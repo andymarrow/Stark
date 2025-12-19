@@ -152,6 +152,7 @@ export default function ExplorePage() {
 
             {/* --- MOBILE FILTER TRIGGER (Mobile) --- */}
             <div className="lg:hidden mb-4">
+                {/* Ensure both filters and setFilters are passed correctly */}
                 <FilterSheet filters={filters} setFilters={setFilters} />
             </div>
 
