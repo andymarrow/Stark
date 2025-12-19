@@ -1,7 +1,7 @@
 import React from "react";
 import DashboardSidebar from "./_components/DashboardSidebar";
 import DashboardHeader from "./_components/DashboardHeader";
-import { ProjectProvider } from "@/app/_context/ProjectContext";
+
 
 export const metadata = {
   title: "Dashboard | OmniOptimize",
@@ -10,7 +10,6 @@ export const metadata = {
 
 export default function DashboardLayout({ children }) {
   return (
-    <ProjectProvider>
           <div className="flex h-screen bg-slate-50 dark:bg-[#020617] overflow-hidden">
             
             {/* DESKTOP SIDEBAR 
@@ -37,7 +36,6 @@ export default function DashboardLayout({ children }) {
             </div>
 
           </div>
-    </ProjectProvider>
     
   );
 }
