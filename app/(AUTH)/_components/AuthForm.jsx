@@ -57,7 +57,7 @@ export default function AuthForm({ view = "login" }) {
         <div className="flex justify-between items-center">
             <label className="text-xs font-mono uppercase text-muted-foreground ml-1">Password</label>
             {view === "login" && (
-                <Link href="/forgot-password" class="text-[10px] text-accent hover:underline font-mono">
+                <Link href="/forgot-password" className="text-[10px] text-accent hover:underline font-mono">
                     FORGOT_KEY?
                 </Link>
             )}
