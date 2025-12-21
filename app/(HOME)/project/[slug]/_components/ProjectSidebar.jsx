@@ -1,7 +1,7 @@
 "use client";
-import { Github, Globe, Star, Eye, Calendar, Copy } from "lucide-react";
+import { Github, Globe, Star, Eye, Calendar, Copy, Edit3 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link"; // Import Link
+import Link from "next/link"; 
 import { Button } from "@/components/ui/button";
 
 export default function ProjectSidebar({ project }) {
@@ -28,10 +28,19 @@ export default function ProjectSidebar({ project }) {
                 <Github className="mr-2 h-4 w-4" />
                 View Source Code
             </Button>
+            
             <Button className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent rounded-none transition-colors">
                 <Globe className="mr-2 h-4 w-4" />
                 Live Demo
             </Button>
+
+            {/* --- NEW: Edit Project Button (Visible to Owner) --- */}
+            <Link href={`/project/${project.slug || project.id}/edit`} className="w-full">
+                <Button variant="outline" className="w-full h-12 bg-secondary/5 hover:bg-secondary/20 text-muted-foreground hover:text-foreground font-mono text-xs border border-dashed border-border hover:border-foreground rounded-none transition-colors uppercase tracking-widest">
+                    <Edit3 className="mr-2 h-4 w-4" />
+                    Edit Configuration
+                </Button>
+            </Link>
         </div>
 
         {/* 3. Tech Stack Grid */}
@@ -53,7 +62,7 @@ export default function ProjectSidebar({ project }) {
             <StatBox icon={Calendar} label="CREATED" value="2024" />
         </div>
 
-        {/* 5. Author Card (Now a Functional Link) */}
+        {/* 5. Author Card */}
         <div>
             <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// CREATED_BY</h3>
             
