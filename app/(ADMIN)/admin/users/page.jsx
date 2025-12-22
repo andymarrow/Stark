@@ -1,7 +1,10 @@
 "use client";
-import { MoreHorizontal, Shield, Ban, CheckCircle, Mail, Key } from "lucide-react";
+import { useState } from "react";
+// FIX: Added 'Shield' to the import list
+import { MoreHorizontal, Shield, Ban, Mail, Key } from "lucide-react";
 import Image from "next/image";
 import AdminTable, { AdminRow, AdminCell } from "../_components/AdminTable";
+import UserDetailModal from "./_components/UserDetailModal"; 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +23,8 @@ const USERS = [
 ];
 
 export default function UserManagementPage() {
+  const [selectedUser, setSelectedUser] = useState(null); 
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
@@ -44,9 +49,10 @@ export default function UserManagementPage() {
       {/* The Table */}
       <AdminTable headers={["User Identity", "Role", "Status", "Joined", "Actions"]}>
         {USERS.map((user) => (
-            <AdminRow key={user.id}>
+            <AdminRow key={user.id} className="cursor-pointer">
+                
                 {/* Identity */}
-                <AdminCell>
+                <AdminCell onClick={() => setSelectedUser(user)}>
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 relative rounded-full overflow-hidden border border-white/10">
                             <Image src={user.avatar} alt={user.name} fill className="object-cover" />
@@ -59,14 +65,14 @@ export default function UserManagementPage() {
                 </AdminCell>
 
                 {/* Role */}
-                <AdminCell mono>
+                <AdminCell mono onClick={() => setSelectedUser(user)}>
                     <span className={`px-2 py-1 border text-[10px] uppercase ${user.role === 'admin' ? 'border-purple-500/50 text-purple-400 bg-purple-500/10' : 'border-zinc-700 text-zinc-400'}`}>
                         {user.role}
                     </span>
                 </AdminCell>
 
                 {/* Status */}
-                <AdminCell mono>
+                <AdminCell mono onClick={() => setSelectedUser(user)}>
                     <div className="flex items-center gap-2">
                         <span className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-green-500' : user.status === 'banned' ? 'bg-red-500' : 'bg-yellow-500'}`} />
                         <span className="uppercase">{user.status}</span>
@@ -74,7 +80,7 @@ export default function UserManagementPage() {
                 </AdminCell>
 
                 {/* Date */}
-                <AdminCell mono className="text-zinc-500">
+                <AdminCell mono className="text-zinc-500" onClick={() => setSelectedUser(user)}>
                     2024-12-20
                 </AdminCell>
 
@@ -82,12 +88,18 @@ export default function UserManagementPage() {
                 <AdminCell>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button className="p-2 hover:bg-white/10 text-zinc-500 hover:text-white transition-colors">
+                            <button className="p-2 hover:bg-white/10 text-zinc-500 hover:text-white transition-colors" onClick={(e) => e.stopPropagation()}>
                                 <MoreHorizontal size={16} />
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="bg-black border-white/10 rounded-none text-zinc-300">
                             <DropdownMenuLabel className="font-mono text-xs uppercase text-zinc-600">User Actions</DropdownMenuLabel>
+                            <DropdownMenuItem 
+                                className="focus:bg-white/10 cursor-pointer text-xs font-mono"
+                                onClick={() => setSelectedUser(user)} 
+                            >
+                                <Shield className="mr-2 h-3 w-3" /> View Dossier
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="focus:bg-white/10 cursor-pointer text-xs font-mono">
                                 <Mail className="mr-2 h-3 w-3" /> Email User
                             </DropdownMenuItem>
@@ -103,6 +115,13 @@ export default function UserManagementPage() {
             </AdminRow>
         ))}
       </AdminTable>
+
+      {/* --- USER DETAIL MODAL --- */}
+      <UserDetailModal 
+        user={selectedUser} 
+        isOpen={!!selectedUser} 
+        onClose={() => setSelectedUser(null)} 
+      />
 
     </div>
   );
