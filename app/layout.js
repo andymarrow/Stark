@@ -3,6 +3,9 @@ import { JetBrains_Mono } from 'next/font/google';
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { GoogleAnalytics } from '@next/third-parties/google'; // Optimized GA loading
+import OfflineStatus from "@/components/OfflineStatus"; // <-- IMPORT THIS
+
+
 
 const mono = JetBrains_Mono({ 
   subsets: ["latin"], 
@@ -105,7 +108,13 @@ export default function RootLayout({ children }) {
           disableTransitionOnChange
         >
           {children}
+
+           {/* Added the Offline Indicator here so it floats above everything */}
+          <OfflineStatus />
+
         </ThemeProvider>
+
+        
         
         {/* GOOGLE ANALYTICS */}
         <GoogleAnalytics gaId="G-VZC34CDBG8" />
