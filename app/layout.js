@@ -4,7 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { GoogleAnalytics } from '@next/third-parties/google'; // Optimized GA loading
 import OfflineStatus from "@/components/OfflineStatus"; // <-- IMPORT THIS
-
+import { Toaster } from "@/components/ui/toaster";
 
 
 const mono = JetBrains_Mono({ 
@@ -111,6 +111,7 @@ export default function RootLayout({ children }) {
 
            {/* Added the Offline Indicator here so it floats above everything */}
           <OfflineStatus />
+          <Toaster />
 
         </ThemeProvider>
 
