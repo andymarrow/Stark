@@ -1,9 +1,7 @@
 "use client";
 import { useEffect, useState, use } from "react";
-import { motion } from "framer-motion";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { ChevronRight, Home, Share2, Flag, Loader2 } from "lucide-react";
+import { ChevronRight, Home, Share2, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
@@ -25,8 +23,8 @@ export default function ProjectDetailPage({ params }) {
         setLoading(true);
         console.log("🔍 Fetching project:", slug);
 
-        // FIX: Use the specific Constraint Name from the error hint
-        // 'author:profiles!projects_owner_id_fkey(*)'
+        // Fetch project and join with author profile
+        // We use the raw database values here. No manual +1s.
         const { data, error } = await supabase
           .from('projects')
           .select(`
@@ -47,9 +45,6 @@ export default function ProjectDetailPage({ params }) {
           return;
         }
 
-        // --- INCREMENT VIEW COUNT ---
-        supabase.rpc('increment_project_view', { project_id: data.id });
-
         const formattedData = {
             ...data,
             images: data.images || [],
@@ -67,7 +62,7 @@ export default function ProjectDetailPage({ params }) {
             
             stats: {
                 stars: data.likes_count || 0,
-                views: (data.views || 0) + 1,
+                views: data.views || 0, // RAW DB VALUE passed to Sidebar
                 forks: 0
             }
         };

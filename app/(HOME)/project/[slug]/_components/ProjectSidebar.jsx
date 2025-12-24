@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Github, Globe, Star, Eye, Calendar, Edit3, Flag, AlertTriangle, Loader2 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -33,6 +33,12 @@ export default function ProjectSidebar({ project }) {
   const [isLiked, setIsLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(project.stats.stars || 0);
 
+  // View Count State
+  const [viewCount, setViewCount] = useState(project.stats.views || 0);
+  
+  // Ref to ensure we don't count twice in React Strict Mode
+  const hasCountedRef = useRef(false);
+
   // Check if user liked this project on load
   useEffect(() => {
     if (user && project.id) {
@@ -49,6 +55,43 @@ export default function ProjectSidebar({ project }) {
     }
     setLikesCount(project.stats.stars || 0);
   }, [user, project.id, project.stats.stars]);
+
+  // --- VIEW COUNTING LOGIC ---
+  useEffect(() => {
+    const incrementView = async () => {
+      // 1. Prevent double counting in Strict Mode
+      if (hasCountedRef.current) return;
+      hasCountedRef.current = true;
+
+      // --- DISABLED OWNER CHECK FOR TESTING ---
+      // We commented this out so you can see the view count go up
+      /*
+      if (user?.id && user.id === project.author.id) {
+        console.log("👀 Owner viewing own project - View NOT counted.");
+        return;
+      }
+      */
+
+      // 2. Optimistic UI update: Increment immediately so user sees it
+      setViewCount(prev => prev + 1);
+
+      // 3. Database update
+      const { error } = await supabase.rpc('increment_project_view', { 
+        project_id: project.id 
+      });
+
+      if (error) {
+        console.error("❌ Failed to increment view in DB:", error);
+      } else {
+        console.log("✅ View counted in DB (Owner check disabled)");
+      }
+    };
+
+    if(project?.id) {
+        incrementView();
+    }
+    
+  }, [project.id, user?.id, project.author.id]);
 
   const toggleLike = async () => {
     if (!user) {
@@ -208,7 +251,7 @@ export default function ProjectSidebar({ project }) {
           <div className="text-[9px] font-mono text-muted-foreground uppercase">STARS</div>
         </div>
 
-        <StatBox icon={Eye} label="VIEWS" value={project.stats.views} />
+        <StatBox icon={Eye} label="VIEWS" value={viewCount} />
         <StatBox icon={Calendar} label="CREATED" value={createdDate} />
       </div>
 
