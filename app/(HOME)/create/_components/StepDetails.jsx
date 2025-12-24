@@ -1,6 +1,21 @@
 "use client";
+import { FileText, ArrowDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function StepDetails({ data, updateData }) {
+  
+  const handleImportReadme = () => {
+    if (!data.readme) {
+        toast.error("No Readme Found", { description: "The source repository doesn't have a readme file." });
+        return;
+    }
+    // Append Readme to current description
+    const newDesc = (data.description ? data.description + "\n\n" : "") + data.readme;
+    updateData("description", newDesc);
+    toast.success("Readme Imported", { description: "Content appended. You can now edit/trim it." });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
       
@@ -16,13 +31,29 @@ export default function StepDetails({ data, updateData }) {
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-mono uppercase text-muted-foreground">Description / Readme</label>
+        <div className="flex justify-between items-center">
+            <label className="text-xs font-mono uppercase text-muted-foreground">Description / Documentation</label>
+            
+            {/* NEW: Import Button */}
+            {data.readme && (
+                <button 
+                    onClick={handleImportReadme}
+                    className="flex items-center gap-1 text-[10px] font-mono text-accent hover:underline uppercase"
+                >
+                    <FileText size={12} /> Import GitHub Readme
+                </button>
+            )}
+        </div>
+        
         <textarea 
             value={data.description}
             onChange={(e) => updateData("description", e.target.value)}
-            className="w-full p-4 h-40 bg-secondary/5 border border-border focus:border-accent outline-none text-sm font-sans resize-none transition-colors"
+            className="w-full p-4 h-64 bg-secondary/5 border border-border focus:border-accent outline-none text-sm font-mono resize-none transition-colors leading-relaxed"
             placeholder="Describe the architecture, features, and stack..."
         />
+        <p className="text-[10px] text-muted-foreground">
+            * Markdown is supported. Feel free to remove installation steps or license text.
+        </p>
       </div>
 
       <div className="space-y-1">
@@ -41,6 +72,18 @@ export default function StepDetails({ data, updateData }) {
                 </span>
             ))}
         </div>
+      </div>
+
+      {/* Live Demo Field (Ensuring you have this from previous steps) */}
+      <div className="space-y-1">
+        <label className="text-xs font-mono uppercase text-muted-foreground">Live Demo URL (Optional)</label>
+        <input 
+            type="url" 
+            value={data.demo_link}
+            onChange={(e) => updateData("demo_link", e.target.value)}
+            className="w-full p-4 bg-secondary/5 border border-border focus:border-accent outline-none font-mono text-sm transition-colors"
+            placeholder="https://..."
+        />
       </div>
 
     </div>

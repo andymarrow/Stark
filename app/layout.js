@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { GoogleAnalytics } from '@next/third-parties/google'; // Optimized GA loading
 import OfflineStatus from "@/components/OfflineStatus"; // <-- IMPORT THIS
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from './_context/AuthContext';
 
 
 const mono = JetBrains_Mono({ 
@@ -101,22 +102,21 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.variable} ${mono.variable} font-sans bg-background text-foreground selection:bg-accent selection:text-white`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
+        <AuthProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
 
-           {/* Added the Offline Indicator here so it floats above everything */}
-          <OfflineStatus />
-          <Toaster />
+            {/* Added the Offline Indicator here so it floats above everything */}
+            <OfflineStatus />
+            <Toaster />
 
-        </ThemeProvider>
-
-        
-        
+          </ThemeProvider>
+        </AuthProvider>
         {/* GOOGLE ANALYTICS */}
         <GoogleAnalytics gaId="G-VZC34CDBG8" />
       </body>

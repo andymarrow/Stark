@@ -5,16 +5,19 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
-        port: '',
-        pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'plus.unsplash.com',
-        port: '',
-        pathname: '/**',
+        hostname: 'lh3.googleusercontent.com', // Allow Google User Images
       },
-      // You can add other domains here later if needed
+      {
+        protocol: 'https',
+        hostname: 'avatars.githubusercontent.com', // Allow GitHub User Images
+      },
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co', // Allow images from your Supabase Storage
+      },
     ],
   },
 };

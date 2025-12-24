@@ -1,53 +1,129 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/app/_context/AuthContext";  
 import PersonalHeader from "./_components/PersonalHeader";
 import DashboardStats from "./_components/DashboardStats";
 import MyProjectsManager from "./_components/MyProjectsManager";
 import SettingsForm from "./_components/SettingsForm";
 import NotificationsView from "./_components/NotificationsView";
-import { Settings, Grid, Bell, Shield, LogOut } from "lucide-react";
-
-// --- MOCK LOGGED IN USER DATA ---
-const MY_PROFILE = {
-  name: "Miheret T.",
-  username: "miheret_dev",
-  email: "miheret@stark.com",
-  plan: "pro",
-  avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&auto=format&fit=crop",
-  bio: "Building digital cathedrals. Full Stack Developer & UI Enthusiast. Creating the Stark Platform.",
-  location: "Addis Ababa, ET",
-  website: "stark.network",
-  joined: "Dec 2024",
-  stats: {
-    totalViews: "45.2k",
-    followers: "1,204",
-    likes: "8.5k",
-    profileVisits: "342"
-  }
-};
+import { Settings, Grid, Bell, Shield, LogOut, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function PersonalProfilePage() {
-  const [activeView, setActiveView] = useState("projects"); // 'projects' | 'settings' | 'notifications'
+  const { user, loading: authLoading, signOut } = useAuth();
+  const router = useRouter();
+  
+  const [activeView, setActiveView] = useState("projects");
+  const [profile, setProfile] = useState(null);
+  const [stats, setStats] = useState({
+    totalViews: 0,
+    followers: 0,
+    starsEarned: 0,
+    nodeReach: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  /**
+   * REALTME AGGREGATION LOGIC
+   * Sums up views and likes from all projects owned by this user
+   */
+  const fetchProfileAndStats = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      setLoading(true);
+
+      // 1. Fetch Profile Base Data
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      // 2. Fetch ALL projects to calculate global traffic and star counts
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('projects')
+        .select('views, likes_count')
+        .eq('owner_id', user.id);
+
+      if (projectsError) throw projectsError;
+
+      // 3. Fetch Real Follower Count
+      const { count: followersCount } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user.id);
+
+      // --- CALCULATIONS ---
+      // Sum of every view on every project
+      const totalProjectViews = projectsData?.reduce((acc, p) => acc + (p.views || 0), 0) || 0;
+      // Sum of every star on every project
+      const totalStarsEarned = projectsData?.reduce((acc, p) => acc + (p.likes_count || 0), 0) || 0;
+
+      setProfile(profileData);
+      setStats({
+        totalViews: totalProjectViews,
+        followers: followersCount || 0,
+        starsEarned: totalStarsEarned,
+        nodeReach: profileData.views || 0 // Views specific to the user's profile URL
+      });
+
+    } catch (error) {
+      console.error("Critical Sync Error:", error);
+      toast.error("SECURITY_SYNC_FAILURE", { description: "Link to database unstable." });
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+      return;
+    }
+    if (user) {
+      fetchProfileAndStats();
+    }
+  }, [user, authLoading, router, fetchProfileAndStats]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast.info("SESSION_TERMINATED");
+    } catch (error) {
+      toast.error("LOGOUT_ERROR");
+    }
+  };
+
+  if (authLoading || loading || !profile) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-muted-foreground animate-pulse">
+          <Loader2 size={32} className="animate-spin text-accent" />
+          <span className="font-mono text-xs uppercase tracking-widest">Accessing Personal Data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-10  md:pt-0">
+    <div className="min-h-screen bg-background pb-24 md:pb-10 pt-16 md:pt-0">
       
-      {/* 1. Header & Stats */}
-      <PersonalHeader user={MY_PROFILE} />
-      <DashboardStats stats={MY_PROFILE.stats} />
+      <PersonalHeader user={profile} onUpdate={fetchProfileAndStats} />
+      
+      <DashboardStats stats={stats} />
 
-      {/* 2. Main Control Area */}
       <div className="container mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* LEFT COLUMN: Navigation / Settings */}
             <div className="lg:col-span-3">
                 <div className="sticky top-24 space-y-8">
-                    
-                    {/* Navigation Menu */}
                     <div className="space-y-1">
-                        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">Dashboard</h3>
-                        
+                        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">System_Directories</h3>
                         <NavButton 
                             icon={Grid} 
                             label="My Projects" 
@@ -57,7 +133,7 @@ export default function PersonalProfilePage() {
                         <NavButton 
                             icon={Bell} 
                             label="Notifications" 
-                            badge="4" 
+                            badge="0" 
                             active={activeView === "notifications"} 
                             onClick={() => setActiveView("notifications")}
                         />
@@ -69,32 +145,38 @@ export default function PersonalProfilePage() {
                         />
                     </div>
 
-                    <div className="space-y-1">
-                        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">Account</h3>
-                        <NavButton icon={LogOut} label="Log Out" />
+                    <div className="space-y-1 pt-4 border-t border-border border-dashed">
+                        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">Security</h3>
+                        <NavButton 
+                          icon={LogOut} 
+                          label="Terminate Session" 
+                          onClick={handleLogout} 
+                        />
                     </div>
                     
-                    {/* Pro Badge */}
                     <div className="p-4 bg-secondary/10 border border-border mt-4">
-                        <h4 className="font-bold text-sm mb-1">Stark Pro</h4>
-                        <p className="text-xs text-muted-foreground mb-3">Your plan renews on Jan 1st.</p>
-                        <button className="text-[10px] font-mono text-accent hover:underline uppercase">Manage Billing</button>
+                        <h4 className="font-bold text-sm mb-1 uppercase tracking-tight">Stark Protocol</h4>
+                        <p className="text-[10px] text-muted-foreground mb-3 font-mono">NODE_STATUS: {profile.role?.toUpperCase() || 'CREATOR'}</p>
+                        <button className="text-[10px] font-mono text-accent hover:underline uppercase font-bold">Access Logs</button>
                     </div>
                 </div>
             </div>
 
-            {/* RIGHT COLUMN: Dynamic Content */}
             <div className="lg:col-span-9">
                 <div className="bg-background min-h-[500px]">
-                    {activeView === 'projects' && <MyProjectsManager />}
-                    {activeView === 'settings' && <SettingsForm user={MY_PROFILE} />}
-                    {activeView === 'notifications' && <NotificationsView />}
+                    {activeView === 'projects' && (
+                      <MyProjectsManager user={user} onRefresh={fetchProfileAndStats} />
+                    )}
+                    {activeView === 'settings' && (
+                      <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />
+                    )}
+                    {activeView === 'notifications' && (
+                      <NotificationsView />
+                    )}
                 </div>
             </div>
-
         </div>
       </div>
-
     </div>
   );
 }
@@ -111,11 +193,13 @@ function NavButton({ icon: Icon, label, badge, active, onClick }) {
             `}
         >
             <div className="flex items-center gap-3">
-                <Icon size={16} />
-                <span>{label}</span>
+                <Icon size={16} className={active ? "text-accent" : "group-hover:text-accent transition-colors"} />
+                <span className="font-mono uppercase text-[10px] tracking-widest">{label}</span>
             </div>
-            {badge && (
-                <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded-full font-mono">{badge}</span>
+            {badge !== "0" && badge && (
+                <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded-none font-mono font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                  {badge}
+                </span>
             )}
         </button>
     )

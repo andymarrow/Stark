@@ -1,18 +1,36 @@
 "use client";
-import { Github, Mail } from "lucide-react";
+import { useState } from "react";
+import { Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
 
 export default function SocialAuth() {
-  const handleSocialLogin = (provider) => {
-    // In real app: signIn(provider)
-    alert(`Initiating handshake with ${provider}...`);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const handleSocialLogin = async (provider) => {
+    setIsLoading(true);
+    try {
+        const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: provider,
+            options: {
+                // Ensure this points to your callback route
+                redirectTo: `${window.location.origin}/auth/callback`,
+            }
+        });
+        if (error) throw error;
+    } catch (error) {
+        toast.error("Connection Failed", { description: error.message });
+        setIsLoading(false);
+    }
   };
 
   return (
     <div className="grid grid-cols-2 gap-4">
       <Button 
         variant="outline" 
-        onClick={() => handleSocialLogin("GitHub")}
+        disabled={isLoading}
+        onClick={() => handleSocialLogin("github")}
         className="h-12 rounded-none border-border hover:bg-secondary hover:border-foreground transition-all font-mono text-xs uppercase"
       >
         <Github size={16} className="mr-2" />
@@ -20,9 +38,11 @@ export default function SocialAuth() {
       </Button>
       <Button 
         variant="outline" 
-        onClick={() => handleSocialLogin("Google")}
+        disabled={isLoading}
+        onClick={() => handleSocialLogin("google")}
         className="h-12 rounded-none border-border hover:bg-secondary hover:border-foreground transition-all font-mono text-xs uppercase"
       >
+        {/* Google SVG Icon */}
         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
             <path
                 fill="currentColor"

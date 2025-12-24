@@ -4,25 +4,74 @@ import { Eye, EyeOff, ArrowRight, Lock, Mail, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient"; // Import Supabase
+import { useRouter } from "next/navigation";
+import { toast } from "sonner"; // Using your toast system
 
 export default function AuthForm({ view = "login" }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
-  const handleSubmit = (e) => {
+  // Form State
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(""); // Only for signup
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-        setIsLoading(false);
-        // router.push('/dashboard')
-    }, 2000);
+
+    try {
+      if (view === "signup") {
+        // --- SIGN UP LOGIC ---
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: username, // Passing metadata for our SQL trigger
+              username: username.toLowerCase().replace(/\s+/g, '_')
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        toast.success("Identity Created", {
+            description: "Please verify your email to activate the node."
+        });
+        
+      } else {
+        // --- LOG IN LOGIC ---
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        toast.success("Access Granted", {
+            description: "Establishing secure connection..."
+        });
+        
+        // Redirect to personal profile
+        router.push("/profile");
+      }
+
+    } catch (error) {
+      toast.error("Access Denied", {
+          description: error.message || "Invalid credentials provided."
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       
-      {/* Name Input (Signup Only) */}
+      {/* Username (Signup Only) */}
       {view === "signup" && (
         <div className="space-y-1">
             <label className="text-xs font-mono uppercase text-muted-foreground ml-1">Username</label>
@@ -31,6 +80,8 @@ export default function AuthForm({ view = "login" }) {
                 <Input 
                     type="text" 
                     placeholder="stark_user" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     className="pl-10 h-12 rounded-none border-border bg-secondary/5 focus-visible:ring-accent transition-all"
                     required
                 />
@@ -46,6 +97,8 @@ export default function AuthForm({ view = "login" }) {
             <Input 
                 type="email" 
                 placeholder="dev@stark.net" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 h-12 rounded-none border-border bg-secondary/5 focus-visible:ring-accent transition-all"
                 required
             />
@@ -67,6 +120,8 @@ export default function AuthForm({ view = "login" }) {
             <Input 
                 type={showPassword ? "text" : "password"} 
                 placeholder="••••••••" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 pr-10 h-12 rounded-none border-border bg-secondary/5 focus-visible:ring-accent transition-all"
                 required
             />
