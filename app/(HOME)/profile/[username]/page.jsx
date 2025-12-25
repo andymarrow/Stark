@@ -19,8 +19,10 @@ export default function ProfilePage({ params }) {
   const [profile, setProfile] = useState(null);
   const [workProjects, setWorkProjects] = useState([]);
   const [savedProjects, setSavedProjects] = useState([]);
+  
+  // NEW STATE FOR FOLLOWER COUNTS
+  const [followerStats, setFollowerStats] = useState({ followers: 0, following: 0 });
 
-  // Ref to prevent double counting
   const hasCountedRef = useRef(false);
 
   // 1. FETCH DATA EFFECT
@@ -39,7 +41,7 @@ export default function ProfilePage({ params }) {
         if (profileError || !profileData) throw new Error("Creator not found");
         setProfile(profileData);
 
-        // B. Fetch Projects
+        // B. Fetch Projects (Work)
         const { data: projectsData } = await supabase
           .from('projects')
           .select('*, author:profiles!owner_id(*)')
@@ -49,7 +51,7 @@ export default function ProfilePage({ params }) {
         
         setWorkProjects(projectsData || []);
 
-        // C. Fetch Saved
+        // C. Fetch Saved (Actually Likes/Stars based on current DB)
         const { data: likedData } = await supabase
           .from('project_likes')
           .select('projects(*, author:profiles!owner_id(*))')
@@ -57,6 +59,23 @@ export default function ProfilePage({ params }) {
         
         const likedProjects = likedData?.map(item => item.projects).filter(Boolean) || [];
         setSavedProjects(likedProjects);
+
+        // D. FETCH FOLLOWERS COUNT (New)
+        const { count: followersCount } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('following_id', profileData.id);
+
+        // E. FETCH FOLLOWING COUNT (New)
+        const { count: followingCount } = await supabase
+          .from('follows')
+          .select('*', { count: 'exact', head: true })
+          .eq('follower_id', profileData.id);
+
+        setFollowerStats({ 
+            followers: followersCount || 0, 
+            following: followingCount || 0 
+        });
 
       } catch (err) {
         console.error("Profile Load Error:", err);
@@ -70,37 +89,23 @@ export default function ProfilePage({ params }) {
 
   // 2. VIEW COUNTING EFFECT
   useEffect(() => {
-    // Wait until profile is loaded
     if (!profile?.id) return;
-    
-    // Prevent double counting in Strict Mode
     if (hasCountedRef.current) return;
 
-    // Logic: If user is logged out (anon) OR logged in but not the owner -> Count View
     const isOwner = currentUser?.id === profile.id;
 
     if (!isOwner) {
-        hasCountedRef.current = true; // Mark as counted immediately to prevent loops
-        
+        hasCountedRef.current = true;
         const incrementView = async () => {
-            console.log("⚡ Attempting to increment view for:", profile.id);
-            
-            const { data: newCount, error } = await supabase.rpc('increment_profile_view', { 
-                _profile_id: profile.id  // MATCHES THE NEW SQL PARAMETER NAME
+            const { error } = await supabase.rpc('increment_profile_view', { 
+                _profile_id: profile.id 
             });
-            
-            if (error) {
-                console.error("❌ Node Reach Increment Failed:", error.message, error.details);
-            } else {
-                console.log("✅ Node Reach Incremented. New Count:", newCount);
-                // OPTIONAL: Update the local profile state immediately to show the new number
-                // setProfile(prev => ({ ...prev, views: newCount }));
-            }
+            if (error) console.error("Node Reach Error:", error);
         };
         incrementView();
     }
   }, [profile, currentUser]);
-  
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -117,11 +122,11 @@ export default function ProfilePage({ params }) {
     );
   }
 
-  // Aggregated Stats
+  // Updated Public Stats Object
   const publicStats = {
     projects: workProjects.length,
-    followers: 0, 
-    following: 0,
+    followers: followerStats.followers, // Now Dynamic
+    following: followerStats.following, // Now Dynamic
     likes: workProjects.reduce((acc, p) => acc + (p.likes_count || 0), 0)
   };
 
@@ -145,13 +150,14 @@ export default function ProfilePage({ params }) {
             </div>
         </div>
 
+        {/* Removed "likedCount" prop to simplify UI until DB has Bookmarks table */}
         <ProfileTabs 
             activeTab={activeTab} 
             setActiveTab={setActiveTab} 
             viewMode={viewMode}
             setViewMode={setViewMode}
             workCount={workProjects.length}
-            savedCount={savedProjects.length}
+            savedCount={savedProjects.length} 
         />
 
         {displayProjects.length > 0 ? (

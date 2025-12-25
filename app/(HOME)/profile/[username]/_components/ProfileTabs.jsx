@@ -8,7 +8,7 @@ export default function ProfileTabs({
   setViewMode,
   workCount = 0,
   savedCount = 0,
-  likedCount = 0 
+  // likedCount removed for now
 }) {
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-border mb-8 gap-4">
@@ -22,23 +22,28 @@ export default function ProfileTabs({
                 label="Submissions" 
                 count={workCount}
             />
+            {/* Renamed label to "Starred" for clarity, since it pulls from Likes table */}
             <TabButton 
                 active={activeTab === "saved"} 
                 onClick={() => setActiveTab("saved")} 
-                icon={Bookmark} 
-                label="Inspiration" 
+                icon={Heart} 
+                label="Starred" 
                 count={savedCount}
             />
+            
+            {/* HIDDEN ENDORSED TAB UNTIL BOOKMARKS TABLE IS CREATED */}
+            {/* 
             <TabButton 
                 active={activeTab === "liked"} 
                 onClick={() => setActiveTab("liked")} 
                 icon={Heart} 
                 label="Endorsed" 
                 count={likedCount}
-            />
+            /> 
+            */}
         </div>
 
-        {/* View Toggle (Functional) */}
+        {/* View Toggle */}
         <div className="hidden md:flex items-center gap-1 pb-2">
             <button 
                 onClick={() => setViewMode("grid")}
@@ -47,7 +52,6 @@ export default function ProfileTabs({
                     ? 'text-foreground bg-secondary/30 border-border' 
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/10'
                 }`}
-                title="Grid View"
             >
                 <Grid size={16} />
             </button>
@@ -58,7 +62,6 @@ export default function ProfileTabs({
                     ? 'text-foreground bg-secondary/30 border-border' 
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/10'
                 }`}
-                title="List View"
             >
                 <List size={16} />
             </button>
@@ -67,9 +70,6 @@ export default function ProfileTabs({
   );
 }
 
-/**
- * Sub-component for individual tab triggers
- */
 function TabButton({ active, onClick, icon: Icon, label, count }) {
     return (
         <button 
