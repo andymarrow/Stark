@@ -1,6 +1,7 @@
 "use client";
 import { FileText, ArrowDown } from "lucide-react";
 import CollaboratorManager from "./CollaboratorManager"; 
+import RichTextEditor from "./RichTextEditor"; // Import the new editor
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { TECH_STACKS } from "@/constants/options";
@@ -15,7 +16,7 @@ export default function StepDetails({ data, updateData }) {
     // Append Readme to current description
     const newDesc = (data.description ? data.description + "\n\n" : "") + data.readme;
     updateData("description", newDesc);
-    toast.success("Readme Imported", { description: "Content appended. You can now edit/trim it." });
+    toast.success("Readme Imported", { description: "Content appended to editor." });
   };
 
   const addTag = (tag) => {
@@ -28,12 +29,12 @@ export default function StepDetails({ data, updateData }) {
   };
 
   // Determine suggestions list based on the project type (code, design, video)
-  // Default to 'code' if type is somehow missing or different
   const suggestions = TECH_STACKS[data.type] || TECH_STACKS.code;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
       
+      {/* 1. Title Input */}
       <div className="space-y-1">
         <label className="text-xs font-mono uppercase text-muted-foreground">Project Title</label>
         <input 
@@ -45,21 +46,21 @@ export default function StepDetails({ data, updateData }) {
         />
       </div>
 
-      {/* NEW: Collaborator Manager */}
+      {/* 2. Collaborator Manager */}
       <CollaboratorManager 
         collaborators={data.collaborators || []} 
         setCollaborators={(newVal) => {
-            // Handle both functional updates and direct values
             const val = typeof newVal === 'function' ? newVal(data.collaborators || []) : newVal;
             updateData("collaborators", val);
         }}
       />
 
+      {/* 3. Rich Text Description */}
       <div className="space-y-1">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-2">
             <label className="text-xs font-mono uppercase text-muted-foreground">Description / Documentation</label>
             
-            {/* NEW: Import Button */}
+            {/* Import Button */}
             {data.readme && (
                 <button 
                     onClick={handleImportReadme}
@@ -70,17 +71,18 @@ export default function StepDetails({ data, updateData }) {
             )}
         </div>
         
-        <textarea 
-            value={data.description}
-            onChange={(e) => updateData("description", e.target.value)}
-            className="w-full p-4 h-64 bg-secondary/5 border border-border focus:border-accent outline-none text-sm font-mono resize-none transition-colors leading-relaxed"
-            placeholder="Describe the architecture, features, and stack..."
+        {/* Replaced Textarea with RichTextEditor */}
+        <RichTextEditor 
+            value={data.description} 
+            onChange={(val) => updateData("description", val)} 
         />
-        <p className="text-[10px] text-muted-foreground">
-            * Markdown is supported. Feel free to remove installation steps or license text.
+        
+        <p className="text-[10px] text-muted-foreground mt-2">
+            * Supports Markdown. Use the toolbar to format headers, lists, and code blocks.
         </p>
       </div>
 
+      {/* 4. Tech Stack */}
       <div className="space-y-1">
         <label className="text-xs font-mono uppercase text-muted-foreground">Tech Stack (Comma separated)</label>
         <input 
@@ -91,7 +93,7 @@ export default function StepDetails({ data, updateData }) {
             placeholder={data.type === 'design' ? "Figma, Photoshop..." : "React, Supabase..."}
         />
         
-        {/* QUICK SELECT SUGGESTIONS */}
+        {/* Quick Select */}
         <div className="flex flex-wrap gap-2 mt-2">
             {suggestions.map((tech) => (
                 <button
@@ -105,7 +107,7 @@ export default function StepDetails({ data, updateData }) {
         </div>
       </div>
 
-      {/* Live Demo Field (Ensuring you have this from previous steps) */}
+      {/* 5. Live Demo */}
       <div className="space-y-1">
         <label className="text-xs font-mono uppercase text-muted-foreground">Live Demo URL (Optional)</label>
         <input 

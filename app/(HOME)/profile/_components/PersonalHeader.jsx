@@ -49,7 +49,8 @@ export default function PersonalHeader({ user, onUpdate }) {
             bio: user.bio || "",
             location: user.location || "",
             website: user.website || "",
-            avatar_url: user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200",
+            // CHANGED: Default avatar is now a high-quality environment image instead of a person
+            avatar_url: user.avatar_url || "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=400&auto=format&fit=crop",
         });
     }
   }, [user]);
@@ -167,7 +168,7 @@ export default function PersonalHeader({ user, onUpdate }) {
                 <div className="w-24 h-24 md:w-32 md:h-32 border-2 border-background bg-secondary relative overflow-hidden shadow-lg">
                     <Image 
                         src={formData.avatar_url} 
-                        alt="Me" 
+                        alt="User Avatar" 
                         fill 
                         className="object-cover" 
                     />
