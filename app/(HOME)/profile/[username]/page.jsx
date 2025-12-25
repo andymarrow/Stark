@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState, use, useRef } from "react"; // Added useRef
+import { useEffect, useState, use, useRef } from "react"; 
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth  } from "@/app/_context/AuthContext";
+import { useAuth } from "@/app/_context/AuthContext";
 import ProfileHeader from "./_components/ProfileHeader";
 import ProfileStats from "./_components/ProfileStats";
 import ActivityGraph from "./_components/ActivityGraph";
@@ -20,15 +20,16 @@ export default function ProfilePage({ params }) {
   const [workProjects, setWorkProjects] = useState([]);
   const [savedProjects, setSavedProjects] = useState([]);
 
-  // Ref to prevent double counting in React Strict Mode during development
+  // Ref to prevent double counting
   const hasCountedRef = useRef(false);
 
+  // 1. FETCH DATA EFFECT
   useEffect(() => {
     const fetchCreatorData = async () => {
       try {
         setLoading(true);
 
-        // 1. Fetch Profile by Username
+        // A. Fetch Profile
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -38,14 +39,7 @@ export default function ProfilePage({ params }) {
         if (profileError || !profileData) throw new Error("Creator not found");
         setProfile(profileData);
 
-        // --- NEW: NODE REACH LOGIC (INCREMENT VIEW) ---
-        // Only count if it's not the owner viewing their own public profile
-        if (!hasCountedRef.current && currentUser?.id !== profileData.id) {
-            await supabase.rpc('increment_profile_view', { target_user_id: profileData.id });
-            hasCountedRef.current = true;
-        }
-
-        // 2. Fetch Creator's Projects
+        // B. Fetch Projects
         const { data: projectsData } = await supabase
           .from('projects')
           .select('*, author:profiles!owner_id(*)')
@@ -55,7 +49,7 @@ export default function ProfilePage({ params }) {
         
         setWorkProjects(projectsData || []);
 
-        // 3. Fetch Saved Projects
+        // C. Fetch Saved
         const { data: likedData } = await supabase
           .from('project_likes')
           .select('projects(*, author:profiles!owner_id(*))')
@@ -65,14 +59,44 @@ export default function ProfilePage({ params }) {
         setSavedProjects(likedProjects);
 
       } catch (err) {
-        console.error(err);
+        console.error("Profile Load Error:", err);
       } finally {
         setLoading(false);
       }
     };
 
     if (username) fetchCreatorData();
-  }, [username, currentUser?.id]);
+  }, [username]);
+
+  // 2. VIEW COUNTING EFFECT (Separated for reliability)
+  useEffect(() => {
+    // Wait until profile is loaded
+    if (!profile?.id) return;
+    
+    // Prevent double counting
+    if (hasCountedRef.current) return;
+
+    // Logic: If user is logged out (anon) OR logged in but not the owner -> Count View
+    const isOwner = currentUser?.id === profile.id;
+
+    if (!isOwner) {
+        hasCountedRef.current = true; // Mark as counted immediately
+        
+        const incrementView = async () => {
+            const { error } = await supabase.rpc('increment_profile_view', { 
+                target_user_id: profile.id 
+            });
+            
+            if (error) {
+                console.error("Node Reach Increment Failed:", error);
+                hasCountedRef.current = false; // Reset if failed so it might try again? Or keep true to prevent spam.
+            } else {
+                console.log("Node Reach Incremented");
+            }
+        };
+        incrementView();
+    }
+  }, [profile, currentUser]); // Depends on profile loading and auth resolving
 
   if (loading) {
     return (
@@ -90,7 +114,7 @@ export default function ProfilePage({ params }) {
     );
   }
 
-  // Aggregated Stats for the public view
+  // Aggregated Stats
   const publicStats = {
     projects: workProjects.length,
     followers: 0, 
