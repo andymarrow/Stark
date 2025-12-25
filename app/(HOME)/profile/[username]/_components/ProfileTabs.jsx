@@ -1,7 +1,15 @@
 "use client";
 import { Layers, Bookmark, Heart, Grid, List } from "lucide-react";
 
-export default function ProfileTabs({ activeTab, setActiveTab, viewMode, setViewMode }) {
+export default function ProfileTabs({ 
+  activeTab, 
+  setActiveTab, 
+  viewMode, 
+  setViewMode,
+  workCount = 0,
+  savedCount = 0,
+  likedCount = 0 
+}) {
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-border mb-8 gap-4">
         
@@ -11,37 +19,45 @@ export default function ProfileTabs({ activeTab, setActiveTab, viewMode, setView
                 active={activeTab === "work"} 
                 onClick={() => setActiveTab("work")} 
                 icon={Layers} 
-                label="My Work" 
-                count={14}
+                label="Submissions" 
+                count={workCount}
             />
             <TabButton 
                 active={activeTab === "saved"} 
                 onClick={() => setActiveTab("saved")} 
                 icon={Bookmark} 
-                label="Saved" 
-                count={32}
+                label="Inspiration" 
+                count={savedCount}
             />
             <TabButton 
                 active={activeTab === "liked"} 
                 onClick={() => setActiveTab("liked")} 
                 icon={Heart} 
-                label="Liked" 
-                count={128}
+                label="Endorsed" 
+                count={likedCount}
             />
         </div>
 
-        {/* View Toggle (Now Functional) */}
+        {/* View Toggle (Functional) */}
         <div className="hidden md:flex items-center gap-1 pb-2">
             <button 
                 onClick={() => setViewMode("grid")}
-                className={`p-2 transition-colors ${viewMode === 'grid' ? 'text-foreground bg-secondary/20' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`p-2 transition-all duration-200 border border-transparent ${
+                  viewMode === 'grid' 
+                    ? 'text-foreground bg-secondary/30 border-border' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/10'
+                }`}
                 title="Grid View"
             >
                 <Grid size={16} />
             </button>
             <button 
                 onClick={() => setViewMode("list")}
-                className={`p-2 transition-colors ${viewMode === 'list' ? 'text-foreground bg-secondary/20' : 'text-muted-foreground hover:text-foreground'}`}
+                className={`p-2 transition-all duration-200 border border-transparent ${
+                  viewMode === 'list' 
+                    ? 'text-foreground bg-secondary/30 border-border' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/10'
+                }`}
                 title="List View"
             >
                 <List size={16} />
@@ -51,6 +67,9 @@ export default function ProfileTabs({ activeTab, setActiveTab, viewMode, setView
   );
 }
 
+/**
+ * Sub-component for individual tab triggers
+ */
 function TabButton({ active, onClick, icon: Icon, label, count }) {
     return (
         <button 
@@ -62,10 +81,15 @@ function TabButton({ active, onClick, icon: Icon, label, count }) {
                     : "border-transparent text-muted-foreground hover:text-foreground"}
             `}
         >
-            <Icon size={16} className={active ? "text-accent" : "group-hover:text-accent transition-colors"} />
-            <span className="text-sm font-mono font-medium tracking-wide uppercase">{label}</span>
+            <Icon 
+              size={16} 
+              className={`transition-colors ${active ? "text-accent" : "group-hover:text-accent"}`} 
+            />
+            <span className="text-xs font-mono font-bold uppercase tracking-widest">
+              {label}
+            </span>
             <span className={`
-                text-[10px] px-1.5 py-0.5 border
+                text-[10px] px-1.5 py-0.5 border font-mono transition-colors
                 ${active 
                     ? "border-accent text-accent bg-accent/5" 
                     : "border-border text-muted-foreground group-hover:border-foreground group-hover:text-foreground"}

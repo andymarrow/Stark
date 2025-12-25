@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth } from "@/app/_context/AuthContext";  
+import { useAuth } from "@/app/_context/AuthContext";
 import PersonalHeader from "./_components/PersonalHeader";
 import DashboardStats from "./_components/DashboardStats";
 import MyProjectsManager from "./_components/MyProjectsManager";
@@ -17,17 +17,19 @@ export default function PersonalProfilePage() {
   
   const [activeView, setActiveView] = useState("projects");
   const [profile, setProfile] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
   const [stats, setStats] = useState({
     totalViews: 0,
     followers: 0,
     starsEarned: 0,
     nodeReach: 0
   });
-  const [loading, setLoading] = useState(true);
 
   /**
    * REALTME AGGREGATION LOGIC
-   * Sums up views and likes from all projects owned by this user
+   * Fetches real counts for everything from the DB
    */
   const fetchProfileAndStats = useCallback(async () => {
     if (!user) return;
@@ -58,18 +60,24 @@ export default function PersonalProfilePage() {
         .select('*', { count: 'exact', head: true })
         .eq('following_id', user.id);
 
+      // 4. Fetch Unread Notifications Count
+      const { count: unread } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .eq('is_read', false);
+
       // --- CALCULATIONS ---
-      // Sum of every view on every project
       const totalProjectViews = projectsData?.reduce((acc, p) => acc + (p.views || 0), 0) || 0;
-      // Sum of every star on every project
       const totalStarsEarned = projectsData?.reduce((acc, p) => acc + (p.likes_count || 0), 0) || 0;
 
       setProfile(profileData);
+      setUnreadCount(unread || 0);
       setStats({
         totalViews: totalProjectViews,
         followers: followersCount || 0,
         starsEarned: totalStarsEarned,
-        nodeReach: profileData.views || 0 // Views specific to the user's profile URL
+        nodeReach: profileData.views || 0 
       });
 
     } catch (error) {
@@ -85,10 +93,47 @@ export default function PersonalProfilePage() {
       router.push("/login");
       return;
     }
+
     if (user) {
       fetchProfileAndStats();
+
+      // --- REALTIME NOTIFICATION LISTENER ---
+      // This listens for any new notifications sent to the user
+      const channel = supabase
+        .channel(`realtime-notifs-${user.id}`)
+        .on(
+          'postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'notifications', 
+            filter: `receiver_id=eq.${user.id}` 
+          }, 
+          () => {
+            // Increment unread badge and show a toast
+            setUnreadCount(prev => prev + 1);
+            toast("New System Signal", { 
+                icon: <Bell className="text-accent" size={14} />,
+                description: "New activity detected in your feed."
+            });
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user, authLoading, router, fetchProfileAndStats]);
+
+  // When switching to notifications view, we can assume the user will see them
+  // You might want to add mark-as-read logic here or inside the component
+  useEffect(() => {
+    if (activeView === 'notifications') {
+        // Reset local badge count when entering view
+        // setUnreadCount(0); 
+    }
+  }, [activeView]);
 
   const handleLogout = async () => {
     try {
@@ -114,7 +159,6 @@ export default function PersonalProfilePage() {
     <div className="min-h-screen bg-background pb-24 md:pb-10 pt-16 md:pt-0">
       
       <PersonalHeader user={profile} onUpdate={fetchProfileAndStats} />
-      
       <DashboardStats stats={stats} />
 
       <div className="container mx-auto px-4 mt-8">
@@ -124,19 +168,22 @@ export default function PersonalProfilePage() {
                 <div className="sticky top-24 space-y-8">
                     <div className="space-y-1">
                         <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">System_Directories</h3>
+                        
                         <NavButton 
                             icon={Grid} 
                             label="My Projects" 
                             active={activeView === "projects"} 
                             onClick={() => setActiveView("projects")}
                         />
+                        
                         <NavButton 
                             icon={Bell} 
                             label="Notifications" 
-                            badge="0" 
+                            badge={unreadCount > 0 ? unreadCount.toString() : null} 
                             active={activeView === "notifications"} 
                             onClick={() => setActiveView("notifications")}
                         />
+                        
                         <NavButton 
                             icon={Settings} 
                             label="Settings" 
@@ -156,7 +203,9 @@ export default function PersonalProfilePage() {
                     
                     <div className="p-4 bg-secondary/10 border border-border mt-4">
                         <h4 className="font-bold text-sm mb-1 uppercase tracking-tight">Stark Protocol</h4>
-                        <p className="text-[10px] text-muted-foreground mb-3 font-mono">NODE_STATUS: {profile.role?.toUpperCase() || 'CREATOR'}</p>
+                        <p className="text-[10px] text-muted-foreground mb-3 font-mono uppercase">
+                            STATUS: {profile.role || 'CREATOR'}
+                        </p>
                         <button className="text-[10px] font-mono text-accent hover:underline uppercase font-bold">Access Logs</button>
                     </div>
                 </div>
@@ -196,8 +245,8 @@ function NavButton({ icon: Icon, label, badge, active, onClick }) {
                 <Icon size={16} className={active ? "text-accent" : "group-hover:text-accent transition-colors"} />
                 <span className="font-mono uppercase text-[10px] tracking-widest">{label}</span>
             </div>
-            {badge !== "0" && badge && (
-                <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded-none font-mono font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+            {badge && badge !== "0" && (
+                <span className="text-[10px] bg-accent text-white px-1.5 py-0.5 rounded-none font-mono font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] animate-in zoom-in">
                   {badge}
                 </span>
             )}
