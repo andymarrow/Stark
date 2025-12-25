@@ -66,6 +66,7 @@
     "react-dom": "^18",
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
+    "react-is": "^19.2.3",
     "react-markdown": "^10.1.0",
     "react-slick": "^0.30.3",
     "react-swiper": "^0.1.5",
