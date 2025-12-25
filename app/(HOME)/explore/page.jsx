@@ -7,18 +7,34 @@ import TechMap from "./_components/TechMap";
 import ActiveFilters from "./_components/ActiveFilters";
 import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
+import { COUNTRIES } from "@/constants/options";
 
-// Helper to map country codes/names to our Map Regions
-// In a real app, you'd use a library or a DB table for this.
+// --- SMART REGION MAPPER ---
 const getRegionFromLocation = (location) => {
     if (!location) return "global";
-    const loc = location.toLowerCase();
-    if (loc.includes("usa") || loc.includes("canada") || loc.includes("america")) return "na";
-    if (loc.includes("germany") || loc.includes("uk") || loc.includes("france") || loc.includes("europe")) return "eu";
-    if (loc.includes("china") || loc.includes("japan") || loc.includes("india") || loc.includes("asia")) return "as";
-    if (loc.includes("brazil") || loc.includes("argentina")) return "sa";
-    if (loc.includes("nigeria") || loc.includes("kenya") || loc.includes("africa")) return "af";
-    if (loc.includes("australia")) return "au";
+    
+    // 1. Normalize the input (lowercase, trim whitespace)
+    const input = location.toLowerCase().trim();
+
+    // 2. Check against our Master Country List
+    // Logic: Does the user's location string INCLUDE a known country name?
+    // Example: "Addis Ababa, Ethiopia" includes "ethiopia" -> Match!
+    // Example: "Ethiopia" includes "ethiopia" -> Match!
+    const matchedCountry = COUNTRIES.find(c => input.includes(c.value.toLowerCase()));
+    
+    if (matchedCountry) {
+        return matchedCountry.region;
+    }
+
+    // 3. Fallback: Check for Continent Names or Common Abbreviations
+    // This catches things like "Africa", "USA", "UK" which might not be in the full name list
+    if (input.includes("usa") || input.includes("america") || input.includes("states") || input.includes("canada") || input.includes("mexico")) return "na";
+    if (input.includes("europe") || input.includes("uk") || input.includes("england") || input.includes("germany") || input.includes("france")) return "eu";
+    if (input.includes("asia") || input.includes("china") || input.includes("india") || input.includes("japan")) return "as";
+    if (input.includes("south america") || input.includes("brazil") || input.includes("argentina")) return "sa";
+    if (input.includes("africa") || input.includes("nigeria") || input.includes("kenya") || input.includes("ethiopia") || input.includes("egypt")) return "af";
+    if (input.includes("australia") || input.includes("zealand") || input.includes("oceania")) return "au";
+    
     return "global"; 
 };
 
@@ -41,7 +57,6 @@ export default function ExplorePage() {
     const fetchProjects = async () => {
       setLoading(true);
       try {
-        // Fetch Projects + Author Profile
         const { data, error } = await supabase
           .from('projects')
           .select(`
@@ -55,31 +70,38 @@ export default function ExplorePage() {
             )
           `)
           .eq('status', 'published')
-          .order('quality_score', { ascending: false }); // Default: High Quality First
+          .order('quality_score', { ascending: false });
 
         if (error) throw error;
 
-        // Transform data for the UI
-        const formatted = (data || []).map(p => ({
-            id: p.id,
-            slug: p.slug,
-            title: p.title,
-            category: p.type, // 'code', 'design', etc.
-            description: p.description,
-            thumbnail_url: p.thumbnail_url,
-            tags: p.tags || [],
-            qualityScore: p.quality_score,
-            views: p.views,
-            likes_count: p.likes_count,
-            // Computed fields
-            region: getRegionFromLocation(p.author?.location),
-            forHire: p.author?.is_for_hire,
-            author: {
-                name: p.author?.full_name || "Anonymous",
-                username: p.author?.username,
-                avatar: p.author?.avatar_url
-            }
-        }));
+        // Transform data
+        const formatted = (data || []).map(p => {
+            const rawLocation = p.author?.location;
+            const regionCode = getRegionFromLocation(rawLocation);
+            
+            // DEBUG: See what region is assigned to what location in your Console
+            // console.log(`📍 Location: "${rawLocation}" -> Region: "${regionCode}"`);
+
+            return {
+                id: p.id,
+                slug: p.slug,
+                title: p.title,
+                category: p.type, 
+                description: p.description,
+                thumbnail_url: p.thumbnail_url,
+                tags: p.tags || [],
+                qualityScore: p.quality_score,
+                views: p.views,
+                likes_count: p.likes_count,
+                region: regionCode, // <--- Assiged Region
+                forHire: p.author?.is_for_hire,
+                author: {
+                    name: p.author?.full_name || "Anonymous",
+                    username: p.author?.username,
+                    avatar: p.author?.avatar_url
+                }
+            };
+        });
 
         setProjects(formatted);
       } catch (err) {
@@ -92,13 +114,17 @@ export default function ExplorePage() {
     fetchProjects();
   }, []);
 
-  // --- 3. The Filter Logic Engine (Client-Side) ---
+  // --- 3. The Filter Logic Engine ---
   const filteredProjects = useMemo(() => {
     return projects.filter(project => {
-        // Region Filter
-        if (filters.region && project.region !== filters.region) return false;
         
-        // Search Filter (Title, Desc, or Author)
+        // --- REGION FILTER LOGIC ---
+        if (filters.region) {
+            // If project region doesn't match filter, HIDE IT.
+            if (project.region !== filters.region) return false;
+        }
+        
+        // Search Filter
         if (filters.search) {
             const q = filters.search.toLowerCase();
             const match = 
@@ -114,23 +140,20 @@ export default function ExplorePage() {
         // For Hire Filter
         if (filters.forHire && !project.forHire) return false;
 
-        // Stack Filter (OR logic: if project has ANY of selected stacks)
+        // Stack Filter
         if (filters.stack.length > 0) {
-            // Case insensitive check
             const hasStack = project.tags.some(tag => 
                 filters.stack.some(f => tag.toLowerCase().includes(f.toLowerCase()))
             );
             if (!hasStack) return false;
         }
 
-        // Category Filter (Mapped from DB 'type')
+        // Category Filter
         if (filters.category.length > 0) {
-            // Map UI categories ("SaaS", "Mobile") to DB types or Tags logic if needed
-            // For now, simple check against project.category (which is DB 'type') 
-            // OR checks tags for loose matching (e.g. 'mobile' tag)
             const hasCategory = filters.category.some(cat => {
                 const c = cat.toLowerCase();
-                return project.category.toLowerCase().includes(c) || project.tags.some(t => t.toLowerCase().includes(c));
+                return project.category.toLowerCase().includes(c) || 
+                       project.tags.some(t => t.toLowerCase().includes(c));
             });
             if (!hasCategory) return false;
         }
@@ -139,8 +162,8 @@ export default function ExplorePage() {
     });
   }, [filters, projects]);
 
-  // Handler specifically for the map interactions
   const handleRegionSelect = (regionId) => {
+    // Toggle: if clicking the active region, clear it (null), otherwise set it
     setFilters(prev => ({ ...prev, region: prev.region === regionId ? null : regionId }));
   };
 
@@ -148,7 +171,6 @@ export default function ExplorePage() {
     <div className="min-h-screen bg-background pt-8 pb-20">
       <div className="container mx-auto px-4">
         
-        {/* Page Header */}
         <div className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Explore <span className="text-accent">Hub</span></h1>
             <p className="text-muted-foreground font-light max-w-2xl">
@@ -158,10 +180,7 @@ export default function ExplorePage() {
 
         <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* --- LEFT SIDEBAR (Desktop) --- */}
             <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto pr-2 scrollbar-hide">
-                
-                {/* 1. The Amazing Map Filter */}
                 <div>
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-mono font-bold uppercase text-muted-foreground">Geographic_Filter</span>
@@ -171,25 +190,19 @@ export default function ExplorePage() {
                             </button>
                         )}
                     </div>
+                    {/* Pass the currently selected region so the map highlights it */}
                     <TechMap selectedRegion={filters.region} onSelect={handleRegionSelect} />
                 </div>
-
-                {/* 2. The Detailed Filters */}
                 <ExploreFilters filters={filters} setFilters={setFilters} />
             </aside>
 
-            {/* --- MOBILE FILTER TRIGGER (Mobile) --- */}
             <div className="lg:hidden mb-4">
                 <FilterSheet filters={filters} setFilters={setFilters} />
             </div>
 
-            {/* --- RIGHT CONTENT (Results) --- */}
             <div className="flex-1">
-                
-                {/* Active Filters Display */}
                 <ActiveFilters filters={filters} setFilters={setFilters} />
 
-                {/* Results Grid */}
                 {loading ? (
                     <div className="flex items-center justify-center h-64">
                         <Loader2 className="animate-spin text-accent" size={32} />
@@ -201,7 +214,6 @@ export default function ExplorePage() {
                         ))}
                     </div>
                 ) : (
-                    // Empty State
                     <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5">
                         <span className="text-muted-foreground font-mono text-sm mb-2">NO_DATA_FOUND_IN_SECTOR</span>
                         <button 
@@ -213,7 +225,6 @@ export default function ExplorePage() {
                     </div>
                 )}
 
-                {/* Load More Indicator (Visual Only for now since we fetch all) */}
                 {filteredProjects.length > 12 && (
                     <div className="mt-12 flex justify-center">
                         <span className="text-[10px] font-mono text-muted-foreground">END_OF_RESULTS</span>

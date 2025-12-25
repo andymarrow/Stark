@@ -1,78 +1,62 @@
+"use client";
+import { useState, useEffect } from "react";
 import ProjectCard from "./ProjectCard";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import Link from "next/link";
-
-// MOCK DATA - Replicating your database schema
-const PROJECTS = [
-  {
-    id: 1,
-    slug: "neural-dashboard",
-    title: "Neural Dashboard",
-    category: "Code",
-    description: "A real-time analytics dashboard for monitoring machine learning pipelines with high-frequency data updates.",
-    thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2670&auto=format&fit=crop",
-    tags: ["Next.js", "D3.js", "Python", "Redis"],
-    stats: { stars: 1240, views: 8500 },
-    author: { name: "Alex Chen", username: "alexc", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100" }
-  },
-  {
-    id: 2,
-    slug: "zenith-commerce",
-    title: "Zenith Commerce",
-    category: "Code",
-    description: "Headless e-commerce starter kit built for extreme performance and SEO optimization.",
-    thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=2426&auto=format&fit=crop",
-    tags: ["React", "Shopify", "Tailwind", "TypeScript"],
-    stats: { stars: 89, views: 1200 },
-    author: { name: "Sarah Jones", username: "sarah_builds", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&h=100" }
-  },
-  {
-    id: 3,
-    slug: "framer-motion-kit",
-    title: "Motion UI Kit",
-    category: "Design",
-    description: "A comprehensive library of drag-and-drop animation components for modern marketing sites.",
-    thumbnail: "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=2574&auto=format&fit=crop",
-    tags: ["Framer", "React", "Motion"],
-    stats: { stars: 3400, views: 45000 },
-    author: { name: "Mike Ross", username: "mikeross", avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&w=100&h=100" }
-  },
-  {
-    id: 4,
-    slug: "terminal-portfolio",
-    title: "Terminal.me",
-    category: "Code",
-    description: "An interactive CLI-based portfolio website that lets visitors run commands to see your work.",
-    thumbnail: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?q=80&w=2574&auto=format&fit=crop",
-    tags: ["Vue", "Node.js", "WebSockets"],
-    stats: { stars: 567, views: 3200 },
-    author: { name: "David Kim", username: "dkim_dev", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&h=100" }
-  },
-  {
-    id: 5,
-    slug: "crypto-wallet-ui",
-    title: "Defi Wallet UI",
-    category: "Design",
-    description: "Mobile-first crypto wallet design system focused on clarity and trust.",
-    thumbnail: "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=2574&auto=format&fit=crop",
-    tags: ["Figma", "UI/UX", "Mobile"],
-    stats: { stars: 230, views: 1500 },
-    author: { name: "Emma Wilson", username: "emma_ui", avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=100&h=100" }
-  },
-  {
-    id: 6,
-    slug: "task-flow",
-    title: "TaskFlow SaaS",
-    category: "Code",
-    description: "Project management tool with real-time collaboration and kanban boards.",
-    thumbnail: "https://images.unsplash.com/photo-1507925921958-8a62f3d1a50d?q=80&w=2676&auto=format&fit=crop",
-    tags: ["Angular", "Firebase", "RxJS"],
-    stats: { stars: 12, views: 400 },
-    author: { name: "Lucas P", username: "lucas_code", avatar: "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=100&h=100" }
-  },
-];
+import { supabase } from "@/lib/supabaseClient";
 
 export default function FeaturedProjects() {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .select(`
+            *,
+            author:profiles!projects_owner_id_fkey(
+                username, full_name, avatar_url
+            )
+          `)
+          .eq('status', 'published')
+          // Order by Quality Score to show best work on home
+          .order('quality_score', { ascending: false }) 
+          .limit(6);
+
+        if (error) throw error;
+
+        // Transform data for ProjectCard
+        const formatted = (data || []).map(p => ({
+            id: p.id,
+            slug: p.slug,
+            title: p.title,
+            category: p.type, // Map 'type' to 'category' prop
+            description: p.description,
+            thumbnail_url: p.thumbnail_url,
+            tags: p.tags || [],
+            views: p.views,
+            likes_count: p.likes_count,
+            author: {
+                name: p.author?.full_name || "Anonymous",
+                username: p.author?.username,
+                avatar: p.author?.avatar_url
+            }
+        }));
+
+        setProjects(formatted);
+      } catch (err) {
+        console.error("Featured Fetch Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFeatured();
+  }, []);
+
   return (
     <section className="py-20 bg-background relative z-10">
       <div className="container mx-auto px-4">
@@ -95,17 +79,29 @@ export default function FeaturedProjects() {
         </div>
 
         {/* The Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {PROJECTS.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
-        </div>
+        {loading ? (
+            <div className="h-64 flex items-center justify-center">
+                <Loader2 className="animate-spin text-accent" size={32} />
+            </div>
+        ) : projects.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {projects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+        ) : (
+            <div className="h-40 border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground">
+                <p className="font-mono text-sm uppercase">NO_DATA_AVAILABLE</p>
+            </div>
+        )}
 
-        {/* Loading / End of List Indicator */}
+        {/* Load More / End of List Indicator */}
         <div className="mt-16 flex justify-center">
-            <button className="px-8 py-3 border border-border bg-secondary/20 hover:bg-secondary hover:border-accent transition-all text-sm font-mono tracking-wide">
-                LOAD_MORE()
-            </button>
+            <Link href="/explore">
+                <button className="px-8 py-3 border border-border bg-secondary/20 hover:bg-secondary hover:border-accent transition-all text-sm font-mono tracking-wide">
+                    EXPLORE_ALL()
+                </button>
+            </Link>
         </div>
 
       </div>

@@ -1,49 +1,104 @@
 "use client";
-import { Search, ChevronDown, ChevronUp, Command } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, ChevronDown, ChevronUp, Command, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useRouter } from "next/navigation"; // For routing
+import { supabase } from "@/lib/supabaseClient"; // For stats
+import { TECH_STACKS } from "@/constants/options";
 
-// Filter Data
+// Curated list for the Hero "Quick Select"
 const FILTERS = {
-  TECH: ["React", "Vue", "Next.js", "TypeScript", "Python", "Rust", "Go", "Figma", "Blender"],
-  CATEGORY: ["SaaS", "E-commerce", "Portfolio", "Mobile App", "Design System", "Motion Graphics"],
-  COUNTRY: ["United States", "Germany", "Brazil", "Japan", "Nigeria", "India", "UK"]
+  TECH: ["React", "Next.js", "TypeScript", "Python", "Rust", "Go", "Figma"],
+  CATEGORY: ["SaaS", "E-commerce", "Portfolio", "Mobile", "Crypto"],
+  REGION: ["United States", "Germany", "Brazil", "India", "Nigeria"]
 };
 
 export default function Hero() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("TECH"); 
-  const [selectedTags, setSelectedTags] = useState(["TypeScript"]); 
+  
+  // Stats State
+  const [stats, setStats] = useState({ projects: 0, creators: 0, countries: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // --- 1. FETCH REAL SYSTEM STATS ---
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        // Count Projects
+        const { count: projectCount } = await supabase
+            .from('projects')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'published');
+
+        // Count Creators
+        const { count: creatorCount } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true });
+
+        // Count Unique Locations (Approximation for performance)
+        // We fetch locations and dedupe in JS. 
+        // Note: For massive scale, use a Postgres RPC or materialized view.
+        const { data: locations } = await supabase
+            .from('profiles')
+            .select('location')
+            .not('location', 'is', null);
+        
+        const uniqueCountries = new Set(
+            locations?.map(l => l.location.split(',').pop().trim()) // Simple parse
+        ).size;
+
+        setStats({
+            projects: projectCount || 0,
+            creators: creatorCount || 0,
+            countries: uniqueCountries || 0
+        });
+      } catch (err) {
+        console.error("Stats Error:", err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  // --- 2. SEARCH HANDLER ---
+  const handleSearch = (e) => {
+    if (e.key === "Enter" && query.trim()) {
+        router.push(`/explore?search=${encodeURIComponent(query)}`);
+    }
+  };
+
+  // --- 3. TAG CLICK HANDLER ---
+  const handleTagClick = (category, value) => {
+    // Map the Hero categories to URL params expected by ExplorePage
+    let param = "";
+    if (category === "TECH") param = "stack";
+    else if (category === "CATEGORY") param = "category";
+    else if (category === "REGION") {
+        // Simple mapping for demo regions to codes, or just pass search
+        // For simplicity, we'll pass it as a search term or ignore strict mapping here
+        router.push(`/explore?search=${encodeURIComponent(value)}`);
+        return;
+    }
+
+    router.push(`/explore?${param}=${encodeURIComponent(value)}`);
+  };
 
   const toggleFilter = (filterName) => {
     setActiveFilter(activeFilter === filterName ? null : filterName);
   };
 
-  const toggleTag = (tag) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter(t => t !== tag));
-    } else {
-      setSelectedTags([...selectedTags, tag]);
-    }
-  };
-
   return (
     <section className="relative w-full min-h-[90vh] flex flex-col justify-center items-center overflow-hidden pt-20">
       
-      {/* --- BACKGROUND: Custom Schematic/Blueprint --- */}
+      {/* --- BACKGROUND --- */}
       <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden">
-        {/* 1. Large Circular Guides (Engineering vibe) */}
         <div className="absolute -top-[20%] -right-[10%] w-[50vw] h-[50vw] rounded-full border border-border/30 border-dashed opacity-50" />
         <div className="absolute top-[30%] -left-[10%] w-[30vw] h-[30vw] rounded-full border border-border/20 opacity-30" />
-        
-        {/* 2. Horizon Line with Measurements */}
         <div className="absolute top-1/2 left-0 w-full h-[1px] bg-border/20" />
-        <div className="absolute top-1/2 left-[20%] w-[1px] h-4 bg-border/40" />
-        <div className="absolute top-1/2 left-[40%] w-[1px] h-4 bg-border/40" />
-        <div className="absolute top-1/2 left-[60%] w-[1px] h-4 bg-border/40" />
-        <div className="absolute top-1/2 left-[80%] w-[1px] h-4 bg-border/40" />
-
-       
       </div>
 
       <div className="container relative z-10 px-4 flex flex-col items-center">
@@ -94,6 +149,7 @@ export default function Hero() {
                 className="flex-1 bg-transparent border-none outline-none font-mono text-sm placeholder:text-muted-foreground/50 h-full text-foreground"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleSearch}
               />
               <div className="hidden md:flex items-center gap-1.5 opacity-50">
                 <Command size={12} />
@@ -101,7 +157,7 @@ export default function Hero() {
               </div>
             </div>
 
-            {/* Filter Buttons (Tech | Category | Country) */}
+            {/* Filter Buttons */}
             <div className="flex items-center justify-between md:justify-start">
                 {Object.keys(FILTERS).map((key, index) => (
                     <div key={key} className="h-full flex items-center flex-1 md:flex-none">
@@ -115,7 +171,6 @@ export default function Hero() {
                             {key}
                             {activeFilter === key ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
-                        {/* Divider */}
                         {index < Object.keys(FILTERS).length - 1 && (
                             <div className="w-[1px] h-6 bg-border/50" />
                         )}
@@ -136,16 +191,13 @@ export default function Hero() {
                 >
                     <div className="flex flex-wrap gap-2 p-1">
                         {FILTERS[activeFilter].map((tag) => {
-                            const isSelected = selectedTags.includes(tag);
                             return (
                                 <button
                                     key={tag}
-                                    onClick={() => toggleTag(tag)}
+                                    onClick={() => handleTagClick(activeFilter, tag)}
                                     className={`
                                         px-4 py-2 text-xs font-mono border transition-all duration-200
-                                        ${isSelected 
-                                            ? 'bg-background border-accent text-accent shadow-[2px_2px_0px_0px_rgba(220,38,38,1)]' 
-                                            : 'bg-background/50 border-border text-muted-foreground hover:border-foreground hover:text-foreground'}
+                                        bg-background/50 border-border text-muted-foreground hover:border-accent hover:text-accent
                                     `}
                                 >
                                     {tag}
@@ -166,19 +218,25 @@ export default function Hero() {
             transition={{ duration: 0.8, delay: 0.5 }}
             className="mt-16 flex flex-wrap justify-center gap-x-6 md:gap-x-12 gap-y-4 text-[10px] md:text-xs font-mono text-muted-foreground uppercase tracking-widest opacity-80"
         >
-            <StatItem value="2,847" label="projects" />
-            <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
-            <StatItem value="1,203" label="creators" />
-            <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
-            <StatItem value="56" label="countries" />
+            {loadingStats ? (
+                <div className="flex items-center gap-2">
+                    <Loader2 className="animate-spin" size={14} /> LOADING_METRICS...
+                </div>
+            ) : (
+                <>
+                    <StatItem value={stats.projects.toLocaleString()} label="projects" />
+                    <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    <StatItem value={stats.creators.toLocaleString()} label="creators" />
+                    <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    <StatItem value={stats.countries.toString()} label="countries" />
+                </>
+            )}
         </motion.div>
 
       </div>
     </section>
   );
 }
-
-// --- Sub Components ---
 
 function StatItem({ value, label }) {
     return (
