@@ -109,7 +109,7 @@ export default function PersonalProfilePage() {
             table: 'notifications', 
             filter: `receiver_id=eq.${user.id}` 
           }, 
-          () => {
+          (payload) => {
             // Increment unread badge and show a toast
             setUnreadCount(prev => prev + 1);
             toast("New System Signal", { 
@@ -126,15 +126,6 @@ export default function PersonalProfilePage() {
     }
   }, [user, authLoading, router, fetchProfileAndStats]);
 
-  // When switching to notifications view, we can assume the user will see them
-  // You might want to add mark-as-read logic here or inside the component
-  useEffect(() => {
-    if (activeView === 'notifications') {
-        // Reset local badge count when entering view
-        // setUnreadCount(0); 
-    }
-  }, [activeView]);
-
   const handleLogout = async () => {
     try {
       await signOut();
@@ -149,7 +140,7 @@ export default function PersonalProfilePage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-muted-foreground animate-pulse">
           <Loader2 size={32} className="animate-spin text-accent" />
-          <span className="font-mono text-xs uppercase tracking-widest">Accessing Personal Data...</span>
+          <span className="font-mono text-xs uppercase tracking-widest">Initialising Dashboard...</span>
         </div>
       </div>
     );
@@ -220,7 +211,7 @@ export default function PersonalProfilePage() {
                       <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />
                     )}
                     {activeView === 'notifications' && (
-                      <NotificationsView />
+                      <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />
                     )}
                 </div>
             </div>

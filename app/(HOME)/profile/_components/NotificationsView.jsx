@@ -1,6 +1,15 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { Heart, GitFork, UserPlus, Info, MessageSquare, Loader2, CheckCheck } from "lucide-react";
+import { 
+  Heart, 
+  GitFork, 
+  UserPlus, 
+  Info, 
+  MessageSquare, 
+  Loader2, 
+  CheckCheck,
+  ExternalLink 
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
@@ -10,27 +19,32 @@ import Link from "next/link";
 
 const PAGE_SIZE = 8;
 
-export default function NotificationsView() {
+export default function NotificationsView({ onNotificationRead }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState("all"); 
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
 
+  /**
+   * Fetches real notifications from Supabase.
+   * Uses an explicit join to the profiles table via the 'sender_id' foreign key.
+   */
   const fetchNotifications = useCallback(async (isLoadMore = false) => {
     if (!user) return;
+    
     try {
       if (!isLoadMore) setLoading(true);
       
       const from = isLoadMore ? notifications.length : 0;
       const to = from + PAGE_SIZE - 1;
 
+      // We use '!notifications_sender_id_fkey' to be explicit about the relationship
       let query = supabase
         .from('notifications')
         .select(`
           *,
-          sender:profiles!sender_id(username, avatar_url)
+          sender:profiles!notifications_sender_id_fkey(username, avatar_url)
         `)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false })
@@ -46,15 +60,50 @@ export default function NotificationsView() {
       setNotifications(prev => isLoadMore ? [...prev, ...data] : data);
       setHasMore(data.length === PAGE_SIZE);
     } catch (error) {
-      toast.error("COMM_LINK_ERROR", { description: "Failed to fetch logs." });
+      console.error("Fetch Error:", error);
+      toast.error("COMM_LINK_FAILURE", { description: "Failed to sync with central node." });
     } finally {
       setLoading(false);
     }
-  }, [user, filter]);
+  }, [user, filter, notifications.length]);
 
+  // Initial fetch on mount or filter change
   useEffect(() => {
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [filter]);
+
+  /**
+   * LOCAL REALTIME LISTENER
+   * Ensures the list updates immediately if a new notification arrives 
+   * while the user has the notifications tab open.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`local-notifs-${user.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'notifications', 
+        filter: `receiver_id=eq.${user.id}` 
+      }, (payload) => {
+        // Fetch the sender details for the new notification to keep UI rich
+        const syncNewNotif = async () => {
+          const { data } = await supabase
+            .from('notifications')
+            .select('*, sender:profiles!notifications_sender_id_fkey(username, avatar_url)')
+            .eq('id', payload.new.id)
+            .single();
+          
+          if (data) setNotifications(prev => [data, ...prev]);
+        };
+        syncNewNotif();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   const markAsRead = async (id) => {
     const { error } = await supabase
@@ -64,14 +113,20 @@ export default function NotificationsView() {
     
     if (!error) {
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      // Notify parent to decrement badge count
+      if (onNotificationRead) onNotificationRead();
     }
   };
 
   const markAllRead = async () => {
-    const { error } = await supabase.rpc('mark_all_notifications_read', { target_user_id: user.id });
+    const { error } = await supabase
+      .rpc('mark_all_notifications_read', { target_user_id: user.id });
+    
     if (!error) {
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      toast.success("SYSTEM_CLEARED", { description: "All logs marked as read." });
+      toast.success("LOGS_CLEARED", { description: "All incoming signals acknowledged." });
+      // In a real app, you'd trigger a parent refresh here
+      window.location.reload(); 
     }
   };
 
@@ -83,7 +138,7 @@ export default function NotificationsView() {
             <div>
                 <h2 className="text-xl font-bold tracking-tight uppercase">Incoming Signals</h2>
                 <p className="text-[10px] font-mono text-muted-foreground mt-1 uppercase tracking-widest">
-                    Buffer_Status: {notifications.filter(n => !n.is_read).length} Unread
+                    Unread_Packets: {notifications.filter(n => !n.is_read).length}
                 </p>
             </div>
             
@@ -95,7 +150,7 @@ export default function NotificationsView() {
                         className={`
                             px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest border transition-all
                             ${filter === f 
-                                ? "bg-accent text-white border-accent shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" 
+                                ? "bg-accent text-white border-accent shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" 
                                 : "bg-background border-border text-muted-foreground hover:text-foreground"}
                         `}
                     >
@@ -106,33 +161,33 @@ export default function NotificationsView() {
         </div>
 
         {/* Action Bar */}
-        {notifications.some(n => !n.is_read) && (
-            <div className="flex justify-end">
+        <div className="flex justify-end min-h-[20px]">
+            {notifications.some(n => !n.is_read) && (
                 <button 
                     onClick={markAllRead}
                     className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground hover:text-accent uppercase transition-colors"
                 >
-                    <CheckCheck size={12} /> Clear_All_Pending
+                    <CheckCheck size={12} /> Acknowledge_All_Signals
                 </button>
-            </div>
-        )}
+            )}
+        </div>
 
         {/* List */}
         <div className="space-y-2">
             {loading && notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-3 text-muted-foreground">
                     <Loader2 size={24} className="animate-spin text-accent" />
-                    <span className="text-xs font-mono">SCANNING_FREQUENCIES...</span>
+                    <span className="text-xs font-mono uppercase tracking-widest">Intercepting_Data...</span>
                 </div>
             ) : notifications.length > 0 ? (
                 notifications.map((notif) => (
                     <div 
                         key={notif.id} 
                         onClick={() => !notif.is_read && markAsRead(notif.id)}
-                        className={`flex items-start gap-4 p-4 border border-border bg-background transition-all group ${!notif.is_read ? 'border-l-2 border-l-accent bg-accent/[0.02]' : 'opacity-70'}`}
+                        className={`flex items-start gap-4 p-4 border border-border bg-background transition-all group ${!notif.is_read ? 'border-l-2 border-l-accent bg-accent/[0.03]' : 'opacity-60'}`}
                     >
                         {/* Sender Avatar */}
-                        <div className="relative w-10 h-10 border border-border bg-secondary flex-shrink-0">
+                        <div className="relative w-10 h-10 border border-border bg-secondary flex-shrink-0 overflow-hidden">
                             {notif.sender?.avatar_url ? (
                                 <Image src={notif.sender.avatar_url} alt="sender" fill className="object-cover" />
                             ) : (
@@ -161,8 +216,8 @@ export default function NotificationsView() {
 
                         {notif.link && (
                             <Link href={notif.link}>
-                                <Button variant="outline" size="sm" className="h-8 rounded-none border-border font-mono text-[10px] uppercase hidden sm:flex">
-                                    View
+                                <Button variant="outline" size="sm" className="h-8 rounded-none border-border font-mono text-[10px] uppercase hidden sm:flex hover:border-accent hover:text-accent">
+                                    Intercept <ExternalLink size={10} className="ml-1" />
                                 </Button>
                             </Link>
                         )}
@@ -170,7 +225,7 @@ export default function NotificationsView() {
                 ))
             ) : (
                 <div className="h-40 border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground gap-2">
-                    <span className="text-xs font-mono uppercase tracking-[0.3em]">No_New_Data</span>
+                    <span className="text-xs font-mono uppercase tracking-[0.3em] opacity-30">Static_Noise_Only</span>
                 </div>
             )}
         </div>
@@ -182,7 +237,7 @@ export default function NotificationsView() {
                     onClick={() => fetchNotifications(true)}
                     className="rounded-none border-border hover:bg-secondary font-mono text-[10px] uppercase tracking-widest px-8"
                 >
-                    Retrieve Older Packets
+                    Fetch_Older_Packets
                 </Button>
             </div>
         )}
