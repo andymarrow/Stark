@@ -128,7 +128,7 @@ function ProfileContent() {
 
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-10 pt-16 md:pt-0">
+    <div className="min-h-screen bg-background pb-24 md:pb-10 ">
       
       <PersonalHeader user={profile} onUpdate={fetchProfileAndStats} />
       <DashboardStats stats={stats} />
