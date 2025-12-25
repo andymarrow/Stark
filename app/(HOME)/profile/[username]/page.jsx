@@ -68,36 +68,39 @@ export default function ProfilePage({ params }) {
     if (username) fetchCreatorData();
   }, [username]);
 
-  // 2. VIEW COUNTING EFFECT (Separated for reliability)
+  // 2. VIEW COUNTING EFFECT
   useEffect(() => {
     // Wait until profile is loaded
     if (!profile?.id) return;
     
-    // Prevent double counting
+    // Prevent double counting in Strict Mode
     if (hasCountedRef.current) return;
 
     // Logic: If user is logged out (anon) OR logged in but not the owner -> Count View
     const isOwner = currentUser?.id === profile.id;
 
     if (!isOwner) {
-        hasCountedRef.current = true; // Mark as counted immediately
+        hasCountedRef.current = true; // Mark as counted immediately to prevent loops
         
         const incrementView = async () => {
-            const { error } = await supabase.rpc('increment_profile_view', { 
-                target_user_id: profile.id 
+            console.log("⚡ Attempting to increment view for:", profile.id);
+            
+            const { data: newCount, error } = await supabase.rpc('increment_profile_view', { 
+                _profile_id: profile.id  // MATCHES THE NEW SQL PARAMETER NAME
             });
             
             if (error) {
-                console.error("Node Reach Increment Failed:", error);
-                hasCountedRef.current = false; // Reset if failed so it might try again? Or keep true to prevent spam.
+                console.error("❌ Node Reach Increment Failed:", error.message, error.details);
             } else {
-                console.log("Node Reach Incremented");
+                console.log("✅ Node Reach Incremented. New Count:", newCount);
+                // OPTIONAL: Update the local profile state immediately to show the new number
+                // setProfile(prev => ({ ...prev, views: newCount }));
             }
         };
         incrementView();
     }
-  }, [profile, currentUser]); // Depends on profile loading and auth resolving
-
+  }, [profile, currentUser]);
+  
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
