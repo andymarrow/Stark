@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useRef } from "react"; // Added useRef
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth } from "@/app/_context/AuthContext";
+import { useAuth  } from "@/app/_context/AuthContext";
 import ProfileHeader from "./_components/ProfileHeader";
 import ProfileStats from "./_components/ProfileStats";
 import ActivityGraph from "./_components/ActivityGraph";
@@ -20,6 +20,9 @@ export default function ProfilePage({ params }) {
   const [workProjects, setWorkProjects] = useState([]);
   const [savedProjects, setSavedProjects] = useState([]);
 
+  // Ref to prevent double counting in React Strict Mode during development
+  const hasCountedRef = useRef(false);
+
   useEffect(() => {
     const fetchCreatorData = async () => {
       try {
@@ -35,7 +38,14 @@ export default function ProfilePage({ params }) {
         if (profileError || !profileData) throw new Error("Creator not found");
         setProfile(profileData);
 
-        // 2. Fetch Creator's Projects (Work)
+        // --- NEW: NODE REACH LOGIC (INCREMENT VIEW) ---
+        // Only count if it's not the owner viewing their own public profile
+        if (!hasCountedRef.current && currentUser?.id !== profileData.id) {
+            await supabase.rpc('increment_profile_view', { target_user_id: profileData.id });
+            hasCountedRef.current = true;
+        }
+
+        // 2. Fetch Creator's Projects
         const { data: projectsData } = await supabase
           .from('projects')
           .select('*, author:profiles!owner_id(*)')
@@ -45,7 +55,7 @@ export default function ProfilePage({ params }) {
         
         setWorkProjects(projectsData || []);
 
-        // 3. Fetch Projects the Creator has Liked (Saved/Inspiration)
+        // 3. Fetch Saved Projects
         const { data: likedData } = await supabase
           .from('project_likes')
           .select('projects(*, author:profiles!owner_id(*))')
@@ -62,7 +72,7 @@ export default function ProfilePage({ params }) {
     };
 
     if (username) fetchCreatorData();
-  }, [username]);
+  }, [username, currentUser?.id]);
 
   if (loading) {
     return (
@@ -75,15 +85,15 @@ export default function ProfilePage({ params }) {
   if (!profile) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-muted-foreground font-mono">
-        <p>404 // CREATOR_NOT_FOUND</p>
+        <p>404 // NODE_NOT_FOUND</p>
       </div>
     );
   }
 
-  // Aggregate Stats
-  const profileStats = {
+  // Aggregated Stats for the public view
+  const publicStats = {
     projects: workProjects.length,
-    followers: 0, // Logic for follow count can be added here
+    followers: 0, 
     following: 0,
     likes: workProjects.reduce((acc, p) => acc + (p.likes_count || 0), 0)
   };
@@ -95,14 +105,13 @@ export default function ProfilePage({ params }) {
   return (
     <div className="min-h-screen bg-background pt-8 pb-20">
       <div className="container mx-auto px-4 max-w-6xl">
-        
         <div className="mb-6">
             <ProfileHeader user={profile} currentUser={currentUser} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
             <div className="lg:col-span-2">
-                <ProfileStats stats={profileStats} />
+                <ProfileStats stats={publicStats} />
             </div>
             <div className="lg:col-span-1">
                 <ActivityGraph projects={workProjects} />
@@ -134,7 +143,6 @@ export default function ProfilePage({ params }) {
                 Empty_Collection
             </div>
         )}
-        
       </div>
     </div>
   );

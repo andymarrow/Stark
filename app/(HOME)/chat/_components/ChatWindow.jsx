@@ -1,75 +1,132 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/app/_context/AuthContext";
 import ChatHeader from "./ChatHeader";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
+import { toast } from "sonner";
 
-// --- MOCK MESSAGES ---
-const INITIAL_MESSAGES = [
-    { id: 1, text: "Hey! I saw the pull request you submitted.", time: "10:30 AM", isMe: false, read: true },
-    { id: 2, text: "Yeah, I optimized the database queries. Should be 20% faster now.", time: "10:32 AM", isMe: true, read: true },
-    { id: 3, text: "That's awesome. Did you run the migration tests?", time: "10:33 AM", isMe: false, read: true },
-    { id: 4, text: "Running them locally now. Will update the ticket in 5 mins.", time: "10:35 AM", isMe: true, read: true },
-    { id: 5, text: "Perfect. Let me know when it's deployed.", time: "10:42 AM", isMe: false, read: true },
-];
-
-export default function ChatWindow({ chatId, onBack }) {
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+export default function ChatWindow({ convId, onBack }) {
+  const { user } = useAuth();
+  const [messages, setMessages] = useState([]);
+  const [otherUser, setOtherUser] = useState(null);
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
   const scrollRef = useRef(null);
 
-  // Mock User Data based on ID (In real app, fetch this)
-  const user = {
-    name: "Sarah Drasner",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100",
-    online: true
-  };
-
-  // Auto-scroll to bottom
   useEffect(() => {
-    if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    const loadChatData = async () => {
+      // 1. Fetch other participant info
+      const { data: partData } = await supabase
+        .from('conversation_participants')
+        .select('profiles(*)')
+        .eq('conversation_id', convId)
+        .not('user_id', 'eq', user.id)
+        .single();
+      
+      setOtherUser(partData?.profiles);
 
-  const handleSend = (text) => {
-    const newMessage = {
-        id: Date.now(),
-        text: text,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isMe: true,
-        read: false
+      // 2. Fetch last 50 messages
+      const { data: msgData } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      
+      setMessages(msgData || []);
     };
-    setMessages([...messages, newMessage]);
+
+    if (convId) loadChatData();
+
+    // 3. REALTIME MESSAGE & TYPING LISTENER
+    const channel = supabase.channel(`room-${convId}`)
+      
+      // Listen for messages
+      .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'messages', 
+          filter: `conversation_id=eq.${convId}` 
+      }, (payload) => {
+          setMessages((prev) => [...prev, payload.new]);
+          setIsOtherTyping(false); // Stop typing visual when message arrives
+      })
+
+      // Listen for "Typing" Broadcasts
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+          if (payload.userId !== user.id) {
+              setIsOtherTyping(payload.isTyping);
+          }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [convId, user.id]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, isOtherTyping]);
+
+  const handleSend = async (text) => {
+    try {
+      const { error: msgErr } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: convId,
+          sender_id: user.id,
+          text: text
+        });
+      if (msgErr) throw msgErr;
+
+      await supabase
+        .from('conversations')
+        .update({ last_message: text, last_message_at: new Date().toISOString() })
+        .eq('id', convId);
+
+    } catch (err) {
+      toast.error("Transmission Error");
+    }
   };
 
   return (
     <div className="flex flex-col h-full bg-background relative">
-      
-      {/* 1. Header */}
-      <ChatHeader user={user} onBack={onBack} />
+      {otherUser && <ChatHeader user={{
+          name: otherUser.full_name || otherUser.username,
+          avatar: otherUser.avatar_url,
+          online: true,
+          typing: isOtherTyping // Passing typing state to header
+      }} onBack={onBack} />}
 
-      {/* 2. Messages Area */}
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 custom-scrollbar scroll-smooth relative"
-      >
-        {/* Background Grid Pattern for the Chat Area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 custom-scrollbar relative">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
-
-        {/* Date Divider (Demo) */}
-        <div className="flex justify-center mb-6">
-            <span className="bg-secondary/30 text-muted-foreground text-[10px] font-mono px-3 py-1 rounded-full border border-border">
-                Today, {new Date().toLocaleDateString()}
-            </span>
+        
+        <div className="relative z-10">
+            {messages.map((msg) => (
+                <MessageBubble 
+                  key={msg.id} 
+                  message={{
+                      text: msg.text,
+                      time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      read: msg.is_read
+                  }} 
+                  isMe={msg.sender_id === user.id} 
+                />
+            ))}
+            
+            {/* Animated Typing Indicator */}
+            {isOtherTyping && (
+                <div className="flex justify-start mb-4 animate-in fade-in slide-in-from-left-2">
+                    <div className="bg-secondary/20 border border-border p-3 font-mono text-[10px] text-accent uppercase tracking-widest">
+                        Data_Stream_Incoming...
+                    </div>
+                </div>
+            )}
         </div>
-
-        {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} isMe={msg.isMe} />
-        ))}
       </div>
 
-      {/* 3. Input Area */}
-      <ChatInput onSend={handleSend} />
+      {/* Passing convId for broadcast logic */}
+      <ChatInput onSend={handleSend} convId={convId} />
     </div>
   );
 }

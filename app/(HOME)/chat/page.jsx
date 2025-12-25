@@ -1,116 +1,156 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth  } from "@/app/_context/AuthContext";
 import ChatSidebar from "./_components/ChatSidebar";
 import ChatWindow from "./_components/ChatWindow"; 
-import { MessageSquareDashed } from "lucide-react";
+import { MessageSquareDashed, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
 
-// --- MOCK DATA WITH FRESH IMAGES ---
-const MOCK_CHATS = [
-  {
-    id: 1,
-    name: "Sarah Drasner",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop",
-    lastMessage: "Perfect. Let me know when...",
-    lastMessageTime: "10:42 AM",
-    unreadCount: 2,
-    online: true,
-    isRead: false,
-  },
-  {
-    id: 2,
-    name: "Design Team",
-    avatar: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=200&auto=format&fit=crop", // Group of people
-    lastMessage: "Alex: We need the figma link.",
-    lastMessageTime: "09:15 AM",
-    unreadCount: 0,
-    online: false,
-    isRead: true,
-  },
-  {
-    id: 3,
-    name: "Lee Robinson",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&auto=format&fit=crop", // Cool developer vibe
-    lastMessage: "typing...",
-    lastMessageTime: "Yesterday",
-    unreadCount: 5,
-    online: true,
-    typing: true,
-    isRead: false,
-  },
-  { 
-    id: 4, 
-    name: "System Bot", 
-    avatar: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=200&auto=format&fit=crop", // AI/Tech Abstract
-    lastMessage: "Deployment successful.", 
-    lastMessageTime: "Mon", 
-    unreadCount: 0, 
-    isRead: true 
-  },
-  { 
-    id: 5, 
-    name: "Josh Comeau", 
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&auto=format&fit=crop", // Sharp portrait
-    lastMessage: "Sounds good!", 
-    lastMessageTime: "Sun", 
-    unreadCount: 0, 
-    isRead: true 
-  },
-];
+function ChatContent() {
+  const { user, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const chatIdFromUrl = searchParams.get('id');
 
-export default function ChatPage() {
-  const [selectedChatId, setSelectedChatId] = useState(null);
+  const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // --- NEW: Filter State ---
+  const [activeTab, setActiveTab] = useState("ALL_CHATS"); 
+
+  useEffect(() => {
+    if (chatIdFromUrl) setSelectedConvId(chatIdFromUrl);
+  }, [chatIdFromUrl]);
+
+  /**
+   * Fetch real conversations with filtering metadata
+   */
+  const fetchConversations = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('conversation_participants')
+        .select(`
+          is_archived,
+          unread_count,
+          conversation:conversations (
+            id, 
+            type,
+            last_message, 
+            last_message_at,
+            participants:conversation_participants (
+              profile:profiles (id, username, avatar_url, full_name)
+            )
+          )
+        `)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(item => {
+        const conv = item.conversation;
+        const otherParticipant = conv.participants.find(p => p.profile.id !== user.id);
+        
+        return {
+          id: conv.id,
+          type: conv.type || 'direct',
+          isArchived: item.is_archived || false,
+          unreadCount: item.unread_count || 0,
+          lastMessage: conv.last_message,
+          lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+          name: otherParticipant?.profile.full_name || otherParticipant?.profile.username || "Unknown Node",
+          avatar: otherParticipant?.profile.avatar_url,
+        };
+      }).sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
+
+      setConversations(formatted);
+    } catch (err) {
+      console.error(err);
+      toast.error("Frequency Sync Failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchConversations();
+      const channel = supabase
+        .channel('sidebar-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [user, fetchConversations]);
+
+  // --- FILTER LOGIC ---
+  const filteredConversations = conversations.filter(conv => {
+    if (activeTab === "ARCHIVED") return conv.isArchived;
+    if (conv.isArchived) return false; // Hide archived from other tabs
+    
+    if (activeTab === "UNREAD") return conv.unreadCount > 0;
+    if (activeTab === "GROUPS") return conv.type === "group";
+    return true; // ALL_CHATS
+  });
+
+  if (authLoading || loading) return (
+    <div className="h-screen flex items-center justify-center bg-background">
+        <Loader2 className="animate-spin text-accent" />
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0  md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
+    <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
       
       {/* SIDEBAR PANE */}
       <div className={`
         w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full border-r border-border bg-background transition-transform duration-300 ease-in-out absolute md:relative z-10
-        ${selectedChatId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
+        ${selectedConvId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
       `}>
         <ChatSidebar 
-            chats={MOCK_CHATS} 
-            selectedChatId={selectedChatId} 
-            onSelectChat={setSelectedChatId} 
+            chats={filteredConversations} 
+            selectedChatId={selectedConvId} 
+            onSelectChat={setSelectedConvId}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
         />
       </div>
 
       {/* CHAT WINDOW PANE */}
       <div className={`
         flex-1 h-full bg-secondary/5 relative transition-transform duration-300 ease-in-out absolute md:relative inset-0 md:inset-auto z-20 md:z-0
-        ${selectedChatId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+        ${selectedConvId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
         md:block
       `}>
-        
-        {selectedChatId ? (
-           // ACTIVE CHAT
+        {selectedConvId ? (
            <ChatWindow 
-              chatId={selectedChatId} 
-              onBack={() => setSelectedChatId(null)} 
+              convId={selectedConvId} 
+              onBack={() => setSelectedConvId(null)} 
            />
         ) : (
-           // EMPTY STATE
            <div className="hidden md:flex h-full flex-col items-center justify-center text-muted-foreground p-8 text-center bg-background/50">
-              {/* Background Grid for Empty State */}
               <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
-              
               <div className="relative z-10 flex flex-col items-center">
                 <div className="w-24 h-24 bg-secondary/20 border border-border flex items-center justify-center mb-6">
                     <MessageSquareDashed size={40} className="text-accent opacity-50" />
                 </div>
-                <h2 className="text-xl font-bold text-foreground mb-2 font-mono uppercase tracking-wide">Select a Channel</h2>
-                <p className="max-w-xs font-light text-sm">
-                    Choose a contact from the sidebar to initialize the secure connection.
-                </p>
-                <div className="mt-8 text-[10px] font-mono border border-border px-3 py-1 bg-background text-accent">
-                    STATUS: AWAITING_INPUT
-                </div>
+                <h2 className="text-xl font-bold text-foreground mb-2 font-mono uppercase tracking-widest">Select a Channel</h2>
+                <p className="max-w-xs font-light text-sm text-muted-foreground font-mono uppercase">Status: Awaiting_Input</p>
               </div>
            </div>
         )}
-
       </div>
-
     </div>
   );
+}
+
+export default function ChatPage() {
+    return (
+        <Suspense fallback={<div className="h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-accent" /></div>}>
+            <ChatContent />
+        </Suspense>
+    );
 }

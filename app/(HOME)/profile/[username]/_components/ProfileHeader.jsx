@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -7,8 +8,6 @@ import {
   Link as LinkIcon, 
   Calendar, 
   MessageSquare, 
-  UserPlus, 
-  UserMinus,
   Github, 
   Twitter, 
   Linkedin, 
@@ -17,7 +16,9 @@ import {
   AlertTriangle, 
   Loader2,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  UserPlus,
+  UserMinus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -48,6 +49,7 @@ export default function ProfileHeader({ user, currentUser }) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [followsMe, setFollowsMe] = useState(false);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
+  const [isInitializingChat, setIsInitializingChat] = useState(false);
   
   // UI States
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -63,16 +65,18 @@ export default function ProfileHeader({ user, currentUser }) {
     if (currentUser && user?.id) {
       const checkConnection = async () => {
         setIsCheckingConnection(true);
-        
-        // Parallel check: I follow them? + They follow me?
-        const [iFollowReq, theyFollowReq] = await Promise.all([
-          supabase.from('follows').select('*').eq('follower_id', currentUser.id).eq('following_id', user.id).maybeSingle(),
-          supabase.from('follows').select('*').eq('follower_id', user.id).eq('following_id', currentUser.id).maybeSingle()
-        ]);
-
-        setIsFollowing(!!iFollowReq.data);
-        setFollowsMe(!!theyFollowReq.data);
-        setIsCheckingConnection(false);
+        try {
+            const [iFollowReq, theyFollowReq] = await Promise.all([
+                supabase.from('follows').select('*').eq('follower_id', currentUser.id).eq('following_id', user.id).maybeSingle(),
+                supabase.from('follows').select('*').eq('follower_id', user.id).eq('following_id', currentUser.id).maybeSingle()
+            ]);
+            setIsFollowing(!!iFollowReq.data);
+            setFollowsMe(!!theyFollowReq.data);
+        } catch (error) {
+            console.error("Handshake check failed:", error);
+        } finally {
+            setIsCheckingConnection(false);
+        }
       };
       checkConnection();
     } else {
@@ -80,15 +84,75 @@ export default function ProfileHeader({ user, currentUser }) {
     }
   }, [currentUser, user?.id]);
 
-  // 2. Handle Messaging (Gated)
-  const handleMessageClick = () => {
+  /**
+   * 2. Handle Messaging (Find or Create Logic)
+   */
+  const handleMessageClick = async () => {
     if (!currentUser) return toast.error("Authentication Required");
     
-    // Check for mutual link
-    if (isFollowing && followsMe) {
-      router.push(`/chat?u=${user.id}`);
-    } else {
+    // Gating check
+    if (!isFollowing || !followsMe) {
       setIsMessageGateOpen(true);
+      return;
+    }
+
+    setIsInitializingChat(true);
+
+    try {
+        // 1. Find existing conversations for current user
+        const { data: myParticipations, error: partError } = await supabase
+            .from('conversation_participants')
+            .select('conversation_id')
+            .eq('user_id', currentUser.id);
+
+        if (partError) throw partError;
+
+        const myConvIds = (myParticipations || []).map(p => p.conversation_id);
+        let existingRoomId = null;
+
+        // 2. Check if the target user is in any of those conversations
+        if (myConvIds.length > 0) {
+           const { data: commonRoom, error: roomError } = await supabase
+              .from('conversation_participants')
+              .select('conversation_id')
+              .in('conversation_id', myConvIds)
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+           if (!roomError && commonRoom) {
+               existingRoomId = commonRoom.conversation_id;
+           }
+        }
+
+        if (existingRoomId) {
+            router.push(`/chat?id=${existingRoomId}`);
+        } else {
+            // 3. Create a new conversation
+            const { data: newRoom, error: createError } = await supabase
+                .from('conversations')
+                .insert({ last_message: 'Encrypted handshake initiated.' })
+                .select()
+                .single();
+
+            if (createError) throw createError;
+
+            // 4. Add both users to the participants list
+            const { error: joinError } = await supabase
+                .from('conversation_participants')
+                .insert([
+                    { conversation_id: newRoom.id, user_id: currentUser.id },
+                    { conversation_id: newRoom.id, user_id: user.id }
+                ]);
+
+            if (joinError) throw joinError;
+
+            router.push(`/chat?id=${newRoom.id}`);
+        }
+    } catch (err) {
+        console.error("Critical Chat Init Error:", err);
+        toast.error("Initialization Failed", { description: "The encrypted channel could not be established." });
+    } finally {
+        setIsInitializingChat(false);
     }
   };
 
@@ -108,7 +172,7 @@ export default function ProfileHeader({ user, currentUser }) {
         toast.info(`Disconnected from @${user.username}`);
       } else {
         await supabase.from('follows').insert({ follower_id: currentUser.id, following_id: user.id });
-        toast.success(`Connection request sent to @${user.username}`);
+        toast.success(`Connection established with @${user.username}`);
       }
     } catch (err) {
       setIsFollowing(prevStatus);
@@ -142,7 +206,6 @@ export default function ProfileHeader({ user, currentUser }) {
 
   return (
     <div className="w-full bg-background border border-border relative overflow-hidden group">
-      {/* Background Decor */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/30 rounded-bl-[100px] -mr-12 -mt-12 pointer-events-none z-0" />
 
       <div className="p-6 md:p-10 flex flex-col md:flex-row gap-8 items-start relative z-10">
@@ -211,7 +274,7 @@ export default function ProfileHeader({ user, currentUser }) {
             )}
             <div className="flex items-center gap-2">
               <Calendar size={12} className="text-accent" />
-              <span>Active Since {new Date(user.created_at).getFullYear()}</span>
+              <span>Joined {new Date(user.created_at).getFullYear()}</span>
             </div>
           </div>
         </div>
@@ -230,21 +293,31 @@ export default function ProfileHeader({ user, currentUser }) {
           
           <div className="flex gap-2 md:w-36">
             <Button 
-                variant="outline" 
-                onClick={handleMessageClick}
-                className="flex-1 h-11 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
+              variant="outline" 
+              onClick={handleMessageClick}
+              disabled={isInitializingChat}
+              className="flex-1 h-11 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
             >
-              {isFollowing && followsMe ? <MessageSquare size={14} className="mr-2" /> : <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" />}
-              Msg
+              {isInitializingChat ? (
+                <Loader2 className="animate-spin" size={14} />
+              ) : isFollowing && followsMe ? (
+                <>
+                  <MessageSquare size={14} className="mr-2" /> Msg
+                </>
+              ) : (
+                <>
+                  <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
+                </>
+              )}
             </Button>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-11 w-11 p-0 rounded-none border-border hover:bg-secondary">
                   <MoreHorizontal size={16} />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-none border-border bg-background">
+              <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl">
                 <DropdownMenuItem 
                   onClick={() => setIsReportOpen(true)} 
                   className="text-xs font-mono text-red-500 focus:text-red-500 focus:bg-red-500/10 cursor-pointer rounded-none"
@@ -259,24 +332,27 @@ export default function ProfileHeader({ user, currentUser }) {
 
       {/* --- MESSAGE GATE MODAL --- */}
       <Dialog open={isMessageGateOpen} onOpenChange={setIsMessageGateOpen}>
-        <DialogContent className="sm:max-w-[400px] border-border bg-background p-0 rounded-none gap-0">
+        <DialogContent className="sm:max-w-[400px] border-border bg-background p-0 rounded-none gap-0 shadow-2xl">
             <DialogHeader className="p-6 border-b border-border bg-secondary/5">
-                <DialogTitle className="text-lg font-bold flex items-center gap-2 uppercase font-mono tracking-tighter">
-                    <Lock size={18} className="text-accent" /> Channel Restricted
+                <DialogTitle className="text-lg font-bold flex items-center gap-2 uppercase font-mono tracking-tighter text-foreground">
+                    <Lock size={18} className="text-accent" /> Connection Required
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                    Handshake required to initialize messaging frequency.
+                </DialogDescription>
             </DialogHeader>
             <div className="p-6 space-y-4">
                 <p className="text-sm text-muted-foreground font-light leading-relaxed">
-                    Messaging is only available between <span className="text-foreground font-bold">Mutual Connections</span> to prevent spam.
+                    Direct communication is only available between <span className="text-foreground font-bold">Mutual Connections</span> to ensure network security.
                 </p>
                 <div className="bg-secondary/10 border border-border p-4 space-y-3">
-                    <div className="flex items-center justify-between text-[10px] font-mono uppercase">
+                    <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
                         <span className={isFollowing ? "text-foreground" : "text-muted-foreground"}>You follow @{user.username}</span>
-                        <span className={isFollowing ? "text-green-500" : "text-red-500"}>[{isFollowing ? "VERIFIED" : "PENDING"}]</span>
+                        <span className={isFollowing ? "text-green-500" : "text-red-500"}>[{isFollowing ? "OK" : "NO"}]</span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] font-mono uppercase">
+                    <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
                         <span className={followsMe ? "text-foreground" : "text-muted-foreground"}>@{user.username} follows you</span>
-                        <span className={followsMe ? "text-green-500" : "text-red-500"}>[{followsMe ? "VERIFIED" : "PENDING"}]</span>
+                        <span className={followsMe ? "text-green-500" : "text-red-500"}>[{followsMe ? "OK" : "NO"}]</span>
                     </div>
                 </div>
             </div>
@@ -293,14 +369,11 @@ export default function ProfileHeader({ user, currentUser }) {
 
       {/* --- REPORT DIALOG --- */}
       <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
-        <DialogContent className="sm:max-w-[425px] border-border bg-background p-0 rounded-none gap-0">
+        <DialogContent className="sm:max-w-[425px] border-border bg-background p-0 rounded-none gap-0 shadow-2xl">
           <DialogHeader className="p-6 border-b border-border bg-secondary/5">
             <DialogTitle className="text-lg font-bold flex items-center gap-2 text-red-500 uppercase font-mono tracking-tighter">
               <AlertTriangle size={18} /> Incident Report
             </DialogTitle>
-            <DialogDescription className="text-xs font-mono mt-1">
-              File a formal report against @{user.username}.
-            </DialogDescription>
           </DialogHeader>
           
           <div className="p-6 space-y-4">
@@ -315,7 +388,7 @@ export default function ProfileHeader({ user, currentUser }) {
               <Textarea 
                 value={reportDetails}
                 onChange={(e) => setReportDetails(e.target.value)}
-                placeholder="Describe the violation here..." 
+                placeholder="Describe the violation..." 
                 className="bg-secondary/5 border-border rounded-none focus-visible:ring-accent min-h-[100px] text-sm font-mono leading-relaxed"
               />
             </div>
@@ -330,7 +403,7 @@ export default function ProfileHeader({ user, currentUser }) {
               disabled={isSubmitting} 
               className="bg-red-600 hover:bg-red-700 text-white rounded-none font-mono text-xs uppercase h-10 px-4"
             >
-              {isSubmitting ? <Loader2 className="animate-spin size={14}" /> : "Transmit Report"}
+              {isSubmitting ? <Loader2 className="animate-spin size={14} "/> : "Transmit Report"}
             </Button>
           </DialogFooter>
         </DialogContent>

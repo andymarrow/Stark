@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import PersonalHeader from "./_components/PersonalHeader";
@@ -8,14 +8,21 @@ import DashboardStats from "./_components/DashboardStats";
 import MyProjectsManager from "./_components/MyProjectsManager";
 import SettingsForm from "./_components/SettingsForm";
 import NotificationsView from "./_components/NotificationsView";
-import { Settings, Grid, Bell, Shield, LogOut, Loader2 } from "lucide-react";
+import { Settings, Grid, Bell, LogOut, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function PersonalProfilePage() {
+/**
+ * The inner content component that handles search params
+ */
+function ProfileContent() {
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   
-  const [activeView, setActiveView] = useState("projects");
+  // Get current view from URL (?view=settings), default to "projects"
+  const currentView = searchParams.get("view") || "projects";
+  
   const [profile, setProfile] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,16 +35,20 @@ export default function PersonalProfilePage() {
   });
 
   /**
-   * REALTME AGGREGATION LOGIC
-   * Fetches real counts for everything from the DB
+   * Helper to change the view and update the URL
    */
+  const handleViewChange = (viewName) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("view", viewName);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   const fetchProfileAndStats = useCallback(async () => {
     if (!user) return;
     
     try {
       setLoading(true);
 
-      // 1. Fetch Profile Base Data
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -46,7 +57,6 @@ export default function PersonalProfilePage() {
 
       if (profileError) throw profileError;
 
-      // 2. Fetch ALL projects to calculate global traffic and star counts
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
         .select('views, likes_count')
@@ -54,20 +64,17 @@ export default function PersonalProfilePage() {
 
       if (projectsError) throw projectsError;
 
-      // 3. Fetch Real Follower Count
       const { count: followersCount } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
         .eq('following_id', user.id);
 
-      // 4. Fetch Unread Notifications Count
       const { count: unread } = await supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
         .eq('receiver_id', user.id)
         .eq('is_read', false);
 
-      // --- CALCULATIONS ---
       const totalProjectViews = projectsData?.reduce((acc, p) => acc + (p.views || 0), 0) || 0;
       const totalStarsEarned = projectsData?.reduce((acc, p) => acc + (p.likes_count || 0), 0) || 0;
 
@@ -82,7 +89,7 @@ export default function PersonalProfilePage() {
 
     } catch (error) {
       console.error("Critical Sync Error:", error);
-      toast.error("SECURITY_SYNC_FAILURE", { description: "Link to database unstable." });
+      toast.error("SECURITY_SYNC_FAILURE");
     } finally {
       setLoading(false);
     }
@@ -93,36 +100,8 @@ export default function PersonalProfilePage() {
       router.push("/login");
       return;
     }
-
     if (user) {
       fetchProfileAndStats();
-
-      // --- REALTIME NOTIFICATION LISTENER ---
-      // This listens for any new notifications sent to the user
-      const channel = supabase
-        .channel(`realtime-notifs-${user.id}`)
-        .on(
-          'postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'notifications', 
-            filter: `receiver_id=eq.${user.id}` 
-          }, 
-          (payload) => {
-            // Increment unread badge and show a toast
-            setUnreadCount(prev => prev + 1);
-            toast("New System Signal", { 
-                icon: <Bell className="text-accent" size={14} />,
-                description: "New activity detected in your feed."
-            });
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
   }, [user, authLoading, router, fetchProfileAndStats]);
 
@@ -135,16 +114,18 @@ export default function PersonalProfilePage() {
     }
   };
 
-  if (authLoading || loading || !profile) {
+  // Ensure we don't try to render sub-components if user is null
+  if (authLoading || loading || !profile || !user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-muted-foreground animate-pulse">
           <Loader2 size={32} className="animate-spin text-accent" />
-          <span className="font-mono text-xs uppercase tracking-widest">Initialising Dashboard...</span>
+          <span className="font-mono text-xs uppercase tracking-widest">Accessing personal data...</span>
         </div>
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-10 pt-16 md:pt-0">
@@ -163,23 +144,23 @@ export default function PersonalProfilePage() {
                         <NavButton 
                             icon={Grid} 
                             label="My Projects" 
-                            active={activeView === "projects"} 
-                            onClick={() => setActiveView("projects")}
+                            active={currentView === "projects"} 
+                            onClick={() => handleViewChange("projects")}
                         />
                         
                         <NavButton 
                             icon={Bell} 
                             label="Notifications" 
                             badge={unreadCount > 0 ? unreadCount.toString() : null} 
-                            active={activeView === "notifications"} 
-                            onClick={() => setActiveView("notifications")}
+                            active={currentView === "notifications"} 
+                            onClick={() => handleViewChange("notifications")}
                         />
                         
                         <NavButton 
                             icon={Settings} 
                             label="Settings" 
-                            active={activeView === "settings"} 
-                            onClick={() => setActiveView("settings")}
+                            active={currentView === "settings"} 
+                            onClick={() => handleViewChange("settings")}
                         />
                     </div>
 
@@ -191,26 +172,18 @@ export default function PersonalProfilePage() {
                           onClick={handleLogout} 
                         />
                     </div>
-                    
-                    <div className="p-4 bg-secondary/10 border border-border mt-4">
-                        <h4 className="font-bold text-sm mb-1 uppercase tracking-tight">Stark Protocol</h4>
-                        <p className="text-[10px] text-muted-foreground mb-3 font-mono uppercase">
-                            STATUS: {profile.role || 'CREATOR'}
-                        </p>
-                        <button className="text-[10px] font-mono text-accent hover:underline uppercase font-bold">Access Logs</button>
-                    </div>
                 </div>
             </div>
 
             <div className="lg:col-span-9">
                 <div className="bg-background min-h-[500px]">
-                    {activeView === 'projects' && (
+                    {currentView === 'projects' && (
                       <MyProjectsManager user={user} onRefresh={fetchProfileAndStats} />
                     )}
-                    {activeView === 'settings' && (
+                    {currentView === 'settings' && (
                       <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />
                     )}
-                    {activeView === 'notifications' && (
+                    {currentView === 'notifications' && (
                       <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />
                     )}
                 </div>
@@ -219,6 +192,21 @@ export default function PersonalProfilePage() {
       </div>
     </div>
   );
+}
+
+/**
+ * Main Page Component wrapped in Suspense for Next.js 15 useSearchParams
+ */
+export default function PersonalProfilePage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <Loader2 size={32} className="animate-spin text-accent" />
+            </div>
+        }>
+            <ProfileContent />
+        </Suspense>
+    );
 }
 
 function NavButton({ icon: Icon, label, badge, active, onClick }) {

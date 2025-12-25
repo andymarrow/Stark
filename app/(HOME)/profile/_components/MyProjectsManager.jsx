@@ -31,6 +31,8 @@ export default function MyProjectsManager({ user }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchProjects = useCallback(async () => {
+    // GUARD 1: If user is null (logging out), stop immediately
+    if (!user?.id) return; 
     try {
       setLoading(true);
       const from = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -71,10 +73,12 @@ export default function MyProjectsManager({ user }) {
     } finally {
       setLoading(false);
     }
-  }, [user.id, currentPage, searchQuery]);
+  }, [user?.id, currentPage, searchQuery]);
 
   useEffect(() => {
-    fetchProjects();
+    if (user?.id) { // GUARD 3: Only run if user exists
+      fetchProjects();
+    }
   }, [fetchProjects]);
 
   const confirmDelete = async () => {

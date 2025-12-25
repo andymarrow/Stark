@@ -63,10 +63,7 @@ function StatBox({ label, value, icon: Icon, isHighlighted }) {
         <div className={`text-2xl font-bold font-mono tracking-tighter ${isHighlighted ? 'text-accent' : 'text-foreground'}`}>
             {value}
         </div>
-        <div className="text-[8px] font-mono text-zinc-500 mt-1 uppercase tracking-tighter flex items-center gap-1">
-            <span className="w-1 h-1 bg-green-500 rounded-full animate-pulse" />
-            Live_Database_Sync
-        </div>
+        
       </div>
     </div>
   );
