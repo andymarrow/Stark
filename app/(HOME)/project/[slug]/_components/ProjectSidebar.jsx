@@ -277,6 +277,29 @@ export default function ProjectSidebar({ project }) {
         </Link>
       </div>
 
+      {/* 5. Author & Collaborators Card */}
+      <div>
+        <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// TEAM</h3>
+        <div className="flex flex-col gap-2">
+            
+            {/* Main Author */}
+            <CreatorCard 
+                user={project.author} 
+                role="Owner" 
+            />
+
+            {/* Collaborators */}
+            {project.collaborators && project.collaborators.map(collab => (
+                <CreatorCard 
+                    key={collab.id} 
+                    user={collab} 
+                    role="Collaborator" 
+                />
+            ))}
+
+        </div>
+      </div>
+
       {/* 6. Footer Actions (Report Trigger) */}
       <div className="pt-6 border-t border-border">
         <button 
@@ -357,4 +380,35 @@ function StatBox({ icon: Icon, label, value }) {
       <div className="text-[9px] font-mono text-muted-foreground uppercase">{label}</div>
     </div>
   );
+}
+
+// Sub-component for consistent styling
+function CreatorCard({ user, role }) {
+    return (
+        <Link 
+          href={`/profile/${user.username}`}
+          className="flex items-center gap-3 p-3 border border-border bg-background hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(var(--accent),0.1)] transition-all duration-300 group"
+        >
+          <div className="relative w-10 h-10 bg-secondary border border-transparent group-hover:border-accent/50 transition-colors shrink-0">
+            <Image 
+                src={user.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} 
+                alt={user.name} 
+                fill 
+                className="object-cover" 
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-baseline">
+                <h4 className="text-sm font-bold truncate group-hover:text-accent transition-colors">{user.name}</h4>
+                <span className="text-[9px] font-mono text-muted-foreground uppercase">{role}</span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+          </div>
+          {user.isForHire && (
+            <div className="flex flex-col items-end gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Available for hire" />
+            </div>
+          )}
+        </Link>
+    )
 }

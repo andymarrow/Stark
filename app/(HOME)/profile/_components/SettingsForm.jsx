@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2 } from "lucide-react";
+import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2, MapPin } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { COUNTRIES } from "@/constants/options";
 
 export default function SettingsForm({ user, onUpdate }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [useCustomLocation, setUseCustomLocation] = useState(false);
 
   // Initialize state with DB data
   const [formData, setFormData] = useState({
@@ -28,6 +30,13 @@ export default function SettingsForm({ user, onUpdate }) {
   // Keep state in sync if parent fetches new data
   useEffect(() => {
     if (user) {
+        // Check if user's location is in our list
+        const isStandard = COUNTRIES.some(c => c.value === user.location);
+        // If they have a location but it's not in our list, show the custom input mode
+        if (user.location && !isStandard) {
+            setUseCustomLocation(true);
+        }
+
         setFormData({
             full_name: user.full_name || "",
             username: user.username || "",
@@ -58,6 +67,17 @@ export default function SettingsForm({ user, onUpdate }) {
             [network]: value
         }
     }));
+  };
+
+  const handleLocationSelect = (e) => {
+    const val = e.target.value;
+    if (val === "OTHER") {
+        setUseCustomLocation(true);
+        setFormData(prev => ({ ...prev, location: "" })); // Clear for typing
+    } else {
+        setUseCustomLocation(false);
+        setFormData(prev => ({ ...prev, location: val }));
+    }
   };
 
   const handleSave = async () => {
@@ -118,11 +138,60 @@ export default function SettingsForm({ user, onUpdate }) {
                     isTextArea 
                 />
             </div>
-            <InputGroup 
-                label="Location" 
-                value={formData.location} 
-                onChange={(e) => handleInputChange("location", e.target.value)} 
-            />
+            
+            {/* LOCATION SELECTOR with Custom Fallback */}
+            <div className="space-y-1.5">
+                <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
+                    Location
+                    {useCustomLocation && (
+                        <button 
+                            onClick={() => setUseCustomLocation(false)} 
+                            className="text-[9px] text-accent hover:underline cursor-pointer"
+                        >
+                            Select from List
+                        </button>
+                    )}
+                </label>
+                
+                {useCustomLocation ? (
+                    <div className="flex items-center border border-border bg-background focus-within:border-accent transition-colors">
+                        <div className="px-3 py-2 bg-secondary/10 border-r border-border text-sm text-muted-foreground">
+                            <MapPin size={14} />
+                        </div>
+                        <input 
+                            type="text" 
+                            value={formData.location}
+                            onChange={(e) => handleInputChange("location", e.target.value)}
+                            placeholder="Type your city/country..."
+                            className="flex-1 bg-transparent border-none outline-none p-3 h-10 text-sm"
+                            autoFocus
+                        />
+                    </div>
+                ) : (
+                    <div className="relative">
+                        <select
+                            value={formData.location}
+                            onChange={handleLocationSelect}
+                            className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors"
+                        >
+                            <option value="">Select Country / Region...</option>
+                            {COUNTRIES.map((c) => (
+                                <option key={c.value} value={c.value}>
+                                    {c.label}
+                                </option>
+                            ))}
+                            <option disabled>──────────</option>
+                            <option value="OTHER">Other / Not Listed...</option>
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                        </div>
+                    </div>
+                )}
+            </div>
+
             <InputGroup 
                 label="Portfolio URL" 
                 value={formData.website} 

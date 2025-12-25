@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator"; // IMPORT SERVER ACTION
 
 import CreateStepper from "./_components/CreateStepper";
 import StepSource from "./_components/StepSource";
@@ -20,6 +21,7 @@ export default function CreatePage() {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Initialize form data with collaborators array
   const [formData, setFormData] = useState({
     type: 'code',
     link: '',
@@ -28,6 +30,7 @@ export default function CreatePage() {
     description: '',
     tags: '',
     files: [],
+    collaborators: [], // NEW: To store users/ghosts
     // HIDDEN FIELDS AUTO-POPULATED
     readme: '', 
     stats: { stars: 0, forks: 0 } 
@@ -67,7 +70,6 @@ export default function CreatePage() {
     
     // 1. Content Depth
     if (formData.description.length > 100) score += 10;
-    // We check if readme content exists in the description now
     if (formData.description.length > 500) score += 20;
     
     // 2. Visuals
@@ -95,15 +97,14 @@ export default function CreatePage() {
         
         const qualityScore = calculateQualityScore();
 
-        const { error } = await supabase
+        // 1. INSERT PROJECT
+        const { data: projectData, error: projectError } = await supabase
             .from('projects')
             .insert({
                 owner_id: user.id,
                 title: formData.title,
                 slug: slug,
-                // FIX: Do NOT auto-append readme here. 
-                // We trust the user edits the description in Step 2.
-                description: formData.description, 
+                description: formData.description,
                 type: formData.type,
                 source_link: formData.link,
                 demo_link: formData.demo_link || null,
@@ -112,9 +113,42 @@ export default function CreatePage() {
                 thumbnail_url: formData.files[0] || null,
                 status: 'published',
                 quality_score: qualityScore,
-            });
+            })
+            .select()
+            .single(); // Important: Get the inserted object back
 
-        if (error) throw error;
+        if (projectError) throw projectError;
+
+        // 2. HANDLE COLLABORATORS
+        if (formData.collaborators && formData.collaborators.length > 0) {
+            
+            // Prepare rows for DB
+            const collabRows = formData.collaborators.map(c => ({
+                project_id: projectData.id,
+                user_id: c.type === 'user' ? c.user_id : null,
+                invite_email: c.type === 'ghost' ? c.email : null,
+                status: 'pending' // They need to accept/claim it
+            }));
+
+            // Insert into 'collaborations' table
+            const { error: collabError } = await supabase
+                .from('collaborations')
+                .insert(collabRows);
+
+            if (collabError) {
+                console.error("Collaborator DB Error:", collabError);
+                toast.warning("Project Saved, but collaborators failed to link.");
+            } else {
+                // 3. SEND EMAILS (Only for Ghosts)
+                const ghostInvites = formData.collaborators.filter(c => c.type === 'ghost');
+                
+                // Fire and forget - don't await the emails to keep UI snappy
+                ghostInvites.forEach(async (ghost) => {
+                    const inviterName = user.user_metadata?.full_name || user.email;
+                    await sendCollaboratorInvite(ghost.email, formData.title, inviterName);
+                });
+            }
+        }
 
         toast.success("Project Deployed", { description: `Quality Score: ${qualityScore}/100` });
         router.push(`/project/${slug}`);
@@ -153,6 +187,7 @@ export default function CreatePage() {
 
             <div className="mb-8">
                 {step === 1 && <StepSource data={formData} updateData={updateData} />}
+                {/* Note: StepDetails now includes CollaboratorManager internally via props */}
                 {step === 2 && <StepDetails data={formData} updateData={updateData} />}
                 {step === 3 && <StepMedia data={formData} updateData={updateData} />}
                 {step === 4 && <StepReview data={formData} />}

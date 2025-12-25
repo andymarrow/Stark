@@ -1,72 +1,31 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { Loader2 } from "lucide-react";
 import ExploreFilters from "./_components/ExploreFilters";
 import TechMap from "./_components/TechMap";
 import ActiveFilters from "./_components/ActiveFilters";
 import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
 
-// --- EXPANDED MOCK DATA FOR FUNCTIONALITY ---
-const PROJECTS_DATA = [
-    {
-        id: 1,
-        slug: "neural-dashboard",
-        title: "Neural Dashboard",
-        category: "Code",
-        description: "A real-time analytics dashboard.",
-        thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2670&auto=format&fit=crop",
-        tags: ["Next.js", "Python", "React"],
-        region: "na", // North America
-        qualityScore: 95,
-        forHire: true,
-        stats: { stars: 1240, views: 8500 },
-        author: { name: "Alex Chen", username: "alexc", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&h=100" }
-    },
-    {
-        id: 2,
-        slug: "crypto-ui",
-        title: "DeFi Protocol",
-        category: "Design",
-        description: "Modern crypto interface design.",
-        thumbnail: "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=2574&auto=format&fit=crop",
-        tags: ["Figma", "UI", "Crypto"],
-        region: "eu", // Europe
-        qualityScore: 88,
-        forHire: false,
-        stats: { stars: 540, views: 2500 },
-        author: { name: "Sarah", username: "sarah", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=100&h=100" }
-    },
-    {
-        id: 3,
-        slug: "terminal-portfolio",
-        title: "Terminal.me",
-        category: "Code",
-        description: "An interactive CLI-based portfolio website.",
-        thumbnail: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?q=80&w=2574&auto=format&fit=crop",
-        tags: ["Vue", "Node.js"],
-        region: "as", // Asia
-        qualityScore: 92,
-        forHire: true,
-        stats: { stars: 567, views: 3200 },
-        author: { name: "David Kim", username: "dkim_dev", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=100&h=100" }
-    },
-    {
-        id: 4,
-        slug: "africa-fintech",
-        title: "PayFlow Africa",
-        category: "Code",
-        description: "SMS based payment gateway for rural areas.",
-        thumbnail: "https://plus.unsplash.com/premium_photo-1661936361131-c421746dcd0d?w=500&auto=format&fit=crop",
-        tags: ["Go", "Mobile"],
-        region: "af", // Africa
-        qualityScore: 85,
-        forHire: true,
-        stats: { stars: 210, views: 1200 },
-        author: { name: "Kwame", username: "kwame_dev", avatar: "https://images.unsplash.com/photo-1522529599102-193c0d76b5b6?auto=format&fit=crop&w=100&h=100" }
-    },
-];
+// Helper to map country codes/names to our Map Regions
+// In a real app, you'd use a library or a DB table for this.
+const getRegionFromLocation = (location) => {
+    if (!location) return "global";
+    const loc = location.toLowerCase();
+    if (loc.includes("usa") || loc.includes("canada") || loc.includes("america")) return "na";
+    if (loc.includes("germany") || loc.includes("uk") || loc.includes("france") || loc.includes("europe")) return "eu";
+    if (loc.includes("china") || loc.includes("japan") || loc.includes("india") || loc.includes("asia")) return "as";
+    if (loc.includes("brazil") || loc.includes("argentina")) return "sa";
+    if (loc.includes("nigeria") || loc.includes("kenya") || loc.includes("africa")) return "af";
+    if (loc.includes("australia")) return "au";
+    return "global"; 
+};
 
 export default function ExplorePage() {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   // --- 1. Centralized Filter State ---
   const [filters, setFilters] = useState({
     region: null,
@@ -77,14 +36,77 @@ export default function ExplorePage() {
     forHire: false
   });
 
-  // --- 2. The Filter Logic Engine ---
+  // --- 2. Fetch Data from Supabase ---
+  useEffect(() => {
+    const fetchProjects = async () => {
+      setLoading(true);
+      try {
+        // Fetch Projects + Author Profile
+        const { data, error } = await supabase
+          .from('projects')
+          .select(`
+            *,
+            author:profiles!projects_owner_id_fkey(
+                full_name, 
+                username, 
+                avatar_url, 
+                location, 
+                is_for_hire
+            )
+          `)
+          .eq('status', 'published')
+          .order('quality_score', { ascending: false }); // Default: High Quality First
+
+        if (error) throw error;
+
+        // Transform data for the UI
+        const formatted = (data || []).map(p => ({
+            id: p.id,
+            slug: p.slug,
+            title: p.title,
+            category: p.type, // 'code', 'design', etc.
+            description: p.description,
+            thumbnail_url: p.thumbnail_url,
+            tags: p.tags || [],
+            qualityScore: p.quality_score,
+            views: p.views,
+            likes_count: p.likes_count,
+            // Computed fields
+            region: getRegionFromLocation(p.author?.location),
+            forHire: p.author?.is_for_hire,
+            author: {
+                name: p.author?.full_name || "Anonymous",
+                username: p.author?.username,
+                avatar: p.author?.avatar_url
+            }
+        }));
+
+        setProjects(formatted);
+      } catch (err) {
+        console.error("Explore Fetch Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProjects();
+  }, []);
+
+  // --- 3. The Filter Logic Engine (Client-Side) ---
   const filteredProjects = useMemo(() => {
-    return PROJECTS_DATA.filter(project => {
+    return projects.filter(project => {
         // Region Filter
         if (filters.region && project.region !== filters.region) return false;
         
-        // Search Filter (Title or Desc)
-        if (filters.search && !project.title.toLowerCase().includes(filters.search.toLowerCase())) return false;
+        // Search Filter (Title, Desc, or Author)
+        if (filters.search) {
+            const q = filters.search.toLowerCase();
+            const match = 
+                project.title.toLowerCase().includes(q) || 
+                project.description?.toLowerCase().includes(q) ||
+                project.author.username.toLowerCase().includes(q);
+            if (!match) return false;
+        }
 
         // Quality Filter
         if (project.qualityScore < filters.minQuality) return false;
@@ -94,26 +116,32 @@ export default function ExplorePage() {
 
         // Stack Filter (OR logic: if project has ANY of selected stacks)
         if (filters.stack.length > 0) {
-            const hasStack = project.tags.some(tag => filters.stack.includes(tag));
+            // Case insensitive check
+            const hasStack = project.tags.some(tag => 
+                filters.stack.some(f => tag.toLowerCase().includes(f.toLowerCase()))
+            );
             if (!hasStack) return false;
         }
 
-        // Category Filter
+        // Category Filter (Mapped from DB 'type')
         if (filters.category.length > 0) {
-            // Mapping categories loosely for demo (e.g., "Crypto" tag matches "Crypto" category)
-            const hasCategory = filters.category.some(cat => 
-                project.category.includes(cat) || project.tags.some(t => t.includes(cat))
-            );
+            // Map UI categories ("SaaS", "Mobile") to DB types or Tags logic if needed
+            // For now, simple check against project.category (which is DB 'type') 
+            // OR checks tags for loose matching (e.g. 'mobile' tag)
+            const hasCategory = filters.category.some(cat => {
+                const c = cat.toLowerCase();
+                return project.category.toLowerCase().includes(c) || project.tags.some(t => t.toLowerCase().includes(c));
+            });
             if (!hasCategory) return false;
         }
 
         return true;
     });
-  }, [filters]);
+  }, [filters, projects]);
 
   // Handler specifically for the map interactions
   const handleRegionSelect = (regionId) => {
-    setFilters(prev => ({ ...prev, region: regionId }));
+    setFilters(prev => ({ ...prev, region: prev.region === regionId ? null : regionId }));
   };
 
   return (
@@ -152,7 +180,6 @@ export default function ExplorePage() {
 
             {/* --- MOBILE FILTER TRIGGER (Mobile) --- */}
             <div className="lg:hidden mb-4">
-                {/* Ensure both filters and setFilters are passed correctly */}
                 <FilterSheet filters={filters} setFilters={setFilters} />
             </div>
 
@@ -162,8 +189,12 @@ export default function ExplorePage() {
                 {/* Active Filters Display */}
                 <ActiveFilters filters={filters} setFilters={setFilters} />
 
-                {/* Results Grid - Using Functional Data */}
-                {filteredProjects.length > 0 ? (
+                {/* Results Grid */}
+                {loading ? (
+                    <div className="flex items-center justify-center h-64">
+                        <Loader2 className="animate-spin text-accent" size={32} />
+                    </div>
+                ) : filteredProjects.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-500">
                         {filteredProjects.map((project) => (
                             <ProjectCard key={project.id} project={project} />
@@ -182,12 +213,10 @@ export default function ExplorePage() {
                     </div>
                 )}
 
-                {/* Load More Button (Only show if we have results) */}
-                {filteredProjects.length > 0 && (
+                {/* Load More Indicator (Visual Only for now since we fetch all) */}
+                {filteredProjects.length > 12 && (
                     <div className="mt-12 flex justify-center">
-                        <button className="px-8 py-3 border border-border bg-secondary/10 hover:bg-accent hover:text-white transition-all text-sm font-mono tracking-wide">
-                            LOAD_MORE_RESULTS()
-                        </button>
+                        <span className="text-[10px] font-mono text-muted-foreground">END_OF_RESULTS</span>
                     </div>
                 )}
             </div>

@@ -1,7 +1,9 @@
 "use client";
 import { FileText, ArrowDown } from "lucide-react";
+import CollaboratorManager from "./CollaboratorManager"; 
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { TECH_STACKS } from "@/constants/options";
 
 export default function StepDetails({ data, updateData }) {
   
@@ -16,6 +18,19 @@ export default function StepDetails({ data, updateData }) {
     toast.success("Readme Imported", { description: "Content appended. You can now edit/trim it." });
   };
 
+  const addTag = (tag) => {
+    // Basic comma separation logic
+    const currentTags = data.tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (!currentTags.includes(tag)) {
+        const newTags = [...currentTags, tag].join(', ');
+        updateData("tags", newTags);
+    }
+  };
+
+  // Determine suggestions list based on the project type (code, design, video)
+  // Default to 'code' if type is somehow missing or different
+  const suggestions = TECH_STACKS[data.type] || TECH_STACKS.code;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
       
@@ -29,6 +44,16 @@ export default function StepDetails({ data, updateData }) {
             placeholder="e.g. Neural Dashboard"
         />
       </div>
+
+      {/* NEW: Collaborator Manager */}
+      <CollaboratorManager 
+        collaborators={data.collaborators || []} 
+        setCollaborators={(newVal) => {
+            // Handle both functional updates and direct values
+            const val = typeof newVal === 'function' ? newVal(data.collaborators || []) : newVal;
+            updateData("collaborators", val);
+        }}
+      />
 
       <div className="space-y-1">
         <div className="flex justify-between items-center">
@@ -63,13 +88,19 @@ export default function StepDetails({ data, updateData }) {
             value={data.tags}
             onChange={(e) => updateData("tags", e.target.value)}
             className="w-full p-4 bg-secondary/5 border border-border focus:border-accent outline-none font-mono text-sm transition-colors"
-            placeholder="React, Tailwind, Supabase..."
+            placeholder={data.type === 'design' ? "Figma, Photoshop..." : "React, Supabase..."}
         />
-        <div className="flex gap-2 mt-2 flex-wrap">
-            {data.tags.split(',').filter(t => t.trim() !== '').map((tag, i) => (
-                <span key={i} className="px-2 py-1 bg-secondary text-[10px] font-mono text-foreground border border-border">
-                    {tag.trim()}
-                </span>
+        
+        {/* QUICK SELECT SUGGESTIONS */}
+        <div className="flex flex-wrap gap-2 mt-2">
+            {suggestions.map((tech) => (
+                <button
+                    key={tech}
+                    onClick={() => addTag(tech)}
+                    className="px-2 py-1 text-[10px] font-mono border border-border hover:border-accent hover:text-accent bg-background transition-colors uppercase"
+                >
+                    + {tech}
+                </button>
             ))}
         </div>
       </div>

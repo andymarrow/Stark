@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { Settings, Edit3, Share2, MapPin, Link as LinkIcon, Calendar, Camera, UploadCloud, Loader2 } from "lucide-react";
+import { Edit3, Share2, MapPin, Link as LinkIcon, Calendar, Camera, UploadCloud, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,17 +9,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
+import { COUNTRIES } from "@/app/constants/options";
 
 export default function PersonalHeader({ user, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploading, setIsUploading] = useState(false); // State for image upload
+  const [isUploading, setIsUploading] = useState(false);
+  const [useCustomLocation, setUseCustomLocation] = useState(false);
   
   // Ref for the hidden file input
   const fileInputRef = useRef(null);
@@ -36,6 +37,13 @@ export default function PersonalHeader({ user, onUpdate }) {
   // Sync state when user prop changes
   useEffect(() => {
     if (user) {
+        // Check if user's location is in our list
+        const isStandard = COUNTRIES.some(c => c.value === user.location);
+        // If they have a location but it's not in our list, show the custom input mode
+        if (user.location && !isStandard) {
+            setUseCustomLocation(true);
+        }
+
         setFormData({
             full_name: user.full_name || "",
             bio: user.bio || "",
@@ -51,7 +59,6 @@ export default function PersonalHeader({ user, onUpdate }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validation: Check file type and size (e.g. max 2MB)
     if (file.size > 2 * 1024 * 1024) {
         toast.error("File too large", { description: "Max size is 2MB." });
         return;
@@ -62,19 +69,16 @@ export default function PersonalHeader({ user, onUpdate }) {
         const fileExt = file.name.split('.').pop();
         const fileName = `avatars/${user.id}-${Date.now()}.${fileExt}`;
         
-        // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
-            .from('project-assets') // Make sure this bucket exists and is public
+            .from('project-assets')
             .upload(fileName, file);
 
         if (uploadError) throw uploadError;
 
-        // Get Public URL
         const { data: { publicUrl } } = supabase.storage
             .from('project-assets')
             .getPublicUrl(fileName);
 
-        // Update local state preview
         setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
         toast.success("Image Uploaded", { description: "Don't forget to click Save Changes." });
 
@@ -97,7 +101,7 @@ export default function PersonalHeader({ user, onUpdate }) {
                 bio: formData.bio,
                 location: formData.location,
                 website: formData.website,
-                avatar_url: formData.avatar_url, // Save the new URL
+                avatar_url: formData.avatar_url,
             })
             .eq('id', user.id);
 
@@ -117,6 +121,18 @@ export default function PersonalHeader({ user, onUpdate }) {
   // Helper to trigger the hidden file input
   const triggerFileInput = () => {
     fileInputRef.current?.click();
+  };
+
+  // Helper for Location Select
+  const handleLocationSelect = (e) => {
+    const val = e.target.value;
+    if (val === "OTHER") {
+        setUseCustomLocation(true);
+        setFormData(prev => ({ ...prev, location: "" }));
+    } else {
+        setUseCustomLocation(false);
+        setFormData(prev => ({ ...prev, location: val }));
+    }
   };
 
   return (
@@ -185,7 +201,7 @@ export default function PersonalHeader({ user, onUpdate }) {
                             </div>
                             <Button 
                                 variant="outline" 
-                                onClick={triggerFileInput} // Triggers the hidden input
+                                onClick={triggerFileInput} 
                                 disabled={isUploading}
                                 className="h-9 rounded-none border-dashed border-border hover:border-accent text-xs font-mono"
                             >
@@ -216,13 +232,48 @@ export default function PersonalHeader({ user, onUpdate }) {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label className="text-xs font-mono uppercase text-muted-foreground">Location</Label>
-                                    <Input 
-                                        value={formData.location} 
-                                        onChange={(e) => setFormData({...formData, location: e.target.value})}
-                                        className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
-                                    />
+                                    <Label className="text-xs font-mono uppercase text-muted-foreground flex justify-between">
+                                        Location
+                                        {useCustomLocation && (
+                                            <button 
+                                                onClick={() => setUseCustomLocation(false)} 
+                                                className="text-[9px] text-accent hover:underline cursor-pointer"
+                                            >
+                                                List
+                                            </button>
+                                        )}
+                                    </Label>
+                                    
+                                    {useCustomLocation ? (
+                                        <Input 
+                                            value={formData.location} 
+                                            onChange={(e) => setFormData({...formData, location: e.target.value})}
+                                            placeholder="City, Country..."
+                                            className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <div className="relative">
+                                            <select
+                                                value={formData.location}
+                                                onChange={handleLocationSelect}
+                                                className="w-full h-10 bg-secondary/10 border border-border px-3 text-sm focus:border-accent outline-none rounded-none appearance-none transition-colors"
+                                            >
+                                                <option value="">Select...</option>
+                                                {COUNTRIES.map((c) => (
+                                                    <option key={c.value} value={c.value}>{c.label}</option>
+                                                ))}
+                                                <option disabled>──────</option>
+                                                <option value="OTHER">Other...</option>
+                                            </select>
+                                            {/* Arrow Icon */}
+                                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
+
                                 <div className="space-y-2">
                                     <Label className="text-xs font-mono uppercase text-muted-foreground">Website</Label>
                                     <Input 
@@ -280,7 +331,6 @@ export default function PersonalHeader({ user, onUpdate }) {
 
                     {/* Primary Actions */}
                     <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
-                        {/* BUTTON ALSO OPENS DIALOG via onClick */}
                         <Button 
                             onClick={() => setIsEditing(true)} 
                             className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase tracking-wide"

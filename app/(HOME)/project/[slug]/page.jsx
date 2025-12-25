@@ -23,9 +23,8 @@ export default function ProjectDetailPage({ params }) {
         setLoading(true);
         console.log("🔍 Fetching project:", slug);
 
-        // Fetch project and join with author profile
-        // We use the raw database values here. No manual +1s.
-        const { data, error } = await supabase
+        // 1. Fetch Project + Owner
+        const { data: projectData, error: projectError } = await supabase
           .from('projects')
           .select(`
             *,
@@ -34,35 +33,57 @@ export default function ProjectDetailPage({ params }) {
           .eq('slug', slug)
           .single();
 
-        if (error) {
-          console.error("❌ Supabase Error:", error);
+        if (projectError || !projectData) {
+          console.error("❌ Supabase Error:", projectError);
           setError(true);
           return;
         }
 
-        if (!data) {
-          setError(true);
-          return;
+        // 2. Fetch Collaborators (Only existing users, excluding ghost emails)
+        const { data: collabData, error: collabError } = await supabase
+          .from('collaborations')
+          .select(`
+            role,
+            status,
+            profile:profiles(*) 
+          `)
+          .eq('project_id', projectData.id)
+          .not('user_id', 'is', null); // Filter out ghosts who haven't signed up
+
+        if (collabError) {
+            console.error("Collaborator Fetch Error:", collabError);
         }
 
+        // 3. Format Collaborator Data
+        const collaborators = (collabData || []).map(c => ({
+            id: c.profile.id,
+            name: c.profile.full_name || c.profile.username,
+            username: c.profile.username,
+            avatar: c.profile.avatar_url,
+            isForHire: c.profile.is_for_hire,
+            role: c.role || "Collaborator"
+        }));
+
+        // 4. Construct Final Data Object
         const formattedData = {
-            ...data,
-            images: data.images || [],
-            techStack: data.tags ? data.tags.map(t => ({ name: t })) : [],
+            ...projectData,
+            images: projectData.images || [],
+            techStack: projectData.tags ? projectData.tags.map(t => ({ name: t })) : [],
+            collaborators: collaborators, // Pass the team list here
             
-            // Map the joined profile data
+            // Map the joined author profile data
             author: {
-                id: data.author?.id, 
-                name: data.author?.full_name || "Anonymous",
-                username: data.author?.username || "user",
-                avatar: data.author?.avatar_url,
-                isForHire: data.author?.is_for_hire,
-                role: data.author?.bio ? data.author.bio.split('.')[0] : "Creator"
+                id: projectData.author?.id, 
+                name: projectData.author?.full_name || "Anonymous",
+                username: projectData.author?.username || "user",
+                avatar: projectData.author?.avatar_url,
+                isForHire: projectData.author?.is_for_hire,
+                role: projectData.author?.bio ? projectData.author.bio.split('.')[0] : "Creator"
             },
             
             stats: {
-                stars: data.likes_count || 0,
-                views: data.views || 0, // RAW DB VALUE passed to Sidebar
+                stars: projectData.likes_count || 0,
+                views: projectData.views || 0,
                 forks: 0
             }
         };
@@ -147,9 +168,9 @@ export default function ProjectDetailPage({ params }) {
                         {project.title}
                     </h1>
                     <div className="flex flex-wrap gap-2 mb-6">
-                        {project.tags.map(tag => (
-                            <span key={tag.name || tag} className="px-2 py-1 bg-secondary/30 border border-border text-[10px] font-mono text-muted-foreground uppercase">
-                                {tag.name || tag}
+                        {project.techStack.map((tag, i) => (
+                            <span key={i} className="px-2 py-1 bg-secondary/30 border border-border text-[10px] font-mono text-muted-foreground uppercase">
+                                {tag.name}
                             </span>
                         ))}
                     </div>

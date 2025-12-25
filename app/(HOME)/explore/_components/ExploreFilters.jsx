@@ -3,7 +3,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Search } from "lucide-react";
-
+import { TECH_STACKS } from "@/constants/options";
 export default function ExploreFilters({ filters, setFilters }) {
   
   // Generic handler for array-based filters (Stack, Category)
@@ -15,6 +15,11 @@ export default function ExploreFilters({ filters, setFilters }) {
     
     setFilters({ ...filters, [type]: newList });
   };
+
+  // Combine all stacks for the filter view, or you could keep them separate
+  const ALL_STACKS = [...TECH_STACKS.code, ...TECH_STACKS.design, ...TECH_STACKS.video];
+  // Sort alphabetically to make it easier to scan
+  const SORTED_STACKS = [...new Set(ALL_STACKS)].sort();
 
   return (
     <aside className="w-full space-y-6">
@@ -39,8 +44,8 @@ export default function ExploreFilters({ filters, setFilters }) {
             // Tech Stack
           </AccordionTrigger>
           <AccordionContent>
-            <div className="space-y-3 pt-2">
-              {["React", "Next.js", "Vue", "TypeScript", "Python", "Go"].map((tech) => (
+            <div className="space-y-3 pt-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {SORTED_STACKS.map((tech) => (
                 <div key={tech} className="flex items-center space-x-3 group">
                   <Checkbox 
                     id={tech} 
@@ -48,7 +53,7 @@ export default function ExploreFilters({ filters, setFilters }) {
                     onCheckedChange={() => handleCheckbox("stack", tech)}
                     className="rounded-none border-muted-foreground data-[state=checked]:bg-accent data-[state=checked]:border-accent" 
                   />
-                  <label htmlFor={tech} className="text-sm font-light text-muted-foreground group-hover:text-foreground cursor-pointer">
+                  <label htmlFor={tech} className="text-sm font-light text-muted-foreground group-hover:text-foreground cursor-pointer select-none">
                     {tech}
                   </label>
                 </div>
@@ -64,13 +69,13 @@ export default function ExploreFilters({ filters, setFilters }) {
           </AccordionTrigger>
           <AccordionContent>
              <div className="flex flex-wrap gap-2 pt-2">
-                {["SaaS", "E-com", "Portfolio", "Mobile", "Crypto"].map(cat => {
+                {["Code", "Design", "Video", "SaaS", "Mobile", "Crypto", "E-commerce"].map(cat => {
                    const isActive = filters.category.includes(cat);
                    return (
                     <button 
                         key={cat} 
                         onClick={() => handleCheckbox("category", cat)}
-                        className={`px-3 py-1 text-[10px] font-mono border transition-colors ${
+                        className={`px-3 py-1 text-[10px] font-mono border transition-colors uppercase ${
                             isActive 
                             ? "bg-accent text-white border-accent" 
                             : "border-border hover:border-accent hover:text-accent"
