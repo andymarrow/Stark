@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
-import { COUNTRIES } from "@/app/constants/options";
+import { COUNTRIES } from "@/constants/options";
 
 export default function PersonalHeader({ user, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
