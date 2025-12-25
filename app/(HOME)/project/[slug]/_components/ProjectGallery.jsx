@@ -2,14 +2,38 @@
 import { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Maximize2, ImageOff } from "lucide-react"; // Added ImageOff
+import { ChevronLeft, ChevronRight, Maximize2, ImageOff, PlayCircle } from "lucide-react"; 
 import ImageLightbox from "./ImageLightbox";
+
+// Helper to detect video
+const isVideoUrl = (url) => url && (url.includes("youtube.com") || url.includes("youtu.be"));
+
+// Helper to get embed URL
+const getEmbedUrl = (url) => {
+    let videoId = "";
+    if (url.includes("youtu.be")) {
+        videoId = url.split("/").pop();
+    } else if (url.includes("v=")) {
+        videoId = url.split("v=")[1].split("&")[0];
+    }
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0`;
+};
+
+// Helper for thumbnail
+const getThumbnail = (url) => {
+    if (isVideoUrl(url)) {
+        let videoId = "";
+        if (url.includes("youtu.be")) videoId = url.split("/").pop();
+        else if (url.includes("v=")) videoId = url.split("v=")[1].split("&")[0];
+        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    }
+    return url;
+};
 
 export default function ProjectGallery({ images }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
-  // SAFEGUARD: If no images, show nothing or a placeholder
   if (!images || images.length === 0) {
     return (
         <div className="w-full aspect-video bg-secondary/10 border border-border flex flex-col items-center justify-center text-muted-foreground">
@@ -19,12 +43,9 @@ export default function ProjectGallery({ images }) {
     );
   }
 
-  // Ensure current index is valid
   const validIndex = currentIndex >= 0 && currentIndex < images.length ? currentIndex : 0;
-  const currentImageSrc = images[validIndex];
-
-  // If the specific image source is invalid/null
-  if (!currentImageSrc) return null;
+  const currentMediaSrc = images[validIndex];
+  const isVideo = isVideoUrl(currentMediaSrc);
 
   const nextImage = (e) => {
     e?.stopPropagation();
@@ -41,32 +62,45 @@ export default function ProjectGallery({ images }) {
         <div className="space-y-4">
         {/* Main Viewport */}
         <div 
-            className="relative w-full aspect-video bg-black border border-border group overflow-hidden cursor-zoom-in"
-            onClick={() => setIsLightboxOpen(true)}
+            className="relative w-full aspect-video bg-black border border-border group overflow-hidden"
         >
-            
             <AnimatePresence mode="wait">
             <motion.div
                 key={validIndex}
-                initial={{ opacity: 0, scale: 1.05 }}
-                animate={{ opacity: 1, scale: 1 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4 }}
                 className="absolute inset-0"
             >
-                <Image 
-                    src={currentImageSrc} 
-                    alt="Project Preview" 
-                    fill 
-                    className="object-cover"
-                    priority
-                />
+                {isVideo ? (
+                    <iframe 
+                        src={getEmbedUrl(currentMediaSrc)} 
+                        title="YouTube video player" 
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowFullScreen
+                    />
+                ) : (
+                    <div 
+                        className="relative w-full h-full cursor-zoom-in" 
+                        onClick={() => setIsLightboxOpen(true)}
+                    >
+                        <Image 
+                            src={currentMediaSrc} 
+                            alt="Project Preview" 
+                            fill 
+                            className="object-contain" // Changed to contain for better aspect ratio
+                            priority
+                        />
+                    </div>
+                )}
             </motion.div>
             </AnimatePresence>
 
             <div className="absolute top-4 left-4 z-10 pointer-events-none">
                 <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-mono px-2 py-1 border border-white/10 uppercase tracking-widest">
-                    IMG_0{validIndex + 1} // PREVIEW_MODE
+                    {isVideo ? "VIDEO_FEED" : `IMG_0${validIndex + 1}`} // PREVIEW_MODE
                 </span>
             </div>
 
@@ -81,40 +115,57 @@ export default function ProjectGallery({ images }) {
                 </>
             )}
             
-            <button 
-                onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(true); }}
-                className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-md border border-white/10 text-white hover:bg-accent hover:border-accent transition-colors z-20"
-            >
-                <Maximize2 size={16} />
-            </button>
+            {!isVideo && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); setIsLightboxOpen(true); }}
+                    className="absolute top-4 right-4 p-2 bg-black/50 backdrop-blur-md border border-white/10 text-white hover:bg-accent hover:border-accent transition-colors z-20"
+                >
+                    <Maximize2 size={16} />
+                </button>
+            )}
         </div>
 
         {/* Thumbnails */}
         {images.length > 1 && (
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                {images.map((img, idx) => (
-                <button
-                    key={idx}
-                    onClick={() => setCurrentIndex(idx)}
-                    className={`
-                        relative w-24 h-16 flex-shrink-0 border transition-all duration-200
-                        ${validIndex === idx ? "border-accent opacity-100" : "border-transparent opacity-50 hover:opacity-80"}
-                    `}
-                >
-                    {img && <Image src={img} alt="thumb" fill className="object-cover" />}
-                </button>
-                ))}
+                {images.map((item, idx) => {
+                    const isItemVideo = isVideoUrl(item);
+                    return (
+                        <button
+                            key={idx}
+                            onClick={() => setCurrentIndex(idx)}
+                            className={`
+                                relative w-24 h-16 flex-shrink-0 border transition-all duration-200 overflow-hidden bg-secondary
+                                ${validIndex === idx ? "border-accent opacity-100" : "border-transparent opacity-50 hover:opacity-80"}
+                            `}
+                        >
+                            <Image 
+                                src={getThumbnail(item)} 
+                                alt="thumb" 
+                                fill 
+                                className="object-cover" 
+                            />
+                            {isItemVideo && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                    <PlayCircle size={20} className="text-white" />
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
         )}
         </div>
 
-        {/* --- LIGHTBOX OVERLAY --- */}
-        <ImageLightbox 
-            isOpen={isLightboxOpen} 
-            onClose={() => setIsLightboxOpen(false)} 
-            images={images} 
-            initialIndex={validIndex}
-        />
+        {/* --- LIGHTBOX OVERLAY (Only for Images) --- */}
+        {!isVideo && (
+            <ImageLightbox 
+                isOpen={isLightboxOpen} 
+                onClose={() => setIsLightboxOpen(false)} 
+                images={images.filter(img => !isVideoUrl(img))} 
+                initialIndex={0} // Simplified index logic for lightbox if mixed media
+            />
+        )}
     </>
   );
 }

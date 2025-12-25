@@ -2,10 +2,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Flame, ArrowUpRight, Trophy, Star } from "lucide-react";
+import { Flame, ArrowUpRight, Trophy, PlayCircle } from "lucide-react";
+import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; // Import
 
 export default function TrendingHero({ item, type }) {
   const isProject = type === "projects";
+  
+  // Handle Thumbnail Logic
+  const rawImage = isProject ? item.thumbnail : item.coverImage;
+  const imageSrc = getSmartThumbnail(rawImage);
+  const isVideo = isProject && isVideoUrl(rawImage);
 
   return (
     <motion.div 
@@ -13,10 +19,10 @@ export default function TrendingHero({ item, type }) {
       animate={{ opacity: 1, y: 0 }}
       className="relative w-full aspect-[21/9] md:aspect-[3/1] bg-secondary/5 border border-border overflow-hidden group mb-8"
     >
-        {/* 1. Background Image (Blurred & Darkened) */}
+        {/* 1. Background Image */}
         <div className="absolute inset-0">
             <Image 
-                src={isProject ? item.thumbnail : item.coverImage} 
+                src={imageSrc} // Use smart src
                 alt="Background" 
                 fill 
                 className="object-cover opacity-40 blur-sm scale-105 group-hover:scale-110 transition-transform duration-700" 
@@ -27,10 +33,11 @@ export default function TrendingHero({ item, type }) {
         {/* 2. Content */}
         <div className="absolute inset-0 p-8 md:p-12 flex flex-col justify-center items-start z-10">
             
-            {/* The Badge */}
             <div className="flex items-center gap-2 bg-accent text-white px-3 py-1 mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <Trophy size={14} />
-                <span className="text-xs font-mono font-bold uppercase tracking-widest">#1 Trending {isProject ? "Project" : "Creator"}</span>
+                {isVideo ? <PlayCircle size={14} /> : <Trophy size={14} />}
+                <span className="text-xs font-mono font-bold uppercase tracking-widest">
+                    #1 Trending {isProject ? "Project" : "Creator"}
+                </span>
             </div>
 
             <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-foreground mb-4 uppercase">

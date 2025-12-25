@@ -1,18 +1,33 @@
 "use client";
 import { useState, useRef } from "react";
-import { UploadCloud, Image as ImageIcon, X, Loader2, Camera, Wand2, MonitorPlay, Trash2 } from "lucide-react";
+import { UploadCloud, X, Loader2, Camera, Wand2, Trash2, Youtube, Link as LinkIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { useAuth } from "../../../_context/AuthContext";
+import { useAuth } from "@/app/_context/AuthContext";
 import Image from "next/image";
+
+// Helper to check if string is a video link
+const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
+
+// Helper to extract YouTube Thumbnail
+const getYoutubeThumbnail = (url) => {
+    let videoId = "";
+    if (url.includes("youtu.be")) {
+        videoId = url.split("/").pop();
+    } else if (url.includes("v=")) {
+        videoId = url.split("v=")[1].split("&")[0];
+    }
+    return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+};
 
 export default function StepMedia({ data, updateData }) {
   const { user } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [isAutoCapturing, setIsAutoCapturing] = useState(false);
+  const [videoLink, setVideoLink] = useState(""); // State for video input
   const fileInputRef = useRef(null);
 
-  // --- 1. MANUAL UPLOAD ---
+  // --- 1. MANUAL IMAGE UPLOAD ---
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -32,10 +47,8 @@ export default function StepMedia({ data, updateData }) {
         
         const { data: { publicUrl } } = supabase.storage.from('project-assets').getPublicUrl(fileName);
         
-        // Append to existing files
         const newFiles = [...(data.files || []), publicUrl];
         updateData("files", newFiles);
-        
         toast.success("Asset Uploaded");
     } catch (error) {
         toast.error("Upload Failed", { description: error.message });
@@ -62,24 +75,36 @@ export default function StepMedia({ data, updateData }) {
         });
 
         const result = await response.json();
-
         if (!response.ok) throw new Error(result.error);
 
         if (result.images && result.images.length > 0) {
-            // Append new images to state immediately
             const newFiles = [...(data.files || []), ...result.images];
             updateData("files", newFiles);
             toast.success("Capture Complete", { description: `${result.images.length} screenshots added.` });
         } else {
              toast.warning("No Images Returned", { description: "The bot visited but returned no data." });
         }
-
     } catch (error) {
         console.error(error);
         toast.error("Capture Failed", { description: "Could not access the live site. Try manual upload." });
     } finally {
         setIsAutoCapturing(false);
     }
+  };
+
+  // --- 3. ADD VIDEO LINK ---
+  const handleAddVideo = () => {
+    if (!videoLink) return;
+    if (!isVideoUrl(videoLink)) {
+        toast.error("Invalid Link", { description: "Only YouTube links are supported for now." });
+        return;
+    }
+    
+    // Add to files array (it handles both image URLs and video URLs)
+    const newFiles = [...(data.files || []), videoLink];
+    updateData("files", newFiles);
+    setVideoLink("");
+    toast.success("Video Added");
   };
 
   const removeFile = (indexToRemove) => {
@@ -93,91 +118,131 @@ export default function StepMedia({ data, updateData }) {
       <div className="text-center space-y-1 mb-6">
         <h3 className="font-bold text-foreground">Visual Assets</h3>
         <p className="text-xs text-muted-foreground font-mono">
-            {data.files?.length || 0} Assets Loaded
+            {data.files?.length || 0} Assets Loaded (Images & Video)
         </p>
       </div>
 
-      {/* --- MAGIC CAPTURE BAR --- */}
-      {data.demo_link && (
-         <div className="bg-secondary/10 border border-accent/20 p-4 flex items-center justify-between group">
-            <div className="flex items-center gap-3">
-                <div className={`p-2 bg-accent/10 text-accent rounded-full ${isAutoCapturing ? 'animate-spin' : 'animate-pulse'}`}>
-                    {isAutoCapturing ? <Loader2 size={18} /> : <Wand2 size={18} />}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          {/* --- A. MAGIC CAPTURE BAR --- */}
+          {data.demo_link ? (
+             <div className="bg-secondary/10 border border-accent/20 p-4 flex flex-col justify-between group h-32">
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 bg-accent/10 text-accent rounded-full ${isAutoCapturing ? 'animate-spin' : 'animate-pulse'}`}>
+                        {isAutoCapturing ? <Loader2 size={18} /> : <Wand2 size={18} />}
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-bold text-foreground">Auto-Capture</h4>
+                        <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[150px]">
+                            {data.demo_link}
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h4 className="text-sm font-bold text-foreground">
-                        {isAutoCapturing ? "Scanning Target..." : "Auto-Capture Available"}
-                    </h4>
-                    <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">
-                        {data.demo_link}
-                    </p>
+                <button 
+                    onClick={handleAutoCapture}
+                    disabled={isAutoCapturing}
+                    className="flex items-center justify-center gap-2 w-full py-2 bg-accent text-white text-xs font-mono font-bold uppercase tracking-wide hover:bg-accent/90 disabled:opacity-50 transition-all mt-auto"
+                >
+                    <Camera size={14} /> {isAutoCapturing ? "Capturing..." : "Run Capture"}
+                </button>
+             </div>
+          ) : (
+             <div className="bg-secondary/5 border border-border border-dashed p-4 flex items-center justify-center text-muted-foreground h-32">
+                <span className="text-xs font-mono">Add Demo Link in Step 2 to enable Auto-Capture</span>
+             </div>
+          )}
+
+          {/* --- B. MANUAL DROPZONE --- */}
+          <div 
+            className="h-32 border-2 border-dashed border-border hover:border-accent/50 bg-secondary/5 flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer relative group"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileSelect} 
+                className="hidden" 
+                accept="image/*"
+            />
+            {isUploading ? (
+                <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="animate-spin text-accent" size={24} />
+                    <span className="text-xs font-mono">UPLOADING...</span>
                 </div>
-            </div>
-            
-            <button 
-                onClick={handleAutoCapture}
-                disabled={isAutoCapturing}
-                className="flex items-center gap-2 px-4 py-2 bg-accent text-white text-xs font-mono font-bold uppercase tracking-wide hover:bg-accent/90 disabled:opacity-50 transition-all"
-            >
-                <Camera size={14} /> {isAutoCapturing ? "Capturing..." : "Run Capture"}
-            </button>
-         </div>
-      )}
-
-      {/* --- MANUAL DROPZONE --- */}
-      <div 
-        className="w-full h-32 border-2 border-dashed border-border hover:border-accent/50 bg-secondary/5 flex flex-col items-center justify-center gap-2 transition-colors cursor-pointer relative group"
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileSelect} 
-            className="hidden" 
-            accept="image/*"
-        />
-
-        {isUploading ? (
-            <div className="flex flex-col items-center gap-2">
-                <Loader2 className="animate-spin text-accent" size={24} />
-                <span className="text-xs font-mono">UPLOADING...</span>
-            </div>
-        ) : (
-            <div className="flex flex-col items-center">
-                <UploadCloud size={24} className="text-muted-foreground group-hover:text-accent transition-colors mb-2" />
-                <p className="text-xs font-bold text-foreground">Click to Upload Manually</p>
-            </div>
-        )}
+            ) : (
+                <div className="flex flex-col items-center text-center">
+                    <UploadCloud size={24} className="text-muted-foreground group-hover:text-accent transition-colors mb-2" />
+                    <p className="text-xs font-bold text-foreground">Upload Image</p>
+                    <span className="text-[10px] text-muted-foreground">JPG, PNG (Max 5MB)</span>
+                </div>
+            )}
+          </div>
       </div>
 
-      {/* --- PREVIEW GRID (THE FIX) --- */}
-      {/* Visualizes the images immediately */}
-      {data.files && data.files.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            {data.files.map((url, idx) => (
-                <div key={idx} className="relative aspect-video group bg-secondary border border-border overflow-hidden">
-                    <Image 
-                        src={url} 
-                        alt={`Screenshot ${idx}`} 
-                        fill 
-                        className="object-cover transition-transform duration-500 group-hover:scale-105" 
-                    />
-                    
-                    {/* Delete Overlay */}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button 
-                            onClick={() => removeFile(idx)}
-                            className="p-2 bg-red-600 text-white rounded-none hover:bg-red-700 transition-colors"
-                        >
-                            <Trash2 size={16} />
-                        </button>
-                    </div>
+      {/* --- C. VIDEO INPUT --- */}
+      <div className="relative flex items-center">
+         <div className="absolute left-3 text-muted-foreground">
+            <Youtube size={18} />
+         </div>
+         <input 
+            type="text" 
+            value={videoLink}
+            onChange={(e) => setVideoLink(e.target.value)}
+            placeholder="Paste YouTube Link..."
+            className="w-full h-12 pl-10 pr-24 bg-background border border-border focus:border-accent outline-none font-mono text-sm transition-colors"
+            onKeyDown={(e) => e.key === 'Enter' && handleAddVideo()}
+         />
+         <button 
+            onClick={handleAddVideo}
+            disabled={!videoLink}
+            className="absolute right-2 px-4 py-1.5 bg-secondary text-foreground text-xs font-bold uppercase hover:bg-accent hover:text-white transition-colors disabled:opacity-50"
+         >
+            Add Video
+         </button>
+      </div>
 
-                    <div className="absolute bottom-2 left-2 bg-black/70 text-white text-[9px] font-mono px-2 py-0.5">
-                        IMG_0{idx + 1}
+      {/* --- PREVIEW GRID --- */}
+      {data.files && data.files.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+            {data.files.map((url, idx) => {
+                const isVideo = isVideoUrl(url);
+                const thumbnail = isVideo ? getYoutubeThumbnail(url) : url;
+
+                return (
+                    <div key={idx} className="relative aspect-video group bg-secondary border border-border overflow-hidden">
+                        {/* Render Thumbnail (for both Video and Image) */}
+                        <Image 
+                            src={thumbnail || "/placeholder.jpg"} 
+                            alt={`Asset ${idx}`} 
+                            fill 
+                            className="object-cover transition-transform duration-500 group-hover:scale-105" 
+                        />
+                        
+                        {/* Video Indicator Overlay */}
+                        {isVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg">
+                                    <Youtube size={16} fill="currentColor" />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Delete Overlay */}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                            <button 
+                                onClick={() => removeFile(idx)}
+                                className="p-2 bg-red-600 text-white rounded-none hover:bg-red-700 transition-colors"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+
+                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-[9px] font-mono px-2 py-0.5 z-10">
+                            {isVideo ? "VIDEO" : `IMG_0${idx + 1}`}
+                        </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
           </div>
       )}
 

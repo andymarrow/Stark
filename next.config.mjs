@@ -8,15 +8,23 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'lh3.googleusercontent.com', // Allow Google User Images
+        hostname: 'lh3.googleusercontent.com', // Google Auth Images
       },
       {
         protocol: 'https',
-        hostname: 'avatars.githubusercontent.com', // Allow GitHub User Images
+        hostname: 'avatars.githubusercontent.com', // GitHub Auth Images
       },
       {
         protocol: 'https',
-        hostname: '**.supabase.co', // Allow images from your Supabase Storage
+        hostname: '**.supabase.co', // Supabase Storage
+      },
+      {
+        protocol: 'https',
+        hostname: 'img.youtube.com', // youtube thumbnails
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.youtube.com', // youtube thumbnails
       },
     ],
   },
