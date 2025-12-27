@@ -7,7 +7,10 @@ import TechMap from "./_components/TechMap";
 import ActiveFilters from "./_components/ActiveFilters";
 import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
+import Pagination from "@/components/ui/Pagination";
 import { COUNTRIES } from "@/constants/options";
+
+const ITEMS_PER_PAGE = 6;
 
 // --- SMART REGION MAPPER ---
 const getRegionFromLocation = (location) => {
@@ -17,9 +20,6 @@ const getRegionFromLocation = (location) => {
     const input = location.toLowerCase().trim();
 
     // 2. Check against our Master Country List
-    // Logic: Does the user's location string INCLUDE a known country name?
-    // Example: "Addis Ababa, Ethiopia" includes "ethiopia" -> Match!
-    // Example: "Ethiopia" includes "ethiopia" -> Match!
     const matchedCountry = COUNTRIES.find(c => input.includes(c.value.toLowerCase()));
     
     if (matchedCountry) {
@@ -27,7 +27,6 @@ const getRegionFromLocation = (location) => {
     }
 
     // 3. Fallback: Check for Continent Names or Common Abbreviations
-    // This catches things like "Africa", "USA", "UK" which might not be in the full name list
     if (input.includes("usa") || input.includes("america") || input.includes("states") || input.includes("canada") || input.includes("mexico")) return "na";
     if (input.includes("europe") || input.includes("uk") || input.includes("england") || input.includes("germany") || input.includes("france")) return "eu";
     if (input.includes("asia") || input.includes("china") || input.includes("india") || input.includes("japan")) return "as";
@@ -41,6 +40,7 @@ const getRegionFromLocation = (location) => {
 export default function ExplorePage() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // --- 1. Centralized Filter State ---
   const [filters, setFilters] = useState({
@@ -51,6 +51,11 @@ export default function ExplorePage() {
     minQuality: 0,
     forHire: false
   });
+
+  // --- Reset to Page 1 whenever filters change ---
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
 
   // --- 2. Fetch Data from Supabase ---
   useEffect(() => {
@@ -78,9 +83,6 @@ export default function ExplorePage() {
         const formatted = (data || []).map(p => {
             const rawLocation = p.author?.location;
             const regionCode = getRegionFromLocation(rawLocation);
-            
-            // DEBUG: See what region is assigned to what location in your Console
-            // console.log(`📍 Location: "${rawLocation}" -> Region: "${regionCode}"`);
 
             return {
                 id: p.id,
@@ -93,7 +95,7 @@ export default function ExplorePage() {
                 qualityScore: p.quality_score,
                 views: p.views,
                 likes_count: p.likes_count,
-                region: regionCode, // <--- Assiged Region
+                region: regionCode, 
                 forHire: p.author?.is_for_hire,
                 author: {
                     name: p.author?.full_name || "Anonymous",
@@ -120,7 +122,6 @@ export default function ExplorePage() {
         
         // --- REGION FILTER LOGIC ---
         if (filters.region) {
-            // If project region doesn't match filter, HIDE IT.
             if (project.region !== filters.region) return false;
         }
         
@@ -162,8 +163,15 @@ export default function ExplorePage() {
     });
   }, [filters, projects]);
 
+  // --- 4. Pagination Logic ---
+  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
+  
+  const paginatedProjects = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredProjects, currentPage]);
+
   const handleRegionSelect = (regionId) => {
-    // Toggle: if clicking the active region, clear it (null), otherwise set it
     setFilters(prev => ({ ...prev, region: prev.region === regionId ? null : regionId }));
   };
 
@@ -173,8 +181,8 @@ export default function ExplorePage() {
         
         <div className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Explore <span className="text-accent">Hub</span></h1>
-            <p className="text-muted-foreground font-light max-w-2xl">
-                Filter through {filteredProjects.length} open source projects by region, stack, or quality.
+            <p className="text-muted-foreground font-light max-w-2xl text-xs md:text-sm uppercase font-mono tracking-tighter">
+                // System_Index: {filteredProjects.length} Records_Found
             </p>
         </div>
 
@@ -185,12 +193,11 @@ export default function ExplorePage() {
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-mono font-bold uppercase text-muted-foreground">Geographic_Filter</span>
                         {filters.region && (
-                            <button onClick={() => handleRegionSelect(null)} className="text-[10px] text-accent hover:underline">
+                            <button onClick={() => handleRegionSelect(null)} className="text-[10px] text-accent hover:underline uppercase font-bold">
                                 CLEAR_MAP
                             </button>
                         )}
                     </div>
-                    {/* Pass the currently selected region so the map highlights it */}
                     <TechMap selectedRegion={filters.region} onSelect={handleRegionSelect} />
                 </div>
                 <ExploreFilters filters={filters} setFilters={setFilters} />
@@ -200,34 +207,41 @@ export default function ExplorePage() {
                 <FilterSheet filters={filters} setFilters={setFilters} />
             </div>
 
-            <div className="flex-1">
+            <div className="flex-1 flex flex-col">
                 <ActiveFilters filters={filters} setFilters={setFilters} />
 
-                {loading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <Loader2 className="animate-spin text-accent" size={32} />
-                    </div>
-                ) : filteredProjects.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-500">
-                        {filteredProjects.map((project) => (
-                            <ProjectCard key={project.id} project={project} />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5">
-                        <span className="text-muted-foreground font-mono text-sm mb-2">NO_DATA_FOUND_IN_SECTOR</span>
-                        <button 
-                            onClick={() => setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false })}
-                            className="text-accent text-xs hover:underline"
-                        >
-                            RESET_ALL_FILTERS()
-                        </button>
-                    </div>
-                )}
+                <div className="flex-1 min-h-[600px]">
+                    {loading ? (
+                        <div className="flex items-center justify-center h-64">
+                            <Loader2 className="animate-spin text-accent" size={32} />
+                        </div>
+                    ) : paginatedProjects.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in zoom-in-95 duration-500">
+                            {paginatedProjects.map((project) => (
+                                <ProjectCard key={project.id} project={project} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5">
+                            <span className="text-muted-foreground font-mono text-sm mb-2 uppercase">NO_DATA_FOUND_IN_SECTOR</span>
+                            <button 
+                                onClick={() => setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false })}
+                                className="text-accent text-xs hover:underline font-mono"
+                            >
+                                RESET_ALL_FILTERS()
+                            </button>
+                        </div>
+                    )}
+                </div>
 
-                {filteredProjects.length > 12 && (
-                    <div className="mt-12 flex justify-center">
-                        <span className="text-[10px] font-mono text-muted-foreground">END_OF_RESULTS</span>
+                {!loading && filteredProjects.length > 0 && (
+                    <div className="mt-12">
+                        <Pagination 
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                            isLoading={loading}
+                        />
                     </div>
                 )}
             </div>
