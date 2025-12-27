@@ -20,11 +20,11 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'img.youtube.com', // youtube thumbnails
+        hostname: 'img.youtube.com', // YouTube thumbnails
       },
       {
         protocol: 'https',
-        hostname: 'www.youtube.com', // youtube thumbnails
+        hostname: 'www.youtube.com', // YouTube
       },
     ],
   },
