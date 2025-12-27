@@ -45,16 +45,16 @@ function ProfileContent() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const fetchProfileAndStats = useCallback(async () => {
-    if (!user) return;
-    
+ const fetchProfileAndStats = useCallback(async () => {
+    if (!user?.id) return; // Check ID specifically
+
     try {
       setLoading(true);
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', user.id) // This is safe, user.id is stable
         .single();
 
       if (profileError) throw profileError;
@@ -95,13 +95,13 @@ function ProfileContent() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchProfileAndStats();
     }
-  }, [user, fetchProfileAndStats]);
+  }, [user?.id, fetchProfileAndStats]); 
 
   const handleLogout = async () => {
     try {
