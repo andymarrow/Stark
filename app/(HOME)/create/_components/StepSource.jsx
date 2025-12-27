@@ -1,10 +1,8 @@
 "use client";
 import { Github, Globe, Youtube, Figma, Search, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { fetchRepositoryData } from "@/lib/githubLoader"; 
 import { toast } from "sonner";
 
-// ADDED 'errors' prop here
 export default function StepSource({ data, updateData, errors }) {
   const [status, setStatus] = useState("idle"); 
   const [errorMsg, setErrorMsg] = useState("");
@@ -22,26 +20,35 @@ export default function StepSource({ data, updateData, errors }) {
   const analyzeRepo = async () => {
     setStatus("analyzing");
     setErrorMsg("");
-    const result = await fetchRepositoryData(data.link);
 
-    if (result.error) {
+    try {
+        // CALL INTERNAL API BRIDGE
+        const res = await fetch(`/api/github?url=${encodeURIComponent(data.link)}`);
+        const result = await res.json();
+
+        if (result.error) {
+            setStatus("error");
+            setErrorMsg(result.error);
+            toast.error("Analysis Failed", { description: result.error });
+            return;
+        }
+
+        if (result.success) {
+            const repo = result.data;
+            updateData("title", formatTitle(repo.title));
+            updateData("description", repo.description || "");
+            updateData("tags", [repo.language, ...repo.tags].filter(Boolean).join(", "));
+            updateData("demo_link", repo.homepage || "");
+            updateData("stats", { stars: repo.stars, forks: repo.forks });
+            updateData("readme", repo.readme); 
+
+            setStatus("success");
+            toast.success("Repository Synced", { description: "Metadata and Readme extracted." });
+        }
+    } catch (err) {
         setStatus("error");
-        setErrorMsg(result.error);
-        toast.error("Analysis Failed", { description: result.error });
-        return;
-    }
-
-    if (result.success) {
-        const repo = result.data;
-        updateData("title", formatTitle(repo.title));
-        updateData("description", repo.description || "");
-        updateData("tags", [repo.language, ...repo.tags].filter(Boolean).join(", "));
-        updateData("demo_link", repo.homepage || "");
-        updateData("stats", { stars: repo.stars, forks: repo.forks });
-        updateData("readme", repo.readme); 
-
-        setStatus("success");
-        toast.success("Repository Synced", { description: "Metadata and Readme extracted." });
+        setErrorMsg("CONNECTION_ERROR");
+        toast.error("Bridge Error", { description: "Could not contact the scout service." });
     }
   };
 
@@ -95,11 +102,9 @@ export default function StepSource({ data, updateData, errors }) {
                     ${errors?.link ? 'border-red-500 focus:border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]' : status === 'error' ? 'border-red-500/50 focus:border-red-500' : 'border-border focus:border-accent'}
                 `}
             />
-            {/* Decorative Corner */}
             <div className={`absolute top-0 right-0 w-3 h-3 border-t border-r transition-opacity ${errors?.link ? 'border-red-500 opacity-100' : 'border-accent opacity-0 group-focus-within:opacity-100'}`} />
         </div>
         
-        {/* VALIDATION MESSAGE */}
         {errors?.link && (
             <p className="text-[10px] font-mono text-red-500 uppercase tracking-widest flex items-center gap-1.5 animate-in slide-in-from-top-1 duration-200">
                 <AlertTriangle size={10} /> Error: {errors.link}
