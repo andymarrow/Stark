@@ -1,24 +1,26 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Eye, ArrowUpRight, PlayCircle } from "lucide-react";
-import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; // Import helper
+import { Star, Eye, ArrowUpRight, PlayCircle, User } from "lucide-react"; // Added User icon
+import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
 export default function ProjectCard({ project }) {
   // --- MAPPING REAL DB FIELDS ---
   const stars = project?.likes_count ?? project?.stats?.stars ?? 0;
   const views = project?.views ?? project?.stats?.views ?? 0;
   
-  // RAW SOURCE (Could be Video or Image)
+  // RAW SOURCE
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
   
-  // SMART CONVERSION (Always an Image)
+  // SMART CONVERSION
   const imageSrc = getSmartThumbnail(rawThumbnail);
   const isVideo = isVideoUrl(rawThumbnail);
 
   const authorName = project?.author?.full_name || project?.author?.name || "User";
   const authorUsername = project?.author?.username || "user";
-  const authorAvatar = project?.author?.avatar_url || project?.author?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
+  
+  // FIX: Remove hardcoded fallback URL. Check if valid URL exists.
+  const authorAvatar = project?.author?.avatar_url || project?.author?.avatar;
 
   return (
     <article className="group relative flex flex-col h-full bg-card border border-border transition-all duration-300 ease-out hover:-translate-y-1 hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(var(--accent),0.1)]">
@@ -31,15 +33,22 @@ export default function ProjectCard({ project }) {
 
         {/* IMAGE SECTION */}
         <div className="relative w-full aspect-video overflow-hidden bg-secondary border-b border-border group-hover:border-accent/50 transition-colors">
-          <Image
-            src={imageSrc}
-            alt={project?.title || "Project Preview"}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
+          {imageSrc ? (
+            <Image
+                src={imageSrc}
+                alt={project?.title || "Project Preview"}
+                fill
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            />
+          ) : (
+            // Fallback if Project has no thumbnail at all
+            <div className="w-full h-full flex items-center justify-center bg-secondary/50">
+                <div className="text-[10px] font-mono uppercase text-muted-foreground border border-border px-2 py-1">No_Signal</div>
+            </div>
+          )}
           
-          {/* Video Indicator Overlay */}
+          {/* Video Indicator */}
           {isVideo && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                 <div className="w-10 h-10 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white border border-white/20">
@@ -95,14 +104,24 @@ export default function ProjectCard({ project }) {
                 href={`/profile/${authorUsername}`} 
                 className="flex items-center gap-2 pointer-events-auto hover:opacity-80 transition-opacity group/author"
             >
-              <div className="w-5 h-5 relative overflow-hidden bg-secondary border border-transparent group-hover/author:border-accent">
-                <Image 
-                  src={authorAvatar} 
-                  alt={authorName} 
-                  fill
-                  className="object-cover grayscale group-hover:grayscale-0 transition-all"
-                />
+              {/* --- AVATAR FIX START --- */}
+              <div className="w-5 h-5 relative overflow-hidden bg-secondary border border-transparent group-hover/author:border-accent flex items-center justify-center">
+                {authorAvatar ? (
+                    <Image 
+                        src={authorAvatar} 
+                        alt={authorName} 
+                        fill
+                        className="object-cover grayscale group-hover:grayscale-0 transition-all"
+                    />
+                ) : (
+                    // Fallback Initials
+                    <span className="text-[9px] font-mono font-bold text-muted-foreground group-hover:text-foreground">
+                        {authorUsername.charAt(0).toUpperCase()}
+                    </span>
+                )}
               </div>
+              {/* --- AVATAR FIX END --- */}
+              
               <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
                 @{authorUsername}
               </span>

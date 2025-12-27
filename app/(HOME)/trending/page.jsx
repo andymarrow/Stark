@@ -20,7 +20,8 @@ export default function TrendingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch Trending Projects (Top 10 by views)
+        // --- 1. Fetch Trending Projects ---
+        // (Logic remains the same: Most viewed published projects)
         const { data: projectsData, error: projError } = await supabase
           .from('projects')
           .select(`
@@ -33,7 +34,6 @@ export default function TrendingPage() {
 
         if (projError) throw projError;
 
-        // Transform Projects
         const formattedProjects = (projectsData || []).map(p => ({
             id: p.id,
             slug: p.slug,
@@ -51,32 +51,67 @@ export default function TrendingPage() {
         }));
         setProjects(formattedProjects);
 
-        // 2. Fetch Trending Creators (Top 10 by profile views / node reach)
-        // Note: Ideally, we'd join with a follower count, but sorting by 'views' is a good proxy for "Trending"
+        // --- 2. Fetch Trending Creators (With Activity Check) ---
+        
+        // A. Fetch a buffer (20) of users sorted by STARS first (Quality), then Views (Reach)
         const { data: profilesData, error: profError } = await supabase
           .from('profiles')
           .select('*')
-          .order('views', { ascending: false })
-          .limit(10);
+          .order('likes_count', { ascending: false }) // Prioritize Stars
+          .order('views', { ascending: false })       // Then Views
+          .limit(20);                                 // Fetch extra to allow filtering
 
         if (profError) throw profError;
 
-        // Transform Creators (We need to fetch their top project images separately or just use avatars for now)
-        // For efficiency, we will skip fetching topProjects images per user here to avoid N+1 queries in this simple fetch.
-        // We will mock the 'topProjects' array with placeholders or empty for now.
-        const formattedCreators = (profilesData || []).map(p => ({
-            id: p.id,
-            name: p.full_name || p.username,
-            username: p.username,
-            role: p.bio ? p.bio.split('.')[0].substring(0, 30) : "Creator", // Simple bio snippet
-            bio: p.bio,
-            avatar: p.avatar_url,
-            coverImage: p.avatar_url, // Fallback for Hero background
-            isForHire: p.is_for_hire,
-            stats: { followers: p.views, likes: p.likes_count }, // Using Views as "Followers" proxy for leaderboard visual if real follower count is expensive
-            topProjects: [] // Placeholder
-        }));
-        setCreators(formattedCreators);
+        const userIds = profilesData.map(p => p.id);
+
+        // B. Bulk Fetch Projects for these 20 users
+        const { data: userProjectsData, error: userProjError } = await supabase
+            .from('projects')
+            .select('owner_id, thumbnail_url, created_at')
+            .in('owner_id', userIds)
+            .eq('status', 'published') // Only count published work
+            .order('created_at', { ascending: false });
+
+        if (userProjError) throw userProjError;
+
+        // C. Group projects
+        const projectsByOwner = {};
+        (userProjectsData || []).forEach(p => {
+            if (!projectsByOwner[p.owner_id]) {
+                projectsByOwner[p.owner_id] = [];
+            }
+            if (projectsByOwner[p.owner_id].length < 3 && p.thumbnail_url) {
+                projectsByOwner[p.owner_id].push(p.thumbnail_url);
+            }
+        });
+
+        // D. Map & FILTER Empty Creators
+        const activeCreators = (profilesData || [])
+            .map(p => {
+                // Check if they actually have published projects
+                const userWork = projectsByOwner[p.id] || [];
+                
+                // If NO work, return null (we will filter this out)
+                if (userWork.length === 0) return null;
+
+                return {
+                    id: p.id,
+                    name: p.full_name || p.username,
+                    username: p.username,
+                    role: p.bio ? p.bio.split('.')[0].substring(0, 30) : "Creator",
+                    bio: p.bio,
+                    avatar: p.avatar_url,
+                    coverImage: p.avatar_url, 
+                    isForHire: p.is_for_hire,
+                    stats: { followers: p.views, likes: p.likes_count },
+                    topProjects: userWork
+                };
+            })
+            .filter(Boolean) // Remove the nulls (Empty profiles)
+            .slice(0, 10);   // Take top 10 of the survivors
+
+        setCreators(activeCreators);
 
       } catch (err) {
         console.error("Trending Fetch Error:", err);
@@ -91,7 +126,7 @@ export default function TrendingPage() {
   const currentData = view === "projects" ? projects : creators;
   const topItem = currentData[0];
   const leaderBoard = currentData.slice(1, 5);
-  const gridItems = currentData.slice(5); // Show rest in grid
+  const gridItems = currentData.slice(5); 
 
   if (loading) {
     return (
@@ -101,12 +136,14 @@ export default function TrendingPage() {
     );
   }
 
-  // Handle Empty State
+  // Handle Empty State (If NO active creators exist)
   if (currentData.length === 0) {
       return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center pt-20">
             <h2 className="text-2xl font-bold font-mono uppercase">System Quiet</h2>
-            <p className="text-muted-foreground text-sm">Not enough data to determine trends yet.</p>
+            <p className="text-muted-foreground text-sm">
+                {view === 'projects' ? "No projects deployed yet." : "No active creators found."}
+            </p>
         </div>
       );
   }

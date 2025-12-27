@@ -1,9 +1,10 @@
 "use client";
+import { useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Flame, ArrowUpRight, Trophy, PlayCircle } from "lucide-react";
-import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; // Import
+import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
 export default function TrendingHero({ item, type }) {
   const isProject = type === "projects";
@@ -12,6 +13,35 @@ export default function TrendingHero({ item, type }) {
   const rawImage = isProject ? item.thumbnail : item.coverImage;
   const imageSrc = getSmartThumbnail(rawImage);
   const isVideo = isProject && isVideoUrl(rawImage);
+
+  // --- DYNAMIC HYPE CALCULATION ---
+  const hypeScore = useMemo(() => {
+    if (!item?.stats) return "0.0";
+
+    const volume = isProject ? (item.stats.views || 0) : (item.stats.followers || 0);
+    const quality = isProject ? (item.stats.stars || 0) : (item.stats.likes || 0);
+
+    // THE ALGORITHM:
+    // 1. Quality (Stars/Likes) is worth 50x Volume.
+    // 2. We sum them up.
+    // 3. We divide by a "Viral Constant" (e.g., 50) to normalize to a 2-digit number.
+    // 4. We cap it at 99.9.
+    
+    // Example: 2000 Views + 50 Stars = 2000 + 2500 = 4500 Points.
+    // 4500 / 50 = 90.0 Hype Score.
+    
+    const rawScore = volume + (quality * 50);
+    const viralConstant = 50; 
+    
+    // Ensure we don't show 0.0 for the #1 item if they have at least some data
+    let calculated = rawScore / viralConstant;
+    
+    // If it's the #1 item but score is low (early platform), boost it visually to > 80
+    // (Optional: remove this line if you want strict math)
+    if (calculated < 10 && calculated > 0) calculated = calculated + 80;
+
+    return Math.min(calculated, 99.9).toFixed(1);
+  }, [item, isProject]);
 
   return (
     <motion.div 
@@ -22,7 +52,7 @@ export default function TrendingHero({ item, type }) {
         {/* 1. Background Image */}
         <div className="absolute inset-0">
             <Image 
-                src={imageSrc} // Use smart src
+                src={imageSrc} 
                 alt="Background" 
                 fill 
                 className="object-cover opacity-40 blur-sm scale-105 group-hover:scale-110 transition-transform duration-700" 
@@ -59,13 +89,14 @@ export default function TrendingHero({ item, type }) {
                 <div className="flex items-center gap-6 text-sm font-mono border-l border-border pl-8">
                     <div className="flex flex-col">
                         <span className="text-muted-foreground text-[10px] uppercase">Hype Score</span>
-                        <div className="flex items-center gap-1 text-accent font-bold">
-                            <Flame size={14} /> 99.8
+                        <div className="flex items-center gap-1 text-accent font-bold text-lg">
+                            <Flame size={16} className={hypeScore > 90 ? "fill-accent animate-pulse" : ""} /> 
+                            {hypeScore}
                         </div>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-muted-foreground text-[10px] uppercase">{isProject ? "Stars" : "Followers"}</span>
-                        <div className="text-foreground font-bold">
+                        <div className="text-foreground font-bold text-lg">
                             {isProject ? item.stats.stars : item.stats.followers}
                         </div>
                     </div>

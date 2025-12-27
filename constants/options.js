@@ -6,7 +6,7 @@ export const TECH_STACKS = {
     "Vue", "Svelte", "Python", "Go", "Rust", "Docker", "AWS", "Firebase"
   ],
   design: [
-    "Figma", "Adobe XD", "Photoshop", "Illustrator", "Blender", 
+    "Figma", "Adobe XD", "Photoshop", "Illustrator", "Blender","Rive","Dora",
     "Spline", "Sketch", "Procreate", "InDesign"
   ],
   video: [
