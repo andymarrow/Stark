@@ -4,16 +4,27 @@ import Image from "next/image";
 import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck } from "lucide-react"; 
 import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
+// --- HELPER: STRIP MARKDOWN ---
+// This removes markdown symbols so the card preview looks like clean plain text
+function stripMarkdown(md) {
+  if (!md) return "";
+  return md
+    .replace(/#+\s/g, "") // Remove headers
+    .replace(/\*\*?|__?/g, "") // Remove bold/italic
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") // Replace links with just text
+    .replace(/`{1,3}[^`]*`{1,3}/g, "") // Remove code blocks
+    .replace(/<\/?[^>]+(>|$)/g, "") // Remove HTML tags
+    .replace(/[>|\\-]/g, "") // Remove blockquotes, pipes, dashes
+    .replace(/\s+/g, " ") // Collapse multiple spaces
+    .trim();
+}
+
 export default function ProjectCard({ project }) {
-  // --- MAPPING REAL DB FIELDS ---
   const stars = project?.likes_count ?? project?.stats?.stars ?? 0;
   const views = project?.views ?? project?.stats?.views ?? 0;
-  const qScore = project?.quality_score ?? project?.qualityScore ?? 0; // Handle both naming conventions
+  const qScore = project?.quality_score ?? project?.qualityScore ?? 0;
   
-  // RAW SOURCE
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
-  
-  // SMART CONVERSION (Uses the fixed logic for YouTube)
   const imageSrc = getSmartThumbnail(rawThumbnail);
   const isVideo = isVideoUrl(rawThumbnail);
 
@@ -21,19 +32,19 @@ export default function ProjectCard({ project }) {
   const authorUsername = project?.author?.username || "user";
   const authorAvatar = project?.author?.avatar_url || project?.author?.avatar;
 
+  // Clean the description for the card preview
+  const cleanDescription = stripMarkdown(project?.description || "No description provided.");
+
   return (
     <article className="group relative flex flex-col h-full bg-card border border-border transition-all duration-300 ease-out hover:-translate-y-1 hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(220,38,38,0.1)]">
         
-        {/* MAIN CARD LINK */}
         <Link 
             href={`/project/${project?.slug}`} 
             className="absolute inset-0 z-10"
             aria-label={`View ${project?.title}`}
         />
 
-        {/* IMAGE SECTION */}
         <div className="relative w-full aspect-video overflow-hidden bg-secondary border-b border-border group-hover:border-accent/50 transition-colors">
-          {/* Check if imageSrc is not the default fallback or is valid */}
           {imageSrc && imageSrc !== "/placeholder.jpg" ? (
             <Image
                 src={imageSrc}
@@ -43,7 +54,6 @@ export default function ProjectCard({ project }) {
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
           ) : (
-            // Fallback UI if no image exists
             <div className="w-full h-full flex items-center justify-center bg-secondary/30">
                 <div className="text-[10px] font-mono uppercase text-muted-foreground border border-border border-dashed px-3 py-1">
                     Signal_Lost // No_Preview
@@ -51,7 +61,6 @@ export default function ProjectCard({ project }) {
             </div>
           )}
           
-          {/* Video Indicator */}
           {isVideo && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                 <div className="w-10 h-10 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white border border-white/20">
@@ -60,7 +69,6 @@ export default function ProjectCard({ project }) {
             </div>
           )}
 
-          {/* Subtle Quality Score Badge */}
           {qScore > 0 && (
              <div className="absolute bottom-2 left-2 z-20 bg-background/80 backdrop-blur-md border border-border px-1.5 py-0.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <ShieldCheck size={10} className="text-accent" />
@@ -77,7 +85,6 @@ export default function ProjectCard({ project }) {
           </div>
         </div>
 
-        {/* CONTENT SECTION */}
         <div className="flex flex-col flex-1 p-5 pointer-events-none"> 
 
           <div className="flex justify-between items-start mb-2 relative z-0">
@@ -89,8 +96,9 @@ export default function ProjectCard({ project }) {
             </span>
           </div>
 
+          {/* Cleaned Description Display */}
           <p className="text-sm text-muted-foreground line-clamp-2 mb-4 font-light relative z-0">
-            {project?.description || "No description provided."}
+            {cleanDescription}
           </p>
 
           <div className="flex flex-wrap gap-1.5 mt-auto mb-4 relative z-0">
