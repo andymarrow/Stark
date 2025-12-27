@@ -9,27 +9,65 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogClose
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
 
-// --- MOCK EVIDENCE DATA ---
-// Specific messages from users who reported this item
-const REPORT_LOGS = [
-    { id: 1, reporter: "User_882", reason: "Malware", message: "I downloaded this and my antivirus went crazy. Check the package.json scripts.", time: "2h ago", weight: "critical" },
-    { id: 2, reporter: "Dev_Sarah", reason: "Malware", message: "Suspicious obfuscated code in /lib/utils.js", time: "3h ago", weight: "critical" },
-    { id: 3, reporter: "Anon_User", reason: "Spam", message: "Just a clone of existing repo with no changes.", time: "5h ago", weight: "low" },
-];
-
-export default function ReportDetailModal({ report, isOpen, onClose }) {
+// FIX: Added 'onResolve' prop
+export default function ReportDetailModal({ report, isOpen, onClose, onResolve }) {
   if (!report) return null;
 
-  // Determine if target is a Project or User based on data structure
-  const isProject = report.type === 'project' || report.project; 
-  const targetName = report.project || report.user;
-  const targetImage = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000"; // Mock
+  // Identify Target
+  const isProject = report.type === 'project'; 
+  const targetName = isProject ? report.project?.title : report.user?.username;
+  const targetId = isProject ? report.project?.id : report.user?.id;
+  const targetImage = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000"; 
+
+  // --- ACTIONS ---
+
+  const handleDismiss = async () => {
+      const { error } = await supabase
+        .from('reports')
+        .update({ status: 'resolved' })
+        .eq('id', report.id);
+      
+      if (!error) {
+          toast.success("Report Dismissed");
+          if (onResolve) onResolve(report.id); // Notify Parent
+          onClose();
+      } else {
+          toast.error("Action Failed");
+      }
+  };
+
+  const handleTakedown = async () => {
+      if (!confirm(`Are you sure you want to take down ${targetName}?`)) return;
+
+      let error = null;
+
+      if (isProject) {
+          // Delete Project
+          const { error: err } = await supabase.from('projects').delete().eq('id', targetId);
+          error = err;
+      } else {
+          // Ban User
+          const { error: err } = await supabase.from('profiles').update({ role: 'banned' }).eq('id', targetId);
+          error = err;
+      }
+
+      if (!error) {
+          // Also mark report as resolved
+          await supabase.from('reports').update({ status: 'resolved' }).eq('id', report.id);
+          
+          toast.success(isProject ? "Project Removed" : "User Banned");
+          if (onResolve) onResolve(report.id); // Notify Parent
+          onClose();
+      } else {
+          toast.error("Takedown Failed", { description: error.message });
+      }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -52,14 +90,17 @@ export default function ReportDetailModal({ report, isOpen, onClose }) {
                         </span>
                     </div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        {targetName}
+                        {targetName || "Unknown Target"}
                     </h2>
-                    <Link 
-                        href="#" 
-                        className="text-xs font-mono text-zinc-400 hover:text-white flex items-center gap-1 mt-1 hover:underline"
-                    >
-                        view_source <ExternalLink size={10} />
-                    </Link>
+                    {isProject && report.project?.slug && (
+                        <Link 
+                            href={`/project/${report.project.slug}`} 
+                            target="_blank"
+                            className="text-xs font-mono text-zinc-400 hover:text-white flex items-center gap-1 mt-1 hover:underline"
+                        >
+                            view_source <ExternalLink size={10} />
+                        </Link>
+                    )}
                 </div>
             </div>
             <DialogClose asChild>
@@ -72,59 +113,38 @@ export default function ReportDetailModal({ report, isOpen, onClose }) {
         {/* 2. Body: The Evidence */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
             
-            {/* Left: User Reports */}
+            {/* Left: Report Details */}
             <div className="flex-1 border-r border-white/10 flex flex-col">
                 <div className="p-3 border-b border-white/10 bg-zinc-900/20 text-xs font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                    <Flag size={12} /> User Reports ({REPORT_LOGS.length})
+                    <Flag size={12} /> Violation Details
                 </div>
-                <ScrollArea className="flex-1">
-                    <div className="divide-y divide-white/5">
-                        {REPORT_LOGS.map((log) => (
-                            <div key={log.id} className="p-4 hover:bg-white/5 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-5 h-5 bg-zinc-800 rounded-full flex items-center justify-center text-[10px] text-zinc-400">
-                                            {log.reporter[0]}
-                                        </div>
-                                        <span className="text-xs font-bold text-zinc-300">{log.reporter}</span>
-                                    </div>
-                                    <span className="text-[10px] font-mono text-zinc-600">{log.time}</span>
-                                </div>
-                                <div className="pl-7">
-                                    <p className="text-sm text-zinc-400 leading-relaxed">"{log.message}"</p>
-                                    <div className="flex gap-2 mt-2">
-                                        <span className={`text-[9px] uppercase px-1.5 py-0.5 border ${log.weight === 'critical' ? 'text-red-400 border-red-900/50' : 'text-zinc-500 border-zinc-800'}`}>
-                                            {log.weight}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                <div className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-300">Reporter: {report.reporter}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-600">{new Date(report.created_at).toLocaleString()}</span>
                     </div>
-                </ScrollArea>
+                    <div className="bg-white/5 p-4 border border-white/10 text-sm text-zinc-300 font-mono leading-relaxed">
+                        "{report.details}"
+                    </div>
+                </div>
             </div>
 
             {/* Right: History & Context */}
             <div className="w-full md:w-72 bg-zinc-900/10 flex flex-col">
                 <div className="p-3 border-b border-white/10 bg-zinc-900/20 text-xs font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                    <History size={12} /> Prior Infractions
+                    <History size={12} /> Automated Analysis
                 </div>
                 <div className="p-4 space-y-4">
-                    <div className="border-l-2 border-yellow-600 pl-3">
-                        <span className="text-xs text-zinc-300 block">Warning Issued</span>
-                        <span className="text-[10px] text-zinc-500">2 months ago - Spamming</span>
+                    <div className="border-l-2 border-red-600 pl-3">
+                        <span className="text-xs text-zinc-300 block">Flagged Reason</span>
+                        <span className="text-[10px] text-zinc-500 uppercase">{report.reason}</span>
                     </div>
                     <div className="border-l-2 border-zinc-800 pl-3">
-                        <span className="text-xs text-zinc-500 block">Clean Record</span>
-                        <span className="text-[10px] text-zinc-600">Prior to that</span>
+                        <span className="text-xs text-zinc-500 block">System Verdict</span>
+                        <span className="text-[10px] text-zinc-600">Pending Review</span>
                     </div>
-                </div>
-
-                <div className="mt-auto p-4 border-t border-white/10">
-                    <h4 className="text-xs font-bold text-zinc-400 mb-2">Automated Analysis</h4>
-                    <p className="text-[10px] text-zinc-500 leading-relaxed">
-                        System detected matching hash with known malware signature (SHA-256). Confidence: 98%.
-                    </p>
                 </div>
             </div>
 
@@ -132,16 +152,20 @@ export default function ReportDetailModal({ report, isOpen, onClose }) {
 
         {/* 3. Footer: The Gavel */}
         <div className="p-4 border-t border-white/10 bg-zinc-900/50 flex justify-between items-center">
-            <Button variant="ghost" className="h-9 text-zinc-400 hover:text-white text-xs font-mono uppercase">
-                <MessageSquare size={14} className="mr-2" /> Contact Owner
-            </Button>
+            <div className="text-[10px] font-mono text-zinc-600">REPORT_ID: {report.id}</div>
             
             <div className="flex gap-3">
-                <Button className="h-9 bg-green-900/20 text-green-500 border border-green-900/50 hover:bg-green-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider">
+                <Button 
+                    onClick={handleDismiss}
+                    className="h-9 bg-green-900/20 text-green-500 border border-green-900/50 hover:bg-green-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider"
+                >
                     <CheckCircle2 size={14} className="mr-2" /> Dismiss
                 </Button>
-                <Button className="h-9 bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider">
-                    <AlertOctagon size={14} className="mr-2" /> Takedown & Ban
+                <Button 
+                    onClick={handleTakedown}
+                    className="h-9 bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider"
+                >
+                    <AlertOctagon size={14} className="mr-2" /> {isProject ? "Delete Project" : "Ban User"}
                 </Button>
             </div>
         </div>

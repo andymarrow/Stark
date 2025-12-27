@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { Edit3, Share2, MapPin, Link as LinkIcon, Calendar, Camera, UploadCloud, Loader2 } from "lucide-react";
+import Link from "next/link"; // Import Link
+import { Edit3, Share2, MapPin, Link as LinkIcon, Calendar, Camera, UploadCloud, Loader2, ShieldAlert } from "lucide-react"; // Added ShieldAlert
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -313,6 +314,12 @@ export default function PersonalHeader({ user, onUpdate }) {
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2">
                             {user?.full_name || user?.email?.split('@')[0]}
+                            {/* NEW: Admin Badge Logic */}
+                            {user?.role === 'admin' && (
+                                <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 font-mono tracking-wider uppercase font-bold border border-red-800">
+                                    ADMIN
+                                </span>
+                            )}
                             {user?.is_for_hire && (
                                 <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/50 px-2 py-0.5 font-mono tracking-wider uppercase">HIREABLE</span>
                             )}
@@ -332,6 +339,15 @@ export default function PersonalHeader({ user, onUpdate }) {
 
                     {/* Primary Actions */}
                     <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
+                        {/* NEW: GOD MODE BUTTON (Only visible to Admins) */}
+                        {user?.role === 'admin' && (
+                            <Link href="/admin">
+                                <Button className="h-10 bg-red-600 hover:bg-red-700 text-white border border-red-800 rounded-none font-mono text-xs uppercase tracking-wide shadow-[0_0_15px_rgba(220,38,38,0.4)] hover:animate-none">
+                                    <ShieldAlert size={14} className="mr-2" /> God Mode
+                                </Button>
+                            </Link>
+                        )}
+
                         <Button 
                             onClick={() => setIsEditing(true)} 
                             className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase tracking-wide"

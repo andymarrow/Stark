@@ -1,28 +1,79 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)']);
-const isLoginRoute = createRouteMatcher(['/login']);
+export async function middleware(request) {
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
-export default clerkMiddleware(async (auth, req) => {
-  // 1. Get the user ID (New Syntax: await auth())
-  const { userId } = await auth();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
 
-  // 2. If user is ALREADY logged in and visits /login, kick them to /dashboard
-  if (userId && isLoginRoute(req)) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // --- BANNED USER CHECK ---
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.role === 'banned') {
+        // If banned, force sign out and redirect to error page
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        url.searchParams.set('error', 'Account Suspended');
+        return NextResponse.redirect(url);
+    }
   }
 
-  // 3. If user is NOT logged in and visits /dashboard, protect it
-  // (New Syntax: await auth.protect())
-  if (isProtectedRoute(req)) {
-    await auth.protect();
+  // Protected Admin Routes
+  if (request.nextUrl.pathname.startsWith('/admin')) {
+      if (!user) {
+          return NextResponse.redirect(new URL('/login', request.url));
+      }
+      // Note: We also check admin role in the AdminGuard component for UX, 
+      // but you could double check here for extra security.
   }
-});
+
+  return response;
+}
 
 export const config = {
   matcher: [
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * Feel free to modify this pattern to include more paths.
+     */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
