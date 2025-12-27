@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { 
   LayoutDashboard, 
   Users, 
@@ -8,19 +10,39 @@ import {
   Activity, 
   Terminal, 
   LogOut,
-  Settings
 } from "lucide-react";
+import { useAuth } from "@/app/_context/AuthContext";
 
 const NAV_ITEMS = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin" },
   { label: "User Management", icon: Users, href: "/admin/users" },
-  { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation", badge: "3" },
+  { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation" },
   { label: "System Health", icon: Activity, href: "/admin/health" },
   { label: "Audit Logs", icon: Terminal, href: "/admin/logs" },
 ];
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const { signOut } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Fetch Real Moderation Count
+  useEffect(() => {
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      
+      setPendingCount(count || 0);
+    };
+
+    fetchCount();
+
+    // Optional: Set up an interval to refresh count every minute
+    const interval = setInterval(fetchCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex flex-col h-full text-zinc-400">
@@ -52,9 +74,11 @@ export default function AdminSidebar() {
                         <item.icon size={16} />
                         <span>{item.label}</span>
                     </div>
-                    {item.badge && (
-                        <span className="text-[10px] bg-red-600/20 text-red-500 px-1.5 py-0.5 border border-red-600/30">
-                            {item.badge}
+                    
+                    {/* Dynamic Badge for Moderation */}
+                    {item.href === "/admin/moderation" && pendingCount > 0 && (
+                        <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 font-bold">
+                            {pendingCount}
                         </span>
                     )}
                 </Link>
@@ -64,7 +88,10 @@ export default function AdminSidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-white/10">
-        <button className="flex items-center gap-3 px-3 py-2 text-sm font-mono text-zinc-500 hover:text-red-500 transition-colors w-full">
+        <button 
+            onClick={() => signOut()}
+            className="flex items-center gap-3 px-3 py-2 text-sm font-mono text-zinc-500 hover:text-red-500 transition-colors w-full"
+        >
             <LogOut size={16} />
             <span>Secure Logout</span>
         </button>

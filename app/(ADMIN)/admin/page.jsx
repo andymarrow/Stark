@@ -1,28 +1,94 @@
 "use client";
-import { Users, FileCode, AlertTriangle, TrendingUp, Activity, Globe } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, FileCode, AlertTriangle, TrendingUp, Activity, Globe, Loader2 } from "lucide-react";
 import MetricCard from "./_components/MetricCard";
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
+  AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from "recharts";
-
-// --- VISUAL DATA ---
-const TRAFFIC_DATA = Array.from({ length: 24 }).map((_, i) => ({
-  time: `${i}:00`,
-  visitors: Math.floor(Math.random() * 5000) + 2000,
-  requests: Math.floor(Math.random() * 8000) + 3000,
-}));
-
-const ACTIVITY_DATA = [
-  { name: 'Mon', signups: 400, posts: 240 },
-  { name: 'Tue', signups: 300, posts: 139 },
-  { name: 'Wed', signups: 500, posts: 380 },
-  { name: 'Thu', signups: 200, posts: 400 },
-  { name: 'Fri', signups: 600, posts: 500 },
-  { name: 'Sat', signups: 800, posts: 600 },
-  { name: 'Sun', signups: 700, posts: 450 },
-];
+import { supabase } from "@/lib/supabaseClient";
 
 export default function AdminDashboard() {
+  const [stats, setStats] = useState({
+    users: 0,
+    projects: 0,
+    reports: 0,
+    traffic: 0
+  });
+  
+  const [logs, setLogs] = useState([]);
+  const [activityData, setActivityData] = useState([]); // For chart
+  const [loading, setLoading] = useState(true);
+
+  // --- MOCK TRAFFIC DATA (Keep this visual for now) ---
+  const TRAFFIC_DATA = Array.from({ length: 24 }).map((_, i) => ({
+    time: `${i}:00`,
+    requests: Math.floor(Math.random() * 5000) + 1000,
+  }));
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        // 1. KPI Counts
+        const { count: users } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+        const { count: projects } = await supabase.from('projects').select('*', { count: 'exact', head: true });
+        const { count: reports } = await supabase.from('reports').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+        
+        // 2. Fetch Recent Audit Logs
+        const { data: recentLogs } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        setLogs(recentLogs || []);
+
+        // 3. Fetch Weekly Growth (Users per day) - Lightweight aggregation
+        // Note: For large datasets, use an RPC function instead of fetching rows.
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        const { data: recentUsers } = await supabase
+            .from('profiles')
+            .select('created_at')
+            .gte('created_at', oneWeekAgo.toISOString());
+
+        // Group by Day
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const grouped = {};
+        recentUsers.forEach(u => {
+            const d = new Date(u.created_at);
+            const dayName = days[d.getDay()];
+            grouped[dayName] = (grouped[dayName] || 0) + 1;
+        });
+
+        // Format for Recharts
+        const chartData = days.map(day => ({
+            name: day,
+            signups: grouped[day] || 0,
+            // Mock posts for comparison since we fetched users
+            posts: Math.floor(Math.random() * 10) 
+        }));
+        
+        setActivityData(chartData);
+
+        setStats({
+            users: users || 0,
+            projects: projects || 0,
+            reports: reports || 0,
+            traffic: 142000 // Mock traffic total
+        });
+
+      } catch (error) {
+        console.error("Dashboard Error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
         
@@ -42,10 +108,10 @@ export default function AdminDashboard() {
 
         {/* 1. Top Level Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="Total Users" value="12,402" trend="+12%" icon={Users} color="blue" />
-            <MetricCard label="Projects" value="8,230" trend="+5%" icon={FileCode} color="purple" />
-            <MetricCard label="Reports" value="14" trend="+2" icon={AlertTriangle} color="red" alert />
-            <MetricCard label="Traffic (24h)" value="145k" trend="+8%" icon={TrendingUp} color="green" />
+            <MetricCard label="Total Users" value={stats.users.toLocaleString()} trend="+12%" icon={Users} color="blue" />
+            <MetricCard label="Projects" value={stats.projects.toLocaleString()} trend="+5%" icon={FileCode} color="purple" />
+            <MetricCard label="Reports (Pending)" value={stats.reports.toString()} trend="+2" icon={AlertTriangle} color="red" alert={stats.reports > 0} />
+            <MetricCard label="Traffic (Est)" value="142k" trend="+8%" icon={TrendingUp} color="green" />
         </div>
 
         {/* 2. Visual Grid */}
@@ -79,12 +145,12 @@ export default function AdminDashboard() {
                 </div>
             </div>
 
-            {/* User Growth Bar Chart */}
+            {/* User Growth Bar Chart (Real Data) */}
             <div className="bg-black border border-white/10 p-6 h-[400px]">
                 <h3 className="text-xs font-mono text-zinc-500 uppercase mb-6 tracking-widest">Weekly Growth</h3>
                 <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={ACTIVITY_DATA}>
+                        <BarChart data={activityData.length > 0 ? activityData : [{name:'-', signups:0}]}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
                             <XAxis dataKey="name" stroke="#444" fontSize={10} tickLine={false} axisLine={false} />
                             <Tooltip cursor={{fill: '#222'}} content={<CustomTooltip />} />
@@ -97,19 +163,21 @@ export default function AdminDashboard() {
 
         </div>
 
-        {/* 3. System Logs (Terminal Style) */}
+        {/* 3. System Logs (Real Data) */}
         <div className="bg-black border border-white/10 p-4 font-mono text-xs">
             <h3 className="text-zinc-500 uppercase mb-3 px-2">Live_System_Logs</h3>
             <div className="space-y-1 h-32 overflow-y-auto custom-scrollbar px-2">
-                {Array.from({length: 10}).map((_, i) => (
-                    <div key={i} className="flex gap-4 border-b border-white/5 pb-1 mb-1 last:border-0 hover:bg-white/5 p-1 transition-colors">
-                        <span className="text-zinc-600">10:42:{10+i}</span>
-                        <span className={i%3===0 ? "text-red-400" : "text-green-400"}>
-                            {i%3===0 ? "[ERROR] CONNECTION_REFUSED" : "[INFO]  PACKET_RECEIVED"}
+                {logs.length > 0 ? logs.map((log) => (
+                    <div key={log.id} className="flex gap-4 border-b border-white/5 pb-1 mb-1 last:border-0 hover:bg-white/5 p-1 transition-colors">
+                        <span className="text-zinc-600 w-32 shrink-0">{new Date(log.created_at).toLocaleTimeString()}</span>
+                        <span className={log.action.includes('ERROR') ? "text-red-400 font-bold" : "text-green-400"}>
+                            [{log.action}]
                         </span>
-                        <span className="text-zinc-400">Node_0{i%4 + 1}</span>
+                        <span className="text-zinc-400 truncate">{log.details || log.target}</span>
                     </div>
-                ))}
+                )) : (
+                    <div className="text-zinc-600 p-2">NO_RECENT_LOGS</div>
+                )}
             </div>
         </div>
 
