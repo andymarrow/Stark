@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator"; // IMPORT SERVER ACTION
+import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator"; 
+import { projectSchema } from "@/lib/validations"; // IMPORT ZOD SCHEMA
 
 import CreateStepper from "./_components/CreateStepper";
 import StepSource from "./_components/StepSource";
@@ -20,6 +21,7 @@ export default function CreatePage() {
 
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({}); // NEW: Error state for Zod
 
   // Initialize form data with collaborators array
   const [formData, setFormData] = useState({
@@ -30,7 +32,7 @@ export default function CreatePage() {
     description: '',
     tags: '',
     files: [],
-    collaborators: [], // NEW: To store users/ghosts
+    collaborators: [], 
     // HIDDEN FIELDS AUTO-POPULATED
     readme: '', 
     stats: { stars: 0, forks: 0 } 
@@ -46,19 +48,61 @@ export default function CreatePage() {
 
   const updateData = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }));
+    // Clear error for a field when user starts typing again
+    if (errors[key]) {
+        setErrors(prev => {
+            const newErrs = { ...prev };
+            delete newErrs[key];
+            return newErrs;
+        });
+    }
   };
 
   const handleNext = () => {
-    // Basic Validation
-    if (step === 1 && !formData.link) {
-        toast.error("Source Required", { description: "Please enter a valid link." });
-        return;
+    setErrors({}); // Reset errors before validating
+
+    try {
+        if (step === 1) {
+            // Validate Source Link and Type
+            projectSchema.pick({ type: true, link: true }).parse({
+                type: formData.type,
+                link: formData.link,
+            });
+        }
+        
+        if (step === 2) {
+            // Validate Title, Description, and Demo Link
+            projectSchema.pick({ title: true, description: true, demo_link: true }).parse({
+                title: formData.title,
+                description: formData.description,
+                demo_link: formData.demo_link,
+            });
+        }
+
+        if (step === 3) {
+            // Validate that at least one image/video is uploaded
+            projectSchema.pick({ files: true }).parse({
+                files: formData.files,
+            });
+        }
+
+        // If validation passes, move to next step
+        if (step < 4) setStep(step + 1);
+
+    } catch (err) {
+        if (err.errors) {
+            const newErrors = {};
+            err.errors.forEach((e) => {
+                newErrors[e.path[0]] = e.message;
+            });
+            setErrors(newErrors);
+            
+            // Show toast for the first error encountered
+            toast.error("Validation Failed", { 
+                description: err.errors[0].message 
+            });
+        }
     }
-    if (step === 2 && (!formData.title || !formData.description)) {
-        toast.error("Details Missing", { description: "Title and description are mandatory." });
-        return;
-    }
-    if (step < 4) setStep(step + 1);
   };
 
   const handleBack = () => {
@@ -92,7 +136,6 @@ export default function CreatePage() {
 
     try {
         const tagArray = formData.tags.split(',').map(t => t.trim()).filter(t => t);
-        // Use a random string for slug to prevent duplicates for now
         const slug = formData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000);
         
         const qualityScore = calculateQualityScore();
@@ -115,22 +158,19 @@ export default function CreatePage() {
                 quality_score: qualityScore,
             })
             .select()
-            .single(); // Important: Get the inserted object back
+            .single(); 
 
         if (projectError) throw projectError;
 
         // 2. HANDLE COLLABORATORS
         if (formData.collaborators && formData.collaborators.length > 0) {
-            
-            // Prepare rows for DB
             const collabRows = formData.collaborators.map(c => ({
                 project_id: projectData.id,
                 user_id: c.type === 'user' ? c.user_id : null,
                 invite_email: c.type === 'ghost' ? c.email : null,
-                status: 'pending' // They need to accept/claim it
+                status: 'pending' 
             }));
 
-            // Insert into 'collaborations' table
             const { error: collabError } = await supabase
                 .from('collaborations')
                 .insert(collabRows);
@@ -141,8 +181,6 @@ export default function CreatePage() {
             } else {
                 // 3. SEND EMAILS (Only for Ghosts)
                 const ghostInvites = formData.collaborators.filter(c => c.type === 'ghost');
-                
-                // Fire and forget - don't await the emails to keep UI snappy
                 ghostInvites.forEach(async (ghost) => {
                     const inviterName = user.user_metadata?.full_name || user.email;
                     await sendCollaboratorInvite(ghost.email, formData.title, inviterName);
@@ -186,10 +224,9 @@ export default function CreatePage() {
             <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-bl-full pointer-events-none" />
 
             <div className="mb-8">
-                {step === 1 && <StepSource data={formData} updateData={updateData} />}
-                {/* Note: StepDetails now includes CollaboratorManager internally via props */}
-                {step === 2 && <StepDetails data={formData} updateData={updateData} />}
-                {step === 3 && <StepMedia data={formData} updateData={updateData} />}
+                {step === 1 && <StepSource data={formData} updateData={updateData} errors={errors} />}
+                {step === 2 && <StepDetails data={formData} updateData={updateData} errors={errors} />}
+                {step === 3 && <StepMedia data={formData} updateData={updateData} errors={errors} />}
                 {step === 4 && <StepReview data={formData} />}
             </div>
 

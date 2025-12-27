@@ -1,8 +1,18 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import Link from "next/link"; // Import Link
-import { Edit3, Share2, MapPin, Link as LinkIcon, Calendar, Camera, UploadCloud, Loader2, ShieldAlert } from "lucide-react"; // Added ShieldAlert
+import Link from "next/link";
+import { 
+  Edit3, 
+  Share2, 
+  MapPin, 
+  Link as LinkIcon, 
+  Calendar, 
+  Camera, 
+  UploadCloud, 
+  Loader2, 
+  ShieldAlert 
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,10 +31,12 @@ export default function PersonalHeader({ user, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false); 
   const [useCustomLocation, setUseCustomLocation] = useState(false);
   
-  // Ref for the hidden file input
+  // Refs for the hidden file inputs
   const fileInputRef = useRef(null);
+  const bannerInputRef = useRef(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -33,14 +45,13 @@ export default function PersonalHeader({ user, onUpdate }) {
     location: "",
     website: "",
     avatar_url: "",
+    banner_url: "", 
   });
 
   // Sync state when user prop changes
   useEffect(() => {
     if (user) {
-        // Check if user's location is in our list
         const isStandard = COUNTRIES.some(c => c.value === user.location);
-        // If they have a location but it's not in our list, show the custom input mode
         if (user.location && !isStandard) {
             setUseCustomLocation(true);
         }
@@ -50,13 +61,24 @@ export default function PersonalHeader({ user, onUpdate }) {
             bio: user.bio || "",
             location: user.location || "",
             website: user.website || "",
-            // CHANGED: Default avatar is now a high-quality environment image instead of a person
             avatar_url: user.avatar_url || "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?q=80&w=400&auto=format&fit=crop",
+            banner_url: user.banner_url || "", 
         });
     }
   }, [user]);
 
-  // --- 1. HANDLE IMAGE UPLOAD ---
+  // --- AUTOSAVE HELPER ---
+  const autoSaveUrl = async (field, url) => {
+    const { error } = await supabase
+        .from('profiles')
+        .update({ [field]: url })
+        .eq('id', user.id);
+    
+    if (error) throw error;
+    if (onUpdate) onUpdate(); 
+  };
+
+  // --- 1. HANDLE AVATAR UPLOAD (WITH AUTOSAVE) ---
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -81,8 +103,10 @@ export default function PersonalHeader({ user, onUpdate }) {
             .from('project-assets')
             .getPublicUrl(fileName);
 
+        await autoSaveUrl('avatar_url', publicUrl);
+
         setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
-        toast.success("Image Uploaded", { description: "Don't forget to click Save Changes." });
+        toast.success("Identity Icon Updated", { description: "System records synchronized." });
 
     } catch (error) {
         console.error(error);
@@ -92,7 +116,45 @@ export default function PersonalHeader({ user, onUpdate }) {
     }
   };
 
-  // --- 2. SAVE PROFILE TO DB ---
+  // --- 2. HANDLE BANNER UPLOAD (WITH AUTOSAVE) ---
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+        toast.error("File too large", { description: "Max size is 5MB." });
+        return;
+    }
+
+    setIsUploadingBanner(true);
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `banners/${user.id}-${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+            .from('project-assets')
+            .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('project-assets')
+            .getPublicUrl(fileName);
+
+        await autoSaveUrl('banner_url', publicUrl);
+
+        setFormData(prev => ({ ...prev, banner_url: publicUrl }));
+        toast.success("Banner Deployed", { description: "Visual schematic updated in real-time." });
+
+    } catch (error) {
+        console.error(error);
+        toast.error("Banner Upload Failed", { description: error.message });
+    } finally {
+        setIsUploadingBanner(false);
+    }
+  };
+
+  // --- 3. SAVE PROFILE TEXT DATA TO DB ---
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -104,12 +166,13 @@ export default function PersonalHeader({ user, onUpdate }) {
                 location: formData.location,
                 website: formData.website,
                 avatar_url: formData.avatar_url,
+                banner_url: formData.banner_url, 
             })
             .eq('id', user.id);
 
         if (error) throw error;
 
-        toast.success("Profile Updated", { description: "Your digital identity has been synced." });
+        toast.success("Configuration Saved", { description: "Your node details have been updated." });
         setIsEditing(false);
         if (onUpdate) onUpdate(); 
         
@@ -120,12 +183,10 @@ export default function PersonalHeader({ user, onUpdate }) {
     }
   };
 
-  // Helper to trigger the hidden file input
-  const triggerFileInput = () => {
-    fileInputRef.current?.click();
-  };
+  // Helpers
+  const triggerFileInput = () => fileInputRef.current?.click();
+  const triggerBannerInput = () => bannerInputRef.current?.click();
 
-  // Helper for Location Select
   const handleLocationSelect = (e) => {
     const val = e.target.value;
     if (val === "OTHER") {
@@ -140,22 +201,44 @@ export default function PersonalHeader({ user, onUpdate }) {
   return (
     <div className="bg-background border-b border-border pb-8">
       
-      {/* Hidden File Input */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleImageUpload} 
-        className="hidden" 
-        accept="image/*"
-      />
+      {/* Hidden File Inputs */}
+      <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+      <input type="file" ref={bannerInputRef} onChange={handleBannerUpload} className="hidden" accept="image/*" />
 
       {/* 1. Cover / Banner Area */}
-      <div className="h-32 w-full bg-secondary/30 border-b border-border relative overflow-hidden group">
-        <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.2)_50%,transparent_75%,transparent_100%)] bg-[length:20px_20px]" />
-        {/* Cover Image Edit Trigger (Future Feature) */}
-        <button className="absolute top-4 right-4 bg-black/50 text-white p-2 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent">
-            <Camera size={16} />
+      <div className="h-40 md:h-48 w-full bg-secondary/30 border-b border-border relative overflow-hidden group">
+        {formData.banner_url ? (
+            <Image 
+                src={formData.banner_url} 
+                alt="User Banner" 
+                fill 
+                className="object-cover transition-opacity duration-700" 
+                priority
+            />
+        ) : (
+            <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.2)_50%,transparent_75%,transparent_100%)] bg-[length:20px_20px]" />
+        )}
+        
+        <button 
+            onClick={triggerBannerInput}
+            disabled={isUploadingBanner}
+            className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-white p-2.5 opacity-0 group-hover:opacity-100 transition-all hover:bg-accent border border-white/10 shadow-lg flex items-center gap-2 z-20"
+        >
+            {isUploadingBanner ? (
+                <Loader2 size={16} className="animate-spin" />
+            ) : (
+                <Camera size={16} />
+            )}
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest hidden md:block">
+                {isUploadingBanner ? "Uploading..." : "Sync_Banner"}
+            </span>
         </button>
+
+        {!formData.banner_url && (
+            <div className="absolute bottom-4 right-4 text-[9px] font-mono text-white/30 uppercase tracking-[0.2em] pointer-events-none select-none">
+                 Recommended: 1500 x 500
+            </div>
+        )}
       </div>
 
       <div className="container mx-auto px-4 -mt-12">
@@ -163,171 +246,48 @@ export default function PersonalHeader({ user, onUpdate }) {
             
             {/* Avatar with Edit Trigger */}
             <div 
-                className="relative group cursor-pointer" 
-                onClick={() => setIsEditing(true)}
+                className="relative group cursor-pointer z-10" 
+                onClick={() => triggerFileInput()}
             >
-                <div className="w-24 h-24 md:w-32 md:h-32 border-2 border-background bg-secondary relative overflow-hidden shadow-lg">
-                    <Image 
-                        src={formData.avatar_url} 
-                        alt="User Avatar" 
-                        fill 
-                        className="object-cover" 
-                    />
+                <div className="w-24 h-24 md:w-32 md:h-32 border-4 border-background bg-secondary relative overflow-hidden shadow-xl">
+                    {isUploading ? (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <Loader2 className="animate-spin text-white" size={24} />
+                        </div>
+                    ) : (
+                        <Image 
+                            src={formData.avatar_url} 
+                            alt="User Avatar" 
+                            fill 
+                            className="object-cover" 
+                        />
+                    )}
                 </div>
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-xs font-mono cursor-pointer">
-                    EDIT
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-[10px] font-mono font-bold tracking-tighter">
+                    {isUploading ? "SYNCING..." : "UPDATE_ICON"}
                 </div>
             </div>
 
-            {/* --- EDIT PROFILE DIALOG --- */}
-            <Dialog open={isEditing} onOpenChange={setIsEditing}>
-                <DialogContent className="sm:max-w-[500px] border-border bg-background p-0 rounded-none gap-0">
-                    <DialogHeader className="p-6 border-b border-border bg-secondary/5">
-                        <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
-                            <Edit3 size={18} />
-                            Edit Profile
-                        </DialogTitle>
-                    </DialogHeader>
-                    
-                    <div className="p-6 space-y-6">
-                        {/* Avatar Upload UI */}
-                        <div className="flex items-center gap-4">
-                            <div className="relative w-16 h-16 border border-border">
-                                {isUploading ? (
-                                    <div className="w-full h-full flex items-center justify-center bg-secondary">
-                                        <Loader2 className="animate-spin text-muted-foreground" size={20} />
-                                    </div>
-                                ) : (
-                                    <Image src={formData.avatar_url} alt="Preview" fill className="object-cover" />
-                                )}
-                            </div>
-                            <Button 
-                                variant="outline" 
-                                onClick={triggerFileInput} 
-                                disabled={isUploading}
-                                className="h-9 rounded-none border-dashed border-border hover:border-accent text-xs font-mono"
-                            >
-                                <UploadCloud size={14} className="mr-2" />
-                                {isUploading ? "Uploading..." : "Change Avatar"}
-                            </Button>
-                        </div>
-
-                        {/* Form Fields */}
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-mono uppercase text-muted-foreground">Full Name</Label>
-                                <Input 
-                                    value={formData.full_name} 
-                                    onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                                    className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
-                                />
-                            </div>
-                            
-                            <div className="space-y-2">
-                                <Label className="text-xs font-mono uppercase text-muted-foreground">Bio</Label>
-                                <textarea 
-                                    value={formData.bio} 
-                                    onChange={(e) => setFormData({...formData, bio: e.target.value})}
-                                    className="flex min-h-[80px] w-full border border-border bg-secondary/10 px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-mono uppercase text-muted-foreground flex justify-between">
-                                        Location
-                                        {useCustomLocation && (
-                                            <button 
-                                                onClick={() => setUseCustomLocation(false)} 
-                                                className="text-[9px] text-accent hover:underline cursor-pointer"
-                                            >
-                                                List
-                                            </button>
-                                        )}
-                                    </Label>
-                                    
-                                    {useCustomLocation ? (
-                                        <Input 
-                                            value={formData.location} 
-                                            onChange={(e) => setFormData({...formData, location: e.target.value})}
-                                            placeholder="City, Country..."
-                                            className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
-                                            autoFocus
-                                        />
-                                    ) : (
-                                        <div className="relative">
-                                            <select
-                                                value={formData.location}
-                                                onChange={handleLocationSelect}
-                                                className="w-full h-10 bg-secondary/10 border border-border px-3 text-sm focus:border-accent outline-none rounded-none appearance-none transition-colors"
-                                            >
-                                                <option value="">Select...</option>
-                                                {COUNTRIES.map((c) => (
-                                                    <option key={c.value} value={c.value}>{c.label}</option>
-                                                ))}
-                                                <option disabled>──────</option>
-                                                <option value="OTHER">Other...</option>
-                                            </select>
-                                            {/* Arrow Icon */}
-                                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-mono uppercase text-muted-foreground">Website</Label>
-                                    <Input 
-                                        value={formData.website} 
-                                        onChange={(e) => setFormData({...formData, website: e.target.value})}
-                                        className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <DialogFooter className="p-4 border-t border-border bg-secondary/5 flex justify-end gap-2">
-                        <Button 
-                            variant="outline" 
-                            onClick={() => setIsEditing(false)}
-                            className="rounded-none border-border hover:bg-secondary"
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            onClick={handleSave} 
-                            disabled={isSaving || isUploading}
-                            className="bg-accent hover:bg-accent/90 text-white rounded-none"
-                        >
-                            {isSaving ? "Saving..." : "Save Changes"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
             {/* User Info (Display Mode) */}
-            <div className="flex-1 w-full pt-2 md:pt-12">
+            <div className="flex-1 w-full pt-2 md:pt-14">
                 <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                     
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-2 truncate uppercase">
                             {user?.full_name || user?.email?.split('@')[0]}
-                            {/* NEW: Admin Badge Logic */}
                             {user?.role === 'admin' && (
-                                <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 font-mono tracking-wider uppercase font-bold border border-red-800">
+                                <span className="text-[10px] bg-red-600 text-white px-2 py-0.5 font-mono tracking-wider uppercase font-bold border border-red-800 shrink-0">
                                     ADMIN
                                 </span>
                             )}
                             {user?.is_for_hire && (
-                                <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/50 px-2 py-0.5 font-mono tracking-wider uppercase">HIREABLE</span>
+                                <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/50 px-2 py-0.5 font-mono tracking-wider uppercase shrink-0">HIREABLE</span>
                             )}
                         </h1>
                         <p className="text-muted-foreground font-mono text-sm">@{user?.username}</p>
                         
-                        <p className="mt-3 text-sm max-w-lg text-foreground/80 font-light">
-                            {user?.bio || "No bio yet. Click edit to add one."}
+                        <p className="mt-3 text-sm max-w-lg text-foreground/80 font-light leading-relaxed">
+                            {user?.bio || "No bio established. Initiate configuration to add details."}
                         </p>
 
                         <div className="flex flex-wrap gap-4 mt-4 text-xs text-muted-foreground font-mono">
@@ -337,12 +297,11 @@ export default function PersonalHeader({ user, onUpdate }) {
                         </div>
                     </div>
 
-                    {/* Primary Actions */}
-                    <div className="flex gap-2 w-full md:w-auto mt-4 md:mt-0">
-                        {/* NEW: GOD MODE BUTTON (Only visible to Admins) */}
+                    {/* RESPONSIVE ACTIONS BUTTONS FIXED */}
+                    <div className="flex flex-wrap items-center gap-2 w-full md:w-auto mt-4 md:mt-0">
                         {user?.role === 'admin' && (
-                            <Link href="/admin">
-                                <Button className="h-10 bg-red-600 hover:bg-red-700 text-white border border-red-800 rounded-none font-mono text-xs uppercase tracking-wide shadow-[0_0_15px_rgba(220,38,38,0.4)] hover:animate-none">
+                            <Link href="/admin" className="basis-full md:basis-auto flex-1 md:flex-none">
+                                <Button className="w-full h-10 bg-red-600 hover:bg-red-700 text-white border border-red-800 rounded-none font-mono text-xs uppercase shadow-[0_0_15px_rgba(220,38,38,0.4)]">
                                     <ShieldAlert size={14} className="mr-2" /> God Mode
                                 </Button>
                             </Link>
@@ -350,12 +309,12 @@ export default function PersonalHeader({ user, onUpdate }) {
 
                         <Button 
                             onClick={() => setIsEditing(true)} 
-                            className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase tracking-wide"
+                            className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase"
                         >
                             <Edit3 size={14} className="mr-2" /> Edit Profile
                         </Button>
                         
-                        <Button className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-foreground rounded-none font-mono text-xs uppercase tracking-wide">
+                        <Button className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-foreground rounded-none font-mono text-xs uppercase">
                             <Share2 size={14} className="mr-2" /> Share
                         </Button>
                     </div>
@@ -365,6 +324,125 @@ export default function PersonalHeader({ user, onUpdate }) {
 
         </div>
       </div>
+
+      {/* --- EDIT PROFILE DIALOG --- */}
+      <Dialog open={isEditing} onOpenChange={setIsEditing}>
+          <DialogContent className="sm:max-w-[500px] border-border bg-background p-0 rounded-none gap-0">
+              <DialogHeader className="p-6 border-b border-border bg-secondary/5">
+                  <DialogTitle className="text-xl font-bold tracking-tight flex items-center gap-2">
+                      <Edit3 size={18} />
+                      Edit Profile
+                  </DialogTitle>
+              </DialogHeader>
+              
+              <div className="p-6 space-y-6">
+                  {/* Current Assets Preview */}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-mono uppercase text-muted-foreground">Current Assets</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2 relative h-16 border border-border bg-secondary/20 overflow-hidden">
+                            {formData.banner_url ? <Image src={formData.banner_url} alt="B" fill className="object-cover opacity-50" /> : <div className="w-full h-full flex items-center justify-center text-zinc-800 uppercase font-mono text-[9px]">No_Banner</div>}
+                            <button onClick={triggerBannerInput} className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center text-white text-[9px] font-mono uppercase transition-opacity">Swap_Banner</button>
+                        </div>
+                        <div className="relative h-16 border border-border bg-secondary/20 overflow-hidden">
+                             <Image src={formData.avatar_url} alt="A" fill className="object-cover" />
+                             <button onClick={triggerFileInput} className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 flex items-center justify-center text-white text-[9px] font-mono uppercase transition-opacity">Swap_Icon</button>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                      <div className="space-y-2">
+                          <Label className="text-xs font-mono uppercase text-muted-foreground">Full Name</Label>
+                          <Input 
+                              value={formData.full_name} 
+                              onChange={(e) => setFormData({...formData, full_name: e.target.value})}
+                              className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent" 
+                          />
+                      </div>
+                      
+                      <div className="space-y-2">
+                          <Label className="text-xs font-mono uppercase text-muted-foreground">Bio</Label>
+                          <textarea 
+                              value={formData.bio} 
+                              onChange={(e) => setFormData({...formData, bio: e.target.value})}
+                              className="flex min-h-[80px] w-full border border-border bg-secondary/10 px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent rounded-none transition-colors"
+                          />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                              <Label className="text-xs font-mono uppercase text-muted-foreground flex justify-between">
+                                  Location
+                                  {useCustomLocation && (
+                                      <button 
+                                          onClick={() => setUseCustomLocation(false)} 
+                                          className="text-[9px] text-accent hover:underline cursor-pointer"
+                                      >
+                                          List
+                                      </button>
+                                  )}
+                              </Label>
+                              
+                              {useCustomLocation ? (
+                                  <Input 
+                                      value={formData.location} 
+                                      onChange={(e) => setFormData({...formData, location: e.target.value})}
+                                      placeholder="City, Country..."
+                                      className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent font-mono text-xs h-10" 
+                                      autoFocus
+                                  />
+                              ) : (
+                                  <div className="relative">
+                                      <select
+                                          value={formData.location}
+                                          onChange={handleLocationSelect}
+                                          className="w-full h-10 bg-secondary/10 border border-border px-3 text-xs font-mono focus:border-accent outline-none rounded-none appearance-none transition-colors"
+                                      >
+                                          <option value="">Select...</option>
+                                          {COUNTRIES.map((c) => (
+                                              <option key={c.value} value={c.value}>{c.label}</option>
+                                          ))}
+                                          <option disabled>──────</option>
+                                          <option value="OTHER">Other...</option>
+                                      </select>
+                                      <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                                          <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+
+                          <div className="space-y-2">
+                              <Label className="text-xs font-mono uppercase text-muted-foreground">Website</Label>
+                              <Input 
+                                  value={formData.website} 
+                                  onChange={(e) => setFormData({...formData, website: e.target.value})}
+                                  className="bg-secondary/10 border-border rounded-none focus-visible:ring-accent font-mono text-xs h-10" 
+                              />
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              <DialogFooter className="p-4 border-t border-border bg-secondary/5 flex justify-end gap-2">
+                  <Button 
+                      variant="outline" 
+                      onClick={() => setIsEditing(false)}
+                      className="rounded-none border-border hover:bg-secondary font-mono text-xs uppercase"
+                  >
+                      Cancel
+                  </Button>
+                  <Button 
+                      onClick={handleSave} 
+                      disabled={isSaving || isUploading || isUploadingBanner}
+                      className="bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase min-w-[120px]"
+                  >
+                      {isSaving ? "Syncing..." : "Save Changes"}
+                  </Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 }
