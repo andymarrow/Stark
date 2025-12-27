@@ -44,6 +44,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function ProfileHeader({ user, currentUser }) {
   const router = useRouter();
+   // 1. DERIVED STATE: CHECK OWNERSHIP
+  const isOwner = currentUser?.id === user?.id;
   
   // Connection States
   const [isFollowing, setIsFollowing] = useState(false);
@@ -279,55 +281,72 @@ export default function ProfileHeader({ user, currentUser }) {
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex md:flex-col gap-3 w-full md:w-auto mt-4 md:mt-0">
-          <Button 
-            onClick={handleFollowToggle}
-            className={`flex-1 md:w-36 h-11 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
-              ${isFollowing 
-                ? 'bg-secondary text-foreground hover:bg-red-600 hover:text-white' 
-                : 'bg-foreground text-background hover:bg-accent hover:text-white'}`}
-          >
-            {isFollowing ? <><UserMinus size={14} className="mr-2" /> Disconnect</> : <><UserPlus size={14} className="mr-2" /> Connect</>}
-          </Button>
-          
-          <div className="flex gap-2 md:w-36">
+         {!isOwner && (
+          <div className="flex md:flex-col gap-3 w-full md:w-auto mt-4 md:mt-0">
+            
+            {/* CONNECT BUTTON */}
             <Button 
-              variant="outline" 
-              onClick={handleMessageClick}
-              disabled={isInitializingChat}
-              className="flex-1 h-11 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
+              onClick={handleFollowToggle}
+              className={`flex-1 md:w-36 h-11 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
+                ${isFollowing 
+                  ? 'bg-secondary text-foreground hover:bg-red-600 hover:text-white' 
+                  : 'bg-foreground text-background hover:bg-accent hover:text-white'}`}
             >
-              {isInitializingChat ? (
-                <Loader2 className="animate-spin" size={14} />
-              ) : isFollowing && followsMe ? (
-                <>
-                  <MessageSquare size={14} className="mr-2" /> Msg
-                </>
-              ) : (
-                <>
-                  <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
-                </>
-              )}
+              {isFollowing ? <><UserMinus size={14} className="mr-2" /> Disconnect</> : <><UserPlus size={14} className="mr-2" /> Connect</>}
             </Button>
+            
+            <div className="flex gap-2 md:w-36">
+              {/* MESSAGE BUTTON */}
+              <Button 
+                variant="outline" 
+                onClick={handleMessageClick}
+                disabled={isInitializingChat}
+                className="flex-1 h-11 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
+              >
+                {isInitializingChat ? (
+                  <Loader2 className="animate-spin" size={14} />
+                ) : isFollowing && followsMe ? (
+                  <>
+                    <MessageSquare size={14} className="mr-2" /> Msg
+                  </>
+                ) : (
+                  <>
+                    <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
+                  </>
+                )}
+              </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-11 w-11 p-0 rounded-none border-border hover:bg-secondary">
-                  <MoreHorizontal size={16} />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl">
-                <DropdownMenuItem 
-                  onClick={() => setIsReportOpen(true)} 
-                  className="text-xs font-mono text-red-500 focus:text-red-500 focus:bg-red-500/10 cursor-pointer rounded-none"
-                >
-                  <Flag size={14} className="mr-2" /> Flag Node
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              {/* REPORT DROPDOWN */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-11 w-11 p-0 rounded-none border-border hover:bg-secondary">
+                    <MoreHorizontal size={16} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl">
+                  <DropdownMenuItem 
+                    onClick={() => setIsReportOpen(true)} 
+                    className="text-xs font-mono text-red-500 focus:text-red-500 focus:bg-red-500/10 cursor-pointer rounded-none"
+                  >
+                    <Flag size={14} className="mr-2" /> Flag Node
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
-        </div>
+        )}
+        
+        {/* OPTIONAL: ADD AN "EDIT PROFILE" BUTTON FOR OWNERS */}
+        {isOwner && (
+           <div className="flex md:flex-col gap-3 w-full md:w-auto mt-4 md:mt-0">
+               <Button 
+                 onClick={() => router.push('/profile')} // Redirect to personal dashboard
+                 className="flex-1 md:w-36 h-11 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
+               >
+                 Edit Profile
+               </Button>
+           </div>
+        )}
       </div>
 
       {/* --- MESSAGE GATE MODAL --- */}

@@ -10,6 +10,8 @@ import SettingsForm from "./_components/SettingsForm";
 import NotificationsView from "./_components/NotificationsView";
 import { Settings, Grid, Bell, LogOut, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import LoginRequiredState from "@/components/LoginRequiredState"; // Import
+
 
 /**
  * The inner content component that handles search params
@@ -96,14 +98,10 @@ function ProfileContent() {
   }, [user]);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
-      return;
-    }
     if (user) {
       fetchProfileAndStats();
     }
-  }, [user, authLoading, router, fetchProfileAndStats]);
+  }, [user, fetchProfileAndStats]);
 
   const handleLogout = async () => {
     try {
@@ -114,8 +112,28 @@ function ProfileContent() {
     }
   };
 
-  // Ensure we don't try to render sub-components if user is null
-  if (authLoading || loading || !profile || !user) {
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  // Show Cute State if no user
+  if (!user) {
+    return (
+        <div className="min-h-screen bg-background pt-16">
+            <LoginRequiredState 
+                message="Dossier Restricted" 
+                description="Your personal node profile is offline. Log in to view your stats, projects, and settings."
+            />
+        </div>
+    );
+  }
+
+  // Loading data state (only if user exists)
+  if (loading || !profile) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-muted-foreground animate-pulse">

@@ -7,6 +7,7 @@ import ChatWindow from "./_components/ChatWindow";
 import { MessageSquareDashed, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
+import LoginRequiredState from "@/components/LoginRequiredState";
 
 function ChatContent() {
   const { user, loading: authLoading } = useAuth();
@@ -96,12 +97,34 @@ function ChatContent() {
     return true; // ALL_CHATS
   });
 
-  if (authLoading || loading) return (
-    <div className="h-screen flex items-center justify-center bg-background">
-        <Loader2 className="animate-spin text-accent" />
-    </div>
-  );
+   // --- 1. HANDLE AUTH LOADING ---
+  if (authLoading) {
+     return (
+        <div className="h-screen flex items-center justify-center bg-background">
+            <Loader2 className="animate-spin text-accent" />
+        </div>
+     );
+  }
 
+  // --- 2. HANDLE NOT LOGGED IN (SHOW CUTE STATE) ---
+  if (!user) {
+    return (
+        <LoginRequiredState 
+            message="Secure Channel Locked" 
+            description="You must be logged in to intercept or broadcast signals on this frequency."
+        />
+    );
+  }
+
+  // --- 3. NORMAL RENDER (Logged In) ---
+  if (loading) {
+    // This is the loading state for fetching chats, only show if user exists
+    return (
+        <div className="h-screen flex items-center justify-center bg-background">
+            <Loader2 className="animate-spin text-accent" />
+        </div>
+    );
+  }
   return (
     <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
       
