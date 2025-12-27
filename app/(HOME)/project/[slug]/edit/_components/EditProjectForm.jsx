@@ -1,10 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Save, X, UploadCloud, Trash2, AlertTriangle, ArrowLeft, Loader2, Image as ImageIcon } from "lucide-react";
+import { UploadCloud, Trash2, AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -12,31 +11,78 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose
 } from "@/components/ui/dialog";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useAuth } from "@/app/_context/AuthContext";
+import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor"; // Import the RichTextEditor
 
 export default function EditProjectForm({ project }) {
   const router = useRouter();
   const { user } = useAuth();
+  const fileInputRef = useRef(null);
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
-  // Initialize state with real project data
+  // Initialize state
   const [formData, setFormData] = useState({
     title: project.title,
-    description: project.description,
+    description: project.description || "", // Ensure string
     source_link: project.source_link || "",
     demo_link: project.demo_link || "",
-    // Handle tags as a string for the input
     tagsInput: project.techStack ? project.techStack.map(t => t.name || t).join(", ") : "",
     images: project.images || []
   });
+
+  // --- IMAGE UPLOAD HANDLER ---
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+        toast.error("File too large", { description: "Max size is 5MB." });
+        return;
+    }
+
+    setIsUploading(true);
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `projects/${user?.id}/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+            .from('project-assets')
+            .upload(fileName, file);
+
+        if (uploadError) throw uploadError;
+        
+        const { data: { publicUrl } } = supabase.storage
+            .from('project-assets')
+            .getPublicUrl(fileName);
+        
+        setFormData(prev => ({ 
+            ...prev, 
+            images: [...prev.images, publicUrl] 
+        }));
+        
+        toast.success("Asset Added");
+    } catch (error) {
+        console.error(error);
+        toast.error("Upload Failed", { description: error.message });
+    } finally {
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleImageRemove = (indexToRemove) => {
+    const newImages = formData.images.filter((_, i) => i !== indexToRemove);
+    setFormData(prev => ({ ...prev, images: newImages }));
+  };
 
   // --- SAVE HANDLER ---
   const handleSave = async () => {
@@ -48,12 +94,11 @@ export default function EditProjectForm({ project }) {
             .from('projects')
             .update({
                 title: formData.title,
-                description: formData.description,
+                description: formData.description, // Updated via RichTextEditor
                 source_link: formData.source_link,
                 demo_link: formData.demo_link,
                 tags: tagArray,
                 images: formData.images,
-                // Update thumbnail to first image if images changed
                 thumbnail_url: formData.images.length > 0 ? formData.images[0] : null
             })
             .eq('id', project.id);
@@ -61,10 +106,7 @@ export default function EditProjectForm({ project }) {
         if (error) throw error;
 
         toast.success("Project Updated", { description: "Changes have been deployed." });
-        router.refresh(); // Refresh server components
-        // Optional: Redirect back to project page
-        // router.push(`/project/${project.slug}`); 
-
+        router.refresh(); 
     } catch (error) {
         toast.error("Update Failed", { description: error.message });
     } finally {
@@ -72,39 +114,30 @@ export default function EditProjectForm({ project }) {
     }
   };
 
-  // --- DELETE HANDLER ---
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-        const { error } = await supabase
-            .from('projects')
-            .delete()
-            .eq('id', project.id);
-
+        const { error } = await supabase.from('projects').delete().eq('id', project.id);
         if (error) throw error;
-
-        toast.success("Project Deleted", { description: "Resource removed from index." });
-        router.push("/profile"); // Go back to dashboard
+        toast.success("Project Deleted");
+        router.push("/profile");
     } catch (error) {
         toast.error("Delete Failed", { description: error.message });
         setIsDeleting(false);
     }
   };
 
-  // --- IMAGE HANDLER (Simplified for Editor) ---
-  const handleImageRemove = (indexToRemove) => {
-    const newImages = formData.images.filter((_, i) => i !== indexToRemove);
-    setFormData(prev => ({ ...prev, images: newImages }));
-  };
-
-  // Note: For uploading *new* images in edit mode, you would reuse the 
-  // file upload logic from StepMedia. For brevity in this file, we focus on 
-  // managing existing text/links. (You can copy-paste the handleUpload logic if needed)
-
   return (
     <div className="max-w-5xl mx-auto pb-20">
       
-      {/* 1. Header Actions */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleImageUpload} 
+        className="hidden" 
+        accept="image/*"
+      />
+
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
             <Link href={`/project/${project.slug}`}>
@@ -125,7 +158,7 @@ export default function EditProjectForm({ project }) {
             </Link>
             <Button 
                 onClick={handleSave}
-                disabled={isLoading}
+                disabled={isLoading || isUploading}
                 className="h-12 px-8 bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase tracking-widest min-w-[140px]"
             >
                 {isLoading ? <Loader2 className="animate-spin" /> : "Save Changes"}
@@ -135,15 +168,14 @@ export default function EditProjectForm({ project }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* --- LEFT COLUMN: Main Content --- */}
+        {/* LEFT COLUMN */}
         <div className="lg:col-span-8 space-y-8">
             
-            {/* Section: General */}
+            {/* General */}
             <section className="bg-background border border-border p-6 space-y-6">
                 <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">
                     General Configuration
                 </h3>
-                
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold">Project Title</label>
@@ -154,18 +186,18 @@ export default function EditProjectForm({ project }) {
                         />
                     </div>
                     
+                    {/* RICH TEXT EDITOR */}
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold">Description / Readme.md</label>
-                        <Textarea 
-                            value={formData.description}
-                            onChange={(e) => setFormData({...formData, description: e.target.value})}
-                            className="min-h-[300px] w-full rounded-none bg-secondary/5 border border-border p-4 text-sm focus:border-accent focus:outline-none resize-y font-mono leading-relaxed"
+                        <RichTextEditor 
+                            value={formData.description} 
+                            onChange={(val) => setFormData({...formData, description: val})} 
                         />
                     </div>
                 </div>
             </section>
 
-            {/* Section: Media Management */}
+            {/* Media Management */}
             <section className="bg-background border border-border p-6 space-y-6">
                 <div className="flex justify-between items-end border-b border-border pb-2">
                     <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground">
@@ -178,8 +210,6 @@ export default function EditProjectForm({ project }) {
                     {formData.images.map((img, i) => (
                         <div key={i} className="group relative aspect-video bg-secondary border border-border overflow-hidden">
                             <Image src={img} alt="Asset" fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                            
-                            {/* Remove Overlay */}
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                 <button 
                                     onClick={() => handleImageRemove(i)}
@@ -188,31 +218,39 @@ export default function EditProjectForm({ project }) {
                                     <Trash2 size={16} />
                                 </button>
                             </div>
-                            
                             <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <span className="bg-black/50 text-white text-[9px] font-mono px-1">IMG_0{i+1}</span>
                             </div>
                         </div>
                     ))}
                     
-                    {/* Placeholder for Upload (You can connect this to StepMedia logic later) */}
-                    <div className="border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-secondary/5 h-full min-h-[100px] group">
-                        <UploadCloud size={24} className="text-muted-foreground group-hover:text-accent" />
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase">Upload New</span>
+                    {/* Upload Button */}
+                    <div 
+                        onClick={() => !isUploading && fileInputRef.current?.click()}
+                        className={`
+                            border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 transition-colors bg-secondary/5 h-full min-h-[100px] group
+                            ${isUploading ? 'cursor-wait opacity-50' : 'cursor-pointer hover:border-accent/50'}
+                        `}
+                    >
+                        {isUploading ? (
+                            <Loader2 className="animate-spin text-accent" size={24} />
+                        ) : (
+                            <UploadCloud size={24} className="text-muted-foreground group-hover:text-accent" />
+                        )}
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase">
+                            {isUploading ? "Uploading..." : "Upload New"}
+                        </span>
                     </div>
                 </div>
             </section>
 
         </div>
 
-        {/* --- RIGHT COLUMN: Metadata & Settings --- */}
+        {/* RIGHT COLUMN */}
         <div className="lg:col-span-4 space-y-8">
-            
             {/* Links */}
             <section className="bg-background border border-border p-6 space-y-6">
-                <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">
-                    Source Links
-                </h3>
+                <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">Source Links</h3>
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-muted-foreground">Repository URL</label>
@@ -235,9 +273,7 @@ export default function EditProjectForm({ project }) {
 
             {/* Tags */}
             <section className="bg-background border border-border p-6 space-y-6">
-                <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">
-                    Classifications
-                </h3>
+                <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">Classifications</h3>
                 <div className="space-y-4">
                     <div className="space-y-1.5">
                         <label className="text-xs font-bold text-muted-foreground">Tech Stack (Comma sep)</label>
@@ -249,9 +285,7 @@ export default function EditProjectForm({ project }) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {formData.tagsInput.split(',').filter(Boolean).map((t, i) => (
-                            <span key={i} className="px-2 py-1 bg-secondary text-[10px] font-mono border border-border">
-                                {t.trim()}
-                            </span>
+                            <span key={i} className="px-2 py-1 bg-secondary text-[10px] font-mono border border-border">{t.trim()}</span>
                         ))}
                     </div>
                 </div>
@@ -263,9 +297,7 @@ export default function EditProjectForm({ project }) {
                     <AlertTriangle size={16} />
                     <h3 className="text-sm font-bold uppercase tracking-wider">Danger Zone</h3>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                    Deleting this project is irreversible. It will be removed from the global index immediately.
-                </p>
+                <p className="text-xs text-muted-foreground">Deleting this project is irreversible.</p>
                 <Button 
                     variant="outline" 
                     onClick={() => setDeleteDialogOpen(true)}
@@ -274,12 +306,10 @@ export default function EditProjectForm({ project }) {
                     Delete Project
                 </Button>
             </section>
-
         </div>
-
       </div>
 
-      {/* DELETE CONFIRMATION DIALOG */}
+      {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="border-destructive/50 bg-background p-0 rounded-none gap-0 sm:max-w-[400px]">
             <DialogHeader className="p-6 border-b border-destructive/20 bg-destructive/5">
@@ -292,17 +322,12 @@ export default function EditProjectForm({ project }) {
             </DialogHeader>
             <DialogFooter className="p-4 bg-background flex gap-3 justify-end">
                 <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} className="rounded-none border-border">Cancel</Button>
-                <Button 
-                    onClick={handleDelete} 
-                    disabled={isDeleting}
-                    className="bg-destructive hover:bg-destructive/90 text-white rounded-none"
-                >
+                <Button onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90 text-white rounded-none">
                     {isDeleting ? <Loader2 className="animate-spin" /> : "Confirm Delete"}
                 </Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

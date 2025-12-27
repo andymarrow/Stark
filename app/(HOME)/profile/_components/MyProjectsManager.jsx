@@ -83,14 +83,30 @@ export default function MyProjectsManager({ user }) {
   const confirmDelete = async () => {
     if (!projectToDelete) return;
     setIsDeleting(true);
+    
     try {
       const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
       if (error) throw error;
+      
       toast.success("PROJECT_PURGED", { description: "Resource removed from global index." });
+      
+      // 1. Close the modal immediately
       setProjectToDelete(null);
-      fetchProjects();
+
+      // 2. FORCE CLEANUP: Remove pointer-events lock manually if Radix gets stuck
+      // This ensures the screen becomes clickable again even if focus is lost
+      document.body.style.pointerEvents = 'auto';
+
+      // 3. Wait a tiny bit for the modal animation to finish before re-fetching
+      // This prevents the "Focus Trap" error
+      setTimeout(() => {
+        fetchProjects();
+      }, 150);
+
     } catch (error) {
       toast.error("COMMAND_FAILED");
+      // If error, we still want to close the modal usually, or keep it open to show error
+      // But we definitely need to stop loading
     } finally {
       setIsDeleting(false);
     }

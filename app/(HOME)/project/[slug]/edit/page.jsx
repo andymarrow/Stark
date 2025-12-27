@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useState, use } from "react";
+import Link from "next/link";
 import { useRouter, notFound } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldAlert, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import EditProjectForm from "./_components/EditProjectForm";
 
 export default function EditProjectPage({ params }) {
@@ -13,6 +15,7 @@ export default function EditProjectPage({ params }) {
 
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
 
   useEffect(() => {
     // Wait for auth to be ready
@@ -28,7 +31,6 @@ export default function EditProjectPage({ params }) {
       try {
         setLoading(true);
         
-        // Fetch project and owner_id
         const { data, error } = await supabase
           .from('projects')
           .select('*')
@@ -36,23 +38,20 @@ export default function EditProjectPage({ params }) {
           .single();
 
         if (error || !data) {
-           notFound(); // Show 404 if project doesn't exist
+           notFound(); 
            return;
         }
 
-        // SECURITY CHECK: Only owner can edit
+        // SECURITY CHECK: Verify Ownership
         if (data.owner_id !== user.id) {
-            router.push(`/project/${slug}`); // Kick them back to view mode
+            setIsUnauthorized(true);
+            setLoading(false);
             return;
         }
 
-        // Format for form (handle techStack mapping if needed)
-        // Here we assume your DB 'tags' is a string array. 
-        // If your EditForm expects objects, map them here.
-        // Based on my previous EditProjectForm code, it handles raw arrays or objects.
         const formattedProject = {
             ...data,
-            techStack: data.tags || [] // Ensuring it's an array
+            techStack: data.tags || []
         };
 
         setProject(formattedProject);
@@ -65,7 +64,8 @@ export default function EditProjectPage({ params }) {
     };
 
     fetchProject();
-  }, [slug, user, authLoading, router]);
+    
+  }, [slug, user?.id, authLoading, router]);
 
   if (loading || authLoading) {
     return (
@@ -75,8 +75,40 @@ export default function EditProjectPage({ params }) {
     );
   }
 
-  if (!project) return null; // Should have redirected or 404'd
+  // --- 403 UNAUTHORIZED STATE ---
+  if (isUnauthorized) {
+    return (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center animate-in fade-in zoom-in-95 duration-300">
+            <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-full mb-6">
+                <ShieldAlert size={48} className="text-red-500" />
+            </div>
+            
+            <div className="space-y-2 mb-8">
+                <h1 className="text-3xl font-black uppercase tracking-tight">Access Forbidden // 403</h1>
+                <p className="text-muted-foreground font-mono text-sm max-w-md mx-auto">
+                    Security protocol engaged. You do not possess the cryptographic keys to modify this project node.
+                </p>
+            </div>
 
+            <div className="flex gap-4">
+                <Link href={`/project/${slug}`}>
+                    <Button variant="outline" className="h-12 rounded-none border-border font-mono text-xs uppercase tracking-wider">
+                        <ArrowLeft size={14} className="mr-2" /> Return to Viewer
+                    </Button>
+                </Link>
+                <Link href="/profile">
+                    <Button className="h-12 bg-foreground text-background hover:bg-accent hover:text-white rounded-none font-mono text-xs uppercase tracking-wider">
+                        Return to Dashboard
+                    </Button>
+                </Link>
+            </div>
+        </div>
+    );
+  }
+
+  if (!project) return null;
+
+  
   return (
     <div className="min-h-screen bg-background pt-8 px-4">
       <EditProjectForm project={project} />
