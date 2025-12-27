@@ -1,12 +1,14 @@
 "use client";
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Code2, PenTool, Film, Check, ArrowRight, ArrowLeft } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Code2, PenTool, Film, Check, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import AuthShell from "../_components/AuthShell";
 import AuthForm from "../_components/AuthForm";
+import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
+import { useAuth } from "@/app/_context/AuthContext";
 
-// --- CONFIGURATION DATA ---
 const ROLES = [
     { id: "dev", label: "Developer", icon: Code2, desc: "I ship code & architecture." },
     { id: "design", label: "Designer", icon: PenTool, desc: "I craft UI/UX & systems." },
@@ -19,13 +21,26 @@ const STACKS = [
 ];
 
 export default function OnboardingPage() {
+  const { user, loading } = useAuth(); // Check if user is logged in
+  const router = useRouter();
+  
+  // Default to step 1
   const [step, setStep] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
+  
   const [formData, setFormData] = useState({
     role: "",
     stack: []
   });
 
-  // Step 1 is handled by AuthForm (Credentials), Step 2 & 3 are custom here.
+  // --- AUTO-SKIP LOGIC ---
+  // If the user lands here and is ALREADY logged in (e.g. from Email Link),
+  // skip the signup form and go straight to Role Selection (Step 2).
+  useEffect(() => {
+    if (!loading && user) {
+        setStep(2);
+    }
+  }, [user, loading]);
 
   const handleRoleSelect = (roleId) => {
     setFormData({ ...formData, role: roleId });
@@ -40,34 +55,73 @@ export default function OnboardingPage() {
     }));
   };
 
+  const handleComplete = async () => {
+    if (!user) return;
+    setIsSaving(true);
+
+    try {
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                role: formData.role, 
+                // Store stack in bio for now, or add a 'tech_stack' column to your profiles table
+                bio: `Role: ${formData.role} | Stack: ${formData.stack.join(', ')}` 
+            })
+            .eq('id', user.id);
+
+        if (error) throw error;
+
+        toast.success("Profile Configured");
+        router.push("/profile");
+
+    } catch (error) {
+        toast.error("Save Failed", { description: error.message });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
+  // If loading auth state, show nothing or spinner to prevent flickering
+  if (loading) {
+      return <div className="h-screen w-full flex items-center justify-center bg-background"><Loader2 className="animate-spin text-accent" /></div>;
+  }
+
+  // Dynamic Titles based on step
+  const getTitle = () => {
+      if (step === 1) return "Initialize Account";
+      if (step === 2) return "Select Class";
+      return "System Config";
+  };
+
+  const getSubtitle = () => {
+      if (step === 1) return "Create your credentials to join the network.";
+      if (step === 2) return "Define your primary function.";
+      return "Select your active toolset.";
+  };
+
   return (
     <AuthShell 
-        title={step === 1 ? "Initialize Account" : step === 2 ? "Select Class" : "System Config"}
-        subtitle={step === 1 ? "Create your credentials to join the network." : step === 2 ? "Define your primary function." : "Select your active toolset."}
+        title={getTitle()}
+        subtitle={getSubtitle()}
     >
         
-        {/* Progress Dots */}
-        <div className="flex justify-center gap-2 mb-8">
-            {[1, 2, 3].map(i => (
-                <div key={i} className={`w-2 h-2 rounded-full transition-colors ${step >= i ? "bg-accent" : "bg-border"}`} />
-            ))}
-        </div>
+        {/* Progress Dots - Only show if we are actually in the setup phase (Step 2+) */}
+        {step > 1 && (
+            <div className="flex justify-center gap-2 mb-8">
+                {[1, 2, 3].map(i => (
+                    <div key={i} className={`w-2 h-2 rounded-full transition-colors ${step >= i ? "bg-accent" : "bg-border"}`} />
+                ))}
+            </div>
+        )}
 
-        {/* --- STEP 1: CREDENTIALS --- */}
-        {step === 1 && (
+        {/* --- STEP 1: CREDENTIALS (Only shown if NOT logged in) --- */}
+        {step === 1 && !user && (
             <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                 <AuthForm view="signup" />
-                {/* 
-                   In a real app, AuthForm would accept an onSubmit prop. 
-                   For this demo, we mock the transition button below 
-                */}
-                <div className="mt-4 pt-4 border-t border-dashed border-border">
-                    <Button 
-                        onClick={() => setStep(2)} 
-                        className="w-full h-12 bg-secondary/20 hover:bg-secondary/40 text-foreground rounded-none font-mono text-xs uppercase"
-                    >
-                        [DEMO] Skip to Setup <ArrowRight size={14} className="ml-2" />
-                    </Button>
+                <div className="mt-4 pt-4 border-t border-dashed border-border text-center">
+                    <p className="text-xs text-muted-foreground">
+                        Already have an account? <span className="text-foreground cursor-pointer hover:underline font-bold" onClick={() => router.push('/login')}>Login</span>
+                    </p>
                 </div>
             </div>
         )}
@@ -100,13 +154,11 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="flex gap-3 mt-8">
-                    <Button variant="outline" onClick={() => setStep(1)} className="flex-1 h-12 rounded-none border-border">
-                        Back
-                    </Button>
+                    {/* Back button disabled in step 2 because going back to step 1 (signup) makes no sense if logged in */}
                     <Button 
                         onClick={() => setStep(3)} 
                         disabled={!formData.role}
-                        className="flex-[2] h-12 bg-foreground text-background hover:bg-accent hover:text-white rounded-none font-mono uppercase tracking-widest text-xs"
+                        className="w-full h-12 bg-foreground text-background hover:bg-accent hover:text-white rounded-none font-mono uppercase tracking-widest text-xs"
                     >
                         Next Step
                     </Button>
@@ -146,10 +198,11 @@ export default function OnboardingPage() {
                         Back
                     </Button>
                     <Button 
-                        onClick={() => alert("Setup Complete! Redirecting...")} 
+                        onClick={handleComplete} 
+                        disabled={isSaving}
                         className="flex-[2] h-12 bg-accent text-white hover:bg-accent/90 rounded-none font-mono uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(220,38,38,0.4)]"
                     >
-                        Complete Setup
+                        {isSaving ? <Loader2 className="animate-spin" /> : "Complete Setup"}
                     </Button>
                 </div>
             </div>

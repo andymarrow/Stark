@@ -4,9 +4,9 @@ import { Eye, EyeOff, ArrowRight, Lock, Mail, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient"; // Import Supabase
+import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner"; // Using your toast system
+import { toast } from "sonner";
 
 export default function AuthForm({ view = "login" }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -16,7 +16,7 @@ export default function AuthForm({ view = "login" }) {
   // Form State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [username, setUsername] = useState(""); // Only for signup
+  const [username, setUsername] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,18 +29,25 @@ export default function AuthForm({ view = "login" }) {
           email,
           password,
           options: {
+            // This metadata is used by your SQL Trigger to create the profile
             data: {
-              full_name: username, // Passing metadata for our SQL trigger
+              full_name: username, 
               username: username.toLowerCase().replace(/\s+/g, '_')
-            }
+            },
+            // Redirect to onboarding after they verify email
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`
           }
         });
 
         if (error) throw error;
 
-        toast.success("Identity Created", {
-            description: "Please verify your email to activate the node."
-        });
+        // Check if session exists (Auto-confirm enabled) or not (Email confirm required)
+        if (data.session) {
+            toast.success("Welcome to Stark", { description: "Account created successfully." });
+            router.push("/onboarding");
+        } else {
+            toast.success("Check your Inbox", { description: "We sent a verification link to your email." });
+        }
         
       } else {
         // --- LOG IN LOGIC ---
@@ -51,17 +58,14 @@ export default function AuthForm({ view = "login" }) {
 
         if (error) throw error;
 
-        toast.success("Access Granted", {
-            description: "Establishing secure connection..."
-        });
-        
-        // Redirect to personal profile
+        toast.success("Access Granted", { description: "Welcome back." });
         router.push("/profile");
+        router.refresh();
       }
 
     } catch (error) {
-      toast.error("Access Denied", {
-          description: error.message || "Invalid credentials provided."
+      toast.error("Authentication Failed", {
+          description: error.message
       });
     } finally {
       setIsLoading(false);
@@ -142,7 +146,7 @@ export default function AuthForm({ view = "login" }) {
         className="w-full h-12 bg-accent hover:bg-accent/90 text-white rounded-none font-mono uppercase tracking-widest text-xs shadow-lg mt-6 group"
       >
         {isLoading ? (
-            <span className="animate-pulse">Authenticating...</span>
+            <span className="animate-pulse">Processing...</span>
         ) : (
             <span className="flex items-center gap-2">
                 {view === 'login' ? 'Access System' : 'Initialize Account'} 

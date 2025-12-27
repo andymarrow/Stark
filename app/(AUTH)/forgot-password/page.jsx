@@ -5,19 +5,34 @@ import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthShell from "../_components/AuthShell";
+import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
 
 export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API
-    setTimeout(() => {
-        setIsLoading(false);
+
+    try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            // Redirect to a page where they can enter new password
+            redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+        });
+
+        if (error) throw error;
+
         setIsSubmitted(true);
-    }, 1500);
+        toast.success("Recovery Sequence Initiated");
+
+    } catch (error) {
+        toast.error("Request Failed", { description: error.message });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -34,6 +49,8 @@ export default function ForgotPasswordPage() {
                         <Input 
                             type="email" 
                             placeholder="dev@stark.net" 
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
                             className="pl-10 h-12 rounded-none border-border bg-secondary/5 focus-visible:ring-accent transition-all"
                             required
                         />
@@ -62,7 +79,7 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-2">
                     <h3 className="text-xl font-bold">Link Sent</h3>
                     <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-                        Check your inbox. A secure entry link has been dispatched to your provided address.
+                        Check your inbox. A secure entry link has been dispatched to <strong>{email}</strong>.
                     </p>
                 </div>
                 <Link href="/login">

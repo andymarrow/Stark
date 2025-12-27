@@ -1,10 +1,28 @@
 "use client";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ShieldCheck, Terminal } from "lucide-react";
+import { ShieldCheck, Terminal, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function AuthShell({ children, title, subtitle }) {
+  const [nodeCount, setNodeCount] = useState(null);
+
+  // --- FETCH REAL USER COUNT ---
+  useEffect(() => {
+    const fetchCount = async () => {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      
+      if (!error) {
+        setNodeCount(count);
+      }
+    };
+    fetchCount();
+  }, []);
+
   return (
     <div className="min-h-screen w-full flex">
       
@@ -46,7 +64,9 @@ export default function AuthShell({ children, title, subtitle }) {
                     </div>
                     <div className="flex justify-between border-b border-zinc-300 dark:border-white/10 pb-2">
                         <span>ACTIVE_NODES</span>
-                        <span>1,204 CREATORS</span>
+                        <span className="font-bold">
+                            {nodeCount !== null ? `${nodeCount.toLocaleString()} CREATORS` : "CALCULATING..."}
+                        </span>
                     </div>
                     <div className="flex justify-between border-b border-zinc-300 dark:border-white/10 pb-2">
                         <span>ENCRYPTION</span>
@@ -58,13 +78,9 @@ export default function AuthShell({ children, title, subtitle }) {
       </div>
 
       {/* 2. RIGHT: The Form Area */}
-      {/* FIX: Changed layout to flex-col with auto margins to prevent overlap */}
       <div className="w-full lg:w-1/2 bg-background flex flex-col p-8 lg:p-0">
-        
-        {/* Inner container to center content on desktop, but allow flow on mobile */}
         <div className="flex-1 flex flex-col lg:justify-center lg:items-center">
             
-            {/* Mobile Logo - STATIC positioning prevents overlap */}
             <div className="w-full lg:hidden mb-12">
                 <div className="w-8 h-8 bg-foreground text-background flex items-center justify-center font-bold">S</div>
             </div>
@@ -90,7 +106,6 @@ export default function AuthShell({ children, title, subtitle }) {
                 </div>
             </div>
         </div>
-
       </div>
 
     </div>
