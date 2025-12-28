@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2, MapPin } from "lucide-react";
+import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2, MapPin, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { COUNTRIES } from "@/constants/options";
@@ -10,6 +10,10 @@ import { COUNTRIES } from "@/constants/options";
 export default function SettingsForm({ user, onUpdate }) {
   const [isSaving, setIsSaving] = useState(false);
   const [useCustomLocation, setUseCustomLocation] = useState(false);
+  
+  // Username Validation States
+  const [usernameStatus, setUsernameStatus] = useState("idle"); // idle | checking | available | taken
+  const [usernameError, setUsernameError] = useState("");
 
   // Initialize state with DB data
   const [formData, setFormData] = useState({
@@ -30,6 +34,54 @@ export default function SettingsForm({ user, onUpdate }) {
   const sortedCountries = useMemo(() => {
     return [...COUNTRIES].sort((a, b) => a.label.localeCompare(b.label));
   }, []);
+
+  // --- REAL-TIME USERNAME CHECKER ---
+  const checkUsernameAvailability = useCallback(async (name) => {
+    const cleanName = name.toLowerCase().trim().replace(/\s+/g, '_');
+    
+    if (cleanName === user?.username) {
+        setUsernameStatus("idle");
+        setUsernameError("");
+        return;
+    }
+
+    if (cleanName.length < 3) {
+        setUsernameStatus("taken");
+        setUsernameError("Handle too short (min 3 chars)");
+        return;
+    }
+
+    setUsernameStatus("checking");
+
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('username', cleanName)
+            .maybeSingle();
+
+        if (data) {
+            setUsernameStatus("taken");
+            setUsernameError("This identity handle is already claimed.");
+        } else {
+            setUsernameStatus("available");
+            setUsernameError("");
+        }
+    } catch (err) {
+        console.error(err);
+    }
+  }, [user?.username]);
+
+  // Debounce the check
+  useEffect(() => {
+    const timer = setTimeout(() => {
+        if (formData.username !== user?.username) {
+            checkUsernameAvailability(formData.username);
+        }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.username, checkUsernameAvailability, user?.username]);
 
   // Keep state in sync if parent fetches new data
   useEffect(() => {
@@ -83,16 +135,20 @@ export default function SettingsForm({ user, onUpdate }) {
   };
 
   const handleSave = async () => {
+    if (usernameStatus === "taken") {
+        toast.error("Invalid Username", { description: "Please choose an available identity handle." });
+        return;
+    }
+
     setIsSaving(true);
     try {
-        // Validation for username (simple)
         const cleanUsername = formData.username.toLowerCase().trim().replace(/\s+/g, '_');
 
         const { error } = await supabase
             .from('profiles')
             .update({
                 full_name: formData.full_name,
-                username: cleanUsername, // Now allowed to update
+                username: cleanUsername,
                 bio: formData.bio,
                 location: formData.location,
                 website: formData.website,
@@ -102,12 +158,11 @@ export default function SettingsForm({ user, onUpdate }) {
             .eq('id', user.id);
 
         if (error) {
-            if (error.code === '23505') throw new Error("Username already taken in system registry.");
+            if (error.code === '23505') throw new Error("Database Conflict: Username already exists.");
             throw error;
         }
 
         toast.success("Settings Saved", { description: "Your configuration has been deployed." });
-        
         if (onUpdate) onUpdate();
 
     } catch (error) {
@@ -132,14 +187,33 @@ export default function SettingsForm({ user, onUpdate }) {
                 onChange={(e) => handleInputChange("full_name", e.target.value)} 
             />
             
-            {/* USERNAME FIELD - NOW EDITABLE */}
-            <InputGroup 
-                label="Username (Identity Handle)" 
-                value={formData.username} 
-                onChange={(e) => handleInputChange("username", e.target.value)}
-                prefix="@" 
-                placeholder="stark_user"
-            />
+            {/* USERNAME FIELD WITH AVAILABILITY CHECK */}
+            <div className="space-y-1.5">
+                <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
+                    Username (Identity Handle)
+                    {usernameStatus === "checking" && <span className="text-[9px] animate-pulse">CHECKING...</span>}
+                    {usernameStatus === "available" && <span className="text-[9px] text-green-500">AVAILABLE</span>}
+                </label>
+                <div className={`flex items-center border bg-background transition-colors
+                    ${usernameStatus === "taken" ? 'border-red-500' : 'border-border focus-within:border-accent'}`}>
+                    <div className="px-3 py-2 bg-secondary/10 border-r border-border text-sm text-muted-foreground font-mono">@</div>
+                    <input 
+                        type="text" 
+                        value={formData.username} 
+                        onChange={(e) => handleInputChange("username", e.target.value)}
+                        className="flex-1 bg-transparent border-none outline-none p-3 h-10 text-sm font-mono"
+                    />
+                    <div className="pr-3">
+                        {usernameStatus === "available" && <CheckCircle2 size={14} className="text-green-500" />}
+                        {usernameStatus === "taken" && <AlertTriangle size={14} className="text-red-500" />}
+                    </div>
+                </div>
+                {usernameError && (
+                    <p className="text-[10px] font-mono text-red-500 uppercase tracking-tighter">
+                        {usernameError}
+                    </p>
+                )}
+            </div>
 
             <div className="md:col-span-2">
                 <InputGroup 
@@ -150,7 +224,7 @@ export default function SettingsForm({ user, onUpdate }) {
                 />
             </div>
             
-            {/* LOCATION SELECTOR */}
+            {/* ALPHABETICAL LOCATION SELECTOR */}
             <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
                     Location
@@ -183,7 +257,7 @@ export default function SettingsForm({ user, onUpdate }) {
                         <select
                             value={formData.location}
                             onChange={handleLocationSelect}
-                            className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors"
+                            className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors font-sans"
                         >
                             <option value="">Select Country / Region...</option>
                             {sortedCountries.map((c) => (
@@ -248,7 +322,6 @@ export default function SettingsForm({ user, onUpdate }) {
         <SectionHeader icon={Bell} title="Preferences" description="Manage system behavior." />
         <div className="space-y-4 max-w-xl">
             <ToggleRow label="Email Notifications" description="Receive weekly digests and major updates." defaultChecked={true} />
-            
             <ToggleRow 
                 label="For Hire Status" 
                 description="Show the 'Open to Work' badge on your profile." 
@@ -265,7 +338,7 @@ export default function SettingsForm({ user, onUpdate }) {
         </Button>
         <Button 
             onClick={handleSave} 
-            disabled={isSaving}
+            disabled={isSaving || usernameStatus === "checking" || usernameStatus === "taken"}
             className="rounded-none bg-foreground text-background hover:bg-accent hover:text-white transition-colors min-w-[140px]"
         >
             {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Save Changes"}
@@ -335,7 +408,7 @@ function SocialInput({ icon: Icon, label, value, onChange, placeholder }) {
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
-                    className="w-full bg-background border-b border-border focus:border-accent outline-none py-2 text-sm transition-colors"
+                    className="w-full bg-background border-b border-border focus:border-accent outline-none py-2 text-sm transition-colors font-mono"
                 />
                 {value && value.length > 5 && (
                     <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] text-green-500 font-mono bg-green-500/10 px-2 py-0.5">
