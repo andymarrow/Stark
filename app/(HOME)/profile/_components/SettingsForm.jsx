@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2, MapPin } from "lucide-react";
@@ -14,11 +14,10 @@ export default function SettingsForm({ user, onUpdate }) {
   // Initialize state with DB data
   const [formData, setFormData] = useState({
     full_name: user?.full_name || "",
-    username: user?.username || "", // Read only usually
+    username: user?.username || "", 
     bio: user?.bio || "",
     location: user?.location || "",
     website: user?.website || "",
-    // Handle JSONB structure for socials
     socials: {
         github: user?.socials?.github || "",
         twitter: user?.socials?.twitter || "",
@@ -27,12 +26,15 @@ export default function SettingsForm({ user, onUpdate }) {
     is_for_hire: user?.is_for_hire || false
   });
 
+  // Alphabetize countries for the dropdown
+  const sortedCountries = useMemo(() => {
+    return [...COUNTRIES].sort((a, b) => a.label.localeCompare(b.label));
+  }, []);
+
   // Keep state in sync if parent fetches new data
   useEffect(() => {
     if (user) {
-        // Check if user's location is in our list
         const isStandard = COUNTRIES.some(c => c.value === user.location);
-        // If they have a location but it's not in our list, show the custom input mode
         if (user.location && !isStandard) {
             setUseCustomLocation(true);
         }
@@ -73,7 +75,7 @@ export default function SettingsForm({ user, onUpdate }) {
     const val = e.target.value;
     if (val === "OTHER") {
         setUseCustomLocation(true);
-        setFormData(prev => ({ ...prev, location: "" })); // Clear for typing
+        setFormData(prev => ({ ...prev, location: "" }));
     } else {
         setUseCustomLocation(false);
         setFormData(prev => ({ ...prev, location: val }));
@@ -83,24 +85,29 @@ export default function SettingsForm({ user, onUpdate }) {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+        // Validation for username (simple)
+        const cleanUsername = formData.username.toLowerCase().trim().replace(/\s+/g, '_');
+
         const { error } = await supabase
             .from('profiles')
             .update({
                 full_name: formData.full_name,
+                username: cleanUsername, // Now allowed to update
                 bio: formData.bio,
                 location: formData.location,
                 website: formData.website,
                 socials: formData.socials,
                 is_for_hire: formData.is_for_hire,
-                // username is usually not editable to prevent URL breaks, so we omit it here
             })
             .eq('id', user.id);
 
-        if (error) throw error;
+        if (error) {
+            if (error.code === '23505') throw new Error("Username already taken in system registry.");
+            throw error;
+        }
 
         toast.success("Settings Saved", { description: "Your configuration has been deployed." });
         
-        // Refresh parent data
         if (onUpdate) onUpdate();
 
     } catch (error) {
@@ -124,12 +131,16 @@ export default function SettingsForm({ user, onUpdate }) {
                 value={formData.full_name} 
                 onChange={(e) => handleInputChange("full_name", e.target.value)} 
             />
+            
+            {/* USERNAME FIELD - NOW EDITABLE */}
             <InputGroup 
-                label="Username" 
+                label="Username (Identity Handle)" 
                 value={formData.username} 
+                onChange={(e) => handleInputChange("username", e.target.value)}
                 prefix="@" 
-                disabled 
+                placeholder="stark_user"
             />
+
             <div className="md:col-span-2">
                 <InputGroup 
                     label="Bio" 
@@ -139,7 +150,7 @@ export default function SettingsForm({ user, onUpdate }) {
                 />
             </div>
             
-            {/* LOCATION SELECTOR with Custom Fallback */}
+            {/* LOCATION SELECTOR */}
             <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
                     Location
@@ -175,7 +186,7 @@ export default function SettingsForm({ user, onUpdate }) {
                             className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors"
                         >
                             <option value="">Select Country / Region...</option>
-                            {COUNTRIES.map((c) => (
+                            {sortedCountries.map((c) => (
                                 <option key={c.value} value={c.value}>
                                     {c.label}
                                 </option>
@@ -236,7 +247,6 @@ export default function SettingsForm({ user, onUpdate }) {
       <section className="space-y-6">
         <SectionHeader icon={Bell} title="Preferences" description="Manage system behavior." />
         <div className="space-y-4 max-w-xl">
-            {/* We don't have columns for notifications yet, so these are UI-only for now or mapped to local storage */}
             <ToggleRow label="Email Notifications" description="Receive weekly digests and major updates." defaultChecked={true} />
             
             <ToggleRow 
@@ -346,7 +356,6 @@ function ToggleRow({ label, description, checked, defaultChecked, onCheckedChang
             </div>
             <Switch 
                 checked={checked} 
-                defaultChecked={defaultChecked} 
                 onCheckedChange={onCheckedChange}
                 className="data-[state=checked]:bg-accent" 
             />
