@@ -30,39 +30,45 @@ const getYoutubeThumbnail = (url) => {
 
 export default function StepMedia({ data, updateData, errors }) {
   const { user } = useAuth();
-  const [isUploading, setIsUploading] = useState(false);
   const [isAutoCapturing, setIsAutoCapturing] = useState(false);
   const [videoLink, setVideoLink] = useState(""); 
   const fileInputRef = useRef(null);
 
-  const handleFileSelect = async (e) => {
+  // --- 1. LOCAL MULTI-FILE SELECT (DEFERRED UPLOAD) ---
+  const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    const file = files[0];
-    
-    if (file.size > 5 * 1024 * 1024) {
-        toast.error("File too large", { description: "Max size is 5MB." });
-        return;
+
+    // Validate size
+    for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error(`Skipped ${file.name}`, { description: "File too large (Max 5MB)." });
+            return;
+        }
     }
 
-    setIsUploading(true);
-    try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `projects/${user?.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, file);
-        if (uploadError) throw uploadError;
-        
-        const { data: { publicUrl } } = supabase.storage.from('project-assets').getPublicUrl(fileName);
-        
-        const newFiles = [...(data.files || []), publicUrl];
-        updateData("files", newFiles);
-        toast.success("Asset Uploaded");
-    } catch (error) {
-        console.error(error);
-        toast.error("Upload Failed", { description: error.message });
-    } finally {
-        setIsUploading(false);
-    }
+    // Create Local Previews
+    const newRawFiles = [];
+    const newPreviewUrls = [];
+
+    files.forEach(file => {
+        const objectUrl = URL.createObjectURL(file);
+        newPreviewUrls.push(objectUrl);
+        newRawFiles.push({ preview: objectUrl, file: file });
+    });
+
+    // Update Parent State
+    // 1. Add URL strings to 'files' for the preview grid
+    updateData("files", [...(data.files || []), ...newPreviewUrls]);
+    
+    // 2. Add raw File objects to 'rawFiles' for the final upload step
+    const currentRaw = data.rawFiles || [];
+    updateData("rawFiles", [...currentRaw, ...newRawFiles]);
+
+    toast.success(`${files.length} Assets Queued`, { description: "Files will upload on deployment." });
+    
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleAutoCapture = async () => {
@@ -85,6 +91,8 @@ export default function StepMedia({ data, updateData, errors }) {
         if (!response.ok) throw new Error(result.error);
 
         if (result.images && result.images.length > 0) {
+            // Auto-capture returns real Supabase URLs, so we just add them to 'files'
+            // We don't add them to 'rawFiles' because they are already uploaded
             const newFiles = [...(data.files || []), ...result.images];
             updateData("files", newFiles);
             toast.success("Capture Complete", { description: `${result.images.length} screenshots added.` });
@@ -106,6 +114,7 @@ export default function StepMedia({ data, updateData, errors }) {
         return;
     }
     
+    // Video links are just strings, add to 'files'
     const newFiles = [...(data.files || []), videoLink];
     updateData("files", newFiles);
     setVideoLink("");
@@ -113,8 +122,22 @@ export default function StepMedia({ data, updateData, errors }) {
   };
 
   const removeFile = (indexToRemove) => {
+    const fileToRemove = data.files[indexToRemove];
+    
+    // If it was a local blob, revoke URL to free memory
+    if (fileToRemove.startsWith('blob:')) {
+        URL.revokeObjectURL(fileToRemove);
+    }
+
+    // Remove from 'files' array
     const newFiles = data.files.filter((_, index) => index !== indexToRemove);
     updateData("files", newFiles);
+
+    // Also remove from 'rawFiles' if it exists there
+    if (data.rawFiles) {
+        const newRaw = data.rawFiles.filter(r => r.preview !== fileToRemove);
+        updateData("rawFiles", newRaw);
+    }
   };
 
   return (
@@ -169,7 +192,7 @@ export default function StepMedia({ data, updateData, errors }) {
              </div>
           )}
 
-          {/* B. MANUAL DROPZONE */}
+          {/* B. MANUAL DROPZONE (MULTI-SELECT ENABLED) */}
           <div 
             className={`h-32 border-2 border-dashed bg-secondary/5 flex flex-col items-center justify-center gap-2 transition-all cursor-pointer relative group ${errors?.files ? 'border-red-500' : 'border-border hover:border-accent/50'}`}
             onClick={() => fileInputRef.current?.click()}
@@ -180,19 +203,13 @@ export default function StepMedia({ data, updateData, errors }) {
                 onChange={handleFileSelect} 
                 className="hidden" 
                 accept="image/*"
+                multiple // <--- ENABLED MULTIPLE
             />
-            {isUploading ? (
-                <div className="flex flex-col items-center gap-2">
-                    <Loader2 className="animate-spin text-accent" size={24} />
-                    <span className="text-xs font-mono uppercase">Uploading...</span>
-                </div>
-            ) : (
-                <div className="flex flex-col items-center text-center">
-                    <UploadCloud size={24} className={`mb-2 transition-colors ${errors?.files ? 'text-red-500' : 'text-muted-foreground group-hover:text-accent'}`} />
-                    <p className="text-xs font-bold text-foreground">Upload Image</p>
-                    <span className="text-[10px] text-muted-foreground uppercase">Max 5MB</span>
-                </div>
-            )}
+            <div className="flex flex-col items-center text-center">
+                <UploadCloud size={24} className={`mb-2 transition-colors ${errors?.files ? 'text-red-500' : 'text-muted-foreground group-hover:text-accent'}`} />
+                <p className="text-xs font-bold text-foreground">Upload Images</p>
+                <span className="text-[10px] text-muted-foreground uppercase">Multi-Select Supported</span>
+            </div>
           </div>
       </div>
 

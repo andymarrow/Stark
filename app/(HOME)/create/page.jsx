@@ -7,7 +7,7 @@ import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator"; 
-import { projectSchema } from "@/lib/validations"; // IMPORT ZOD SCHEMA
+import { projectSchema } from "@/lib/validations"; 
 
 import CreateStepper from "./_components/CreateStepper";
 import StepSource from "./_components/StepSource";
@@ -21,9 +21,9 @@ export default function CreatePage() {
 
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState({}); // NEW: Error state for Zod
+  const [errors, setErrors] = useState({}); 
 
-  // Initialize form data with collaborators array
+  // Initialize form data with rawFiles for deferred upload
   const [formData, setFormData] = useState({
     type: 'code',
     link: '',
@@ -31,9 +31,9 @@ export default function CreatePage() {
     title: '',
     description: '',
     tags: '',
-    files: [],
+    files: [], // Stores Strings (URLs) for preview
+    rawFiles: [], // NEW: Stores { preview: 'blob:..', file: File } for deferred upload
     collaborators: [], 
-    // HIDDEN FIELDS AUTO-POPULATED
     readme: '', 
     stats: { stars: 0, forks: 0 } 
   });
@@ -112,18 +112,11 @@ export default function CreatePage() {
   const calculateQualityScore = () => {
     let score = 10; // Base score
     
-    // 1. Content Depth
     if (formData.description.length > 100) score += 10;
     if (formData.description.length > 500) score += 20;
-    
-    // 2. Visuals
     if (formData.files.length > 0) score += 15;
     if (formData.files.length > 2) score += 10;
-    
-    // 3. Deployment
     if (formData.demo_link) score += 25;
-    
-    // 4. Social Proof (GitHub Stars)
     if (formData.stats.stars > 10) score += 5;
     if (formData.stats.stars > 100) score += 5;
 
@@ -135,12 +128,41 @@ export default function CreatePage() {
     setIsSubmitting(true);
 
     try {
+        // --- 1. PROCESS UPLOADS (DEFERRED) ---
+        // Iterate through 'files'. If it's a blob (local), upload now.
+        // If it's a URL (video or auto-capture), keep as is.
+        const processedImages = await Promise.all(formData.files.map(async (url) => {
+            if (url.startsWith('blob:')) {
+                // Find the actual file object matched by preview URL
+                const rawEntry = formData.rawFiles.find(r => r.preview === url);
+                
+                if (rawEntry && rawEntry.file) {
+                    const fileExt = rawEntry.file.name.split('.').pop();
+                    // Unique filename to prevent collisions
+                    const fileName = `projects/${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                    
+                    const { error: uploadError } = await supabase.storage
+                        .from('project-assets')
+                        .upload(fileName, rawEntry.file);
+                    
+                    if (uploadError) throw uploadError;
+
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('project-assets')
+                        .getPublicUrl(fileName);
+                    
+                    return publicUrl; // Replace blob with real Supabase URL
+                }
+            }
+            return url; // Keep existing URL (YouTube, Auto-capture)
+        }));
+
         const tagArray = formData.tags.split(',').map(t => t.trim()).filter(t => t);
         const slug = formData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000);
         
         const qualityScore = calculateQualityScore();
 
-        // 1. INSERT PROJECT
+        // --- 2. INSERT PROJECT ---
         const { data: projectData, error: projectError } = await supabase
             .from('projects')
             .insert({
@@ -152,8 +174,8 @@ export default function CreatePage() {
                 source_link: formData.link,
                 demo_link: formData.demo_link || null,
                 tags: tagArray,
-                images: formData.files,
-                thumbnail_url: formData.files[0] || null,
+                images: processedImages, // Use the new array with real URLs
+                thumbnail_url: processedImages[0] || null,
                 status: 'published',
                 quality_score: qualityScore,
             })
@@ -162,7 +184,7 @@ export default function CreatePage() {
 
         if (projectError) throw projectError;
 
-        // 2. HANDLE COLLABORATORS
+        // --- 3. HANDLE COLLABORATORS ---
         if (formData.collaborators && formData.collaborators.length > 0) {
             const collabRows = formData.collaborators.map(c => ({
                 project_id: projectData.id,
@@ -179,7 +201,7 @@ export default function CreatePage() {
                 console.error("Collaborator DB Error:", collabError);
                 toast.warning("Project Saved, but collaborators failed to link.");
             } else {
-                // 3. SEND EMAILS (Only for Ghosts)
+                // SEND EMAILS (Only for Ghosts)
                 const ghostInvites = formData.collaborators.filter(c => c.type === 'ghost');
                 ghostInvites.forEach(async (ghost) => {
                     const inviterName = user.user_metadata?.full_name || user.email;
@@ -225,6 +247,7 @@ export default function CreatePage() {
 
             <div className="mb-8">
                 {step === 1 && <StepSource data={formData} updateData={updateData} errors={errors} />}
+                {/* Note: StepDetails now includes CollaboratorManager internally via props */}
                 {step === 2 && <StepDetails data={formData} updateData={updateData} errors={errors} />}
                 {step === 3 && <StepMedia data={formData} updateData={updateData} errors={errors} />}
                 {step === 4 && <StepReview data={formData} />}
