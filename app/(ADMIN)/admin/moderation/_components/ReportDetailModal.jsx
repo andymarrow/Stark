@@ -1,7 +1,6 @@
 "use client";
 import { 
-  X, Shield, Ban, ExternalLink, Flag, MessageSquare, 
-  AlertOctagon, CheckCircle2, History 
+  X, AlertOctagon, CheckCircle2, Flag, ExternalLink, MessageSquare, UserX 
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,31 +10,43 @@ import {
   DialogContent,
   DialogClose
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
-// FIX: Added 'onResolve' prop
 export default function ReportDetailModal({ report, isOpen, onClose, onResolve }) {
   if (!report) return null;
 
   // Identify Target
-  const isProject = report.type === 'project'; 
-  const targetName = isProject ? report.project?.title : report.user?.username;
-  const targetId = isProject ? report.project?.id : report.user?.id;
-  const targetImage = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000"; 
+  const type = report.type; 
+  
+  // Determine Name
+  let targetName = "Unknown Target";
+  if (type === 'project') targetName = report.project?.title;
+  if (type === 'user') targetName = report.user?.username;
+  if (type === 'comment') targetName = "User Comment";
+
+  // Determine IDs
+  let targetId = null;
+  let commentAuthorId = null;
+
+  if (type === 'project') targetId = report.project?.id;
+  if (type === 'user') targetId = report.user?.id;
+  if (type === 'comment') {
+      targetId = report.comment?.id;
+      commentAuthorId = report.comment?.user_id; // Get ID for banning
+  }
+
+  const targetImage = type === 'comment' 
+    ? "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=200" 
+    : "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000";
 
   // --- ACTIONS ---
 
   const handleDismiss = async () => {
-      const { error } = await supabase
-        .from('reports')
-        .update({ status: 'resolved' })
-        .eq('id', report.id);
-      
+      const { error } = await supabase.from('reports').update({ status: 'resolved' }).eq('id', report.id);
       if (!error) {
           toast.success("Report Dismissed");
-          if (onResolve) onResolve(report.id); // Notify Parent
+          if (onResolve) onResolve(report.id); 
           onClose();
       } else {
           toast.error("Action Failed");
@@ -43,42 +54,60 @@ export default function ReportDetailModal({ report, isOpen, onClose, onResolve }
   };
 
   const handleTakedown = async () => {
-      if (!confirm(`Are you sure you want to take down ${targetName}?`)) return;
+      if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
 
       let error = null;
 
-      if (isProject) {
-          // Delete Project
+      if (type === 'project') {
           const { error: err } = await supabase.from('projects').delete().eq('id', targetId);
           error = err;
-      } else {
-          // Ban User
+      } else if (type === 'user') {
           const { error: err } = await supabase.from('profiles').update({ role: 'banned' }).eq('id', targetId);
+          error = err;
+      } else if (type === 'comment') {
+          const { error: err } = await supabase.from('comments').delete().eq('id', targetId);
           error = err;
       }
 
       if (!error) {
-          // Also mark report as resolved
           await supabase.from('reports').update({ status: 'resolved' }).eq('id', report.id);
-          
-          toast.success(isProject ? "Project Removed" : "User Banned");
-          if (onResolve) onResolve(report.id); // Notify Parent
+          toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} Removed`);
+          if (onResolve) onResolve(report.id); 
           onClose();
       } else {
           toast.error("Takedown Failed", { description: error.message });
       }
   };
 
+  // New: Specific Ban Action for Comment Authors
+  const handleBanAuthor = async () => {
+    if (!commentAuthorId) return;
+    if (!confirm(`Permanently BAN the author of this comment?`)) return;
+
+    const { error } = await supabase.from('profiles').update({ role: 'banned' }).eq('id', commentAuthorId);
+    
+    if (!error) {
+        // Also delete the comment and resolve report
+        await supabase.from('comments').delete().eq('id', targetId);
+        await supabase.from('reports').update({ status: 'resolved' }).eq('id', report.id);
+        
+        toast.success("User Banned & Comment Purged");
+        if (onResolve) onResolve(report.id);
+        onClose();
+    } else {
+        toast.error("Ban Failed", { description: error.message });
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl w-[95vw] bg-zinc-950 border border-white/10 p-0 gap-0 rounded-none overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent className="max-w-2xl w-[95vw] bg-zinc-950 border border-white/10 p-0 gap-0 rounded-none overflow-hidden flex flex-col max-h-[90vh]">
         
-        {/* 1. Header: The Accused */}
+        {/* 1. Header */}
         <div className="p-6 border-b border-white/10 bg-zinc-900/50 flex justify-between items-start">
             <div className="flex gap-5">
-                <div className="relative w-24 h-16 border border-white/10 bg-black">
-                    <Image src={targetImage} alt="Target" fill className="object-cover" />
-                    <div className="absolute inset-0 bg-red-500/10 mix-blend-overlay" />
+                <div className="relative w-20 h-14 border border-white/10 bg-black shrink-0">
+                    <Image src={targetImage} alt="Target" fill className="object-cover opacity-80" />
                 </div>
                 <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -86,86 +115,80 @@ export default function ReportDetailModal({ report, isOpen, onClose, onResolve }
                             {report.reason}
                         </span>
                         <span className="text-[10px] font-mono text-zinc-500 uppercase">
-                            Risk Score: {report.score}%
+                            Type: {type}
                         </span>
                     </div>
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        {targetName || "Unknown Target"}
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        {targetName}
                     </h2>
-                    {isProject && report.project?.slug && (
-                        <Link 
-                            href={`/project/${report.project.slug}`} 
-                            target="_blank"
-                            className="text-xs font-mono text-zinc-400 hover:text-white flex items-center gap-1 mt-1 hover:underline"
-                        >
-                            view_source <ExternalLink size={10} />
-                        </Link>
-                    )}
                 </div>
             </div>
             <DialogClose asChild>
-                <button className="text-zinc-500 hover:text-white transition-colors">
-                    <X size={24} />
-                </button>
+                <button className="text-zinc-500 hover:text-white transition-colors"><X size={20} /></button>
             </DialogClose>
         </div>
 
-        {/* 2. Body: The Evidence */}
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+        {/* 2. Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
             
-            {/* Left: Report Details */}
-            <div className="flex-1 border-r border-white/10 flex flex-col">
-                <div className="p-3 border-b border-white/10 bg-zinc-900/20 text-xs font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                    <Flag size={12} /> Violation Details
+            {/* Show Comment Content if it is a comment report */}
+            {type === 'comment' && report.comment && (
+                <div className="border border-yellow-500/20 bg-yellow-500/5 p-4 relative">
+                    <div className="absolute top-0 right-0 p-1 bg-yellow-500/10 text-yellow-500">
+                        <MessageSquare size={12} />
+                    </div>
+                    <h4 className="text-xs font-bold text-yellow-500 mb-2 uppercase tracking-widest">Reported Content</h4>
+                    <p className="text-sm text-zinc-300 font-mono leading-relaxed">
+                        "{report.comment.content}"
+                    </p>
+                    <div className="mt-3 pt-3 border-t border-yellow-500/10 text-[10px] text-zinc-500 font-mono flex justify-between">
+                        <span>Author: <span className="text-white font-bold">@{report.comment.author?.username || "Unknown"}</span></span>
+                        <span>ID: {report.comment.user_id}</span>
+                    </div>
                 </div>
-                <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-zinc-300">Reporter: {report.reporter}</span>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-600">{new Date(report.created_at).toLocaleString()}</span>
+            )}
+
+            <div>
+                <h4 className="text-xs font-bold text-zinc-400 mb-2 uppercase tracking-widest flex items-center gap-2">
+                    <Flag size={12} /> Reporter Details
+                </h4>
+                <div className="bg-white/5 p-4 border border-white/10 text-sm text-zinc-300">
+                    <div className="mb-2 text-xs font-mono text-zinc-500">
+                        @{report.reporter} • {new Date(report.created_at).toLocaleString()}
                     </div>
-                    <div className="bg-white/5 p-4 border border-white/10 text-sm text-zinc-300 font-mono leading-relaxed">
-                        "{report.details}"
-                    </div>
+                    <p>{report.details || "No additional details provided."}</p>
                 </div>
             </div>
-
-            {/* Right: History & Context */}
-            <div className="w-full md:w-72 bg-zinc-900/10 flex flex-col">
-                <div className="p-3 border-b border-white/10 bg-zinc-900/20 text-xs font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-2">
-                    <History size={12} /> Automated Analysis
-                </div>
-                <div className="p-4 space-y-4">
-                    <div className="border-l-2 border-red-600 pl-3">
-                        <span className="text-xs text-zinc-300 block">Flagged Reason</span>
-                        <span className="text-[10px] text-zinc-500 uppercase">{report.reason}</span>
-                    </div>
-                    <div className="border-l-2 border-zinc-800 pl-3">
-                        <span className="text-xs text-zinc-500 block">System Verdict</span>
-                        <span className="text-[10px] text-zinc-600">Pending Review</span>
-                    </div>
-                </div>
-            </div>
-
         </div>
 
-        {/* 3. Footer: The Gavel */}
+        {/* 3. Footer */}
         <div className="p-4 border-t border-white/10 bg-zinc-900/50 flex justify-between items-center">
-            <div className="text-[10px] font-mono text-zinc-600">REPORT_ID: {report.id}</div>
+            <div className="text-[10px] font-mono text-zinc-600">ID: {report.id}</div>
             
             <div className="flex gap-3">
                 <Button 
                     onClick={handleDismiss}
-                    className="h-9 bg-green-900/20 text-green-500 border border-green-900/50 hover:bg-green-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider"
+                    className="h-9 bg-green-900/20 text-green-500 border border-green-900/50 hover:bg-green-600 hover:text-white rounded-none text-xs font-mono uppercase"
                 >
                     <CheckCircle2 size={14} className="mr-2" /> Dismiss
                 </Button>
+
+                {/* If Comment, show specific Ban Option */}
+                {type === 'comment' && (
+                    <Button 
+                        onClick={handleBanAuthor}
+                        className="h-9 bg-orange-900/20 text-orange-500 border border-orange-900/50 hover:bg-orange-600 hover:text-white rounded-none text-xs font-mono uppercase"
+                    >
+                        <UserX size={14} className="mr-2" /> Ban Author
+                    </Button>
+                )}
+
                 <Button 
                     onClick={handleTakedown}
-                    className="h-9 bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white rounded-none text-xs font-mono uppercase tracking-wider"
+                    className="h-9 bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white rounded-none text-xs font-mono uppercase"
                 >
-                    <AlertOctagon size={14} className="mr-2" /> {isProject ? "Delete Project" : "Ban User"}
+                    <AlertOctagon size={14} className="mr-2" /> 
+                    {type === 'project' ? "Delete Project" : type === 'user' ? "Ban User" : "Delete Comment"}
                 </Button>
             </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { 
-  Shield, FileCode, User, Check, X, Eye, Loader2, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle 
+  Shield, FileCode, User, Check, X, Eye, Loader2, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, MessageSquare 
 } from "lucide-react";
 import AdminTable, { AdminRow, AdminCell } from "../_components/AdminTable";
 import ReportDetailModal from "./_components/ReportDetailModal";
@@ -27,35 +27,50 @@ export default function ModerationPage() {
         const from = (page - 1) * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
 
+        // UPDATED QUERY: Now fetching 'comment' relation
         const { data, count, error } = await supabase
             .from('reports')
             .select(`
                 *,
                 reporter:profiles!reporter_id(username),
                 project:projects(id, title, slug, owner_id),
-                target_user:profiles!target_user_id(username, id)
+                target_user:profiles!target_user_id(username, id),
+                comment:comments(
+                    id, 
+                    content, 
+                    user_id, 
+                    project_id,
+                    author:profiles!user_id(username, id) 
+                ) 
             `, { count: 'exact' })
-            .order('status', { ascending: true }) // 'pending' comes before 'resolved'
-            .order('created_at', { ascending: false })
-            .range(from, to);
 
         if (error) throw error;
 
         setTotalCount(count || 0);
 
-        const formatted = data.map(r => ({
-            id: r.id,
-            type: r.project_id ? 'project' : 'user',
-            reason: r.reason,
-            details: r.details,
-            status: r.status,
-            created_at: r.created_at,
-            reporter: r.reporter?.username || 'Unknown',
-            project: r.project ? { title: r.project.title, slug: r.project.slug, id: r.project.id } : null,
-            user: r.target_user ? { username: r.target_user.username, id: r.target_user.id } : null,
-            score: r.reason === 'malware' ? 95 : r.reason === 'spam' ? 40 : 20, 
-            reports: 1 
-        }));
+        const formatted = data.map(r => {
+            // Determine type logic
+            let type = 'user';
+            if (r.project_id) type = 'project';
+            if (r.comment_id) type = 'comment';
+
+            return {
+                id: r.id,
+                type: type,
+                reason: r.reason,
+                details: r.details,
+                status: r.status,
+                created_at: r.created_at,
+                reporter: r.reporter?.username || 'Unknown',
+                
+                // Target Objects
+                project: r.project,
+                user: r.target_user,
+                comment: r.comment,
+
+                score: r.reason === 'malware' ? 95 : r.reason === 'spam' ? 40 : 20, 
+            };
+        });
 
         setReports(formatted);
     } catch (err) {
@@ -70,44 +85,21 @@ export default function ModerationPage() {
     fetchReports();
   }, [page]);
 
-  // --- 2. ACTIONS ---
-  
-  // This updates local state immediately for instant feedback
   const handleResolve = async (id) => {
-      // 1. Optimistic Update
-      setReports(prev => prev.map(r => 
-          r.id === id ? { ...r, status: 'resolved' } : r
-      ));
-
-      // 2. Database Update
-      const { data, error } = await supabase
-        .from('reports')
-        .update({ status: 'resolved' })
-        .eq('id', id)
-        .select(); // <--- Add .select() to verify the return
-      
+      setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
+      const { error } = await supabase.from('reports').update({ status: 'resolved' }).eq('id', id);
       if (error) {
-          console.error("DB Update Failed:", error); // Check console if this happens
-          toast.error("Database Error: " + error.message);
-          fetchReports(); // Revert
-      } else if (data.length === 0) {
-          // If RLS blocked it, no error is thrown but data is empty
-          console.error("RLS Blocked Update: No rows returned");
-          toast.error("Permission Denied: You cannot update this report.");
-          fetchReports();
+          toast.error("Database Error");
+          fetchReports(); 
       } else {
-          toast.success("Report Dismissed ");
+          toast.success("Report Dismissed");
       }
   };
 
-  // Callback for Modal (since modal handles the DB update itself for takedowns/dismissals)
   const onModalResolve = (id) => {
-      setReports(prev => prev.map(r => 
-          r.id === id ? { ...r, status: 'resolved' } : r
-      ));
+      setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'resolved' } : r));
   };
 
-  // Filter Logic
   const filteredQueue = useMemo(() => {
     return filter === 'all' ? reports : reports.filter(item => item.type === filter);
   }, [filter, reports]);
@@ -125,7 +117,7 @@ export default function ModerationPage() {
             </h1>
             <div className="flex gap-4 text-xs font-mono text-zinc-500">
                 <span>TOTAL: {totalCount}</span>
-                <span className="text-yellow-500">PENDING: {reports.filter(r => r.status === 'pending').length} (on page)</span>
+                <span className="text-yellow-500">PENDING: {reports.filter(r => r.status === 'pending').length}</span>
             </div>
         </div>
         
@@ -142,7 +134,7 @@ export default function ModerationPage() {
         <div className="lg:col-span-3 space-y-4">
             
             <div className="flex border-b border-white/10">
-                {['all', 'project', 'user'].map((tab) => (
+                {['all', 'project', 'user', 'comment'].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setFilter(tab)}
@@ -167,7 +159,6 @@ export default function ModerationPage() {
                     <div className="flex flex-col items-center justify-center flex-1 h-40 text-zinc-500">
                         <Shield size={32} className="mb-2 opacity-20" />
                         <span className="text-xs font-mono">ALL_CLEAR</span>
-                        <p className="text-[10px] mt-2">No pending reports in this category.</p>
                     </div>
                 ) : (
                     <>
@@ -178,15 +169,24 @@ export default function ModerationPage() {
                                     className={`cursor-pointer group transition-all duration-300 ${item.status === 'resolved' ? 'opacity-50' : ''}`}
                                 >
                                     
-                                    {/* Target */}
+                                    {/* Target Identification */}
                                     <AdminCell onClick={() => setSelectedReport(item)}>
                                         <div className="flex items-center gap-3">
-                                            <div className={`p-2 border border-white/10 ${item.type === 'project' ? 'bg-blue-900/20 text-blue-400' : 'bg-purple-900/20 text-purple-400'}`}>
-                                                {item.type === 'project' ? <FileCode size={16} /> : <User size={16} />}
+                                            <div className={`p-2 border border-white/10 ${
+                                                item.type === 'project' ? 'bg-blue-900/20 text-blue-400' : 
+                                                item.type === 'comment' ? 'bg-yellow-900/20 text-yellow-400' :
+                                                'bg-purple-900/20 text-purple-400'
+                                            }`}>
+                                                {item.type === 'project' ? <FileCode size={16} /> : 
+                                                 item.type === 'comment' ? <MessageSquare size={16} /> : 
+                                                 <User size={16} />}
                                             </div>
                                             <div>
                                                 <div className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors">
-                                                    {item.project?.title || item.user?.username || "Unknown"}
+                                                    {/* Smart Name Display */}
+                                                    {item.type === 'project' ? item.project?.title : 
+                                                     item.type === 'comment' ? 'Comment ID: ' + item.comment?.id?.slice(0,8) :
+                                                     item.user?.username || "Unknown"}
                                                 </div>
                                                 <div className="text-[10px] text-zinc-600 font-mono">
                                                     Reported by {item.reporter}
@@ -200,7 +200,7 @@ export default function ModerationPage() {
                                         <span className="text-xs text-red-300 font-medium uppercase">{item.reason}</span>
                                     </AdminCell>
 
-                                    {/* Risk Score & Date */}
+                                    {/* Risk Score */}
                                     <AdminCell mono onClick={() => setSelectedReport(item)}>
                                         <div className="flex flex-col gap-1.5 w-24">
                                             <div className="flex justify-between text-[9px] text-zinc-500">
@@ -216,7 +216,7 @@ export default function ModerationPage() {
                                         </div>
                                     </AdminCell>
 
-                                    {/* STATUS BADGE */}
+                                    {/* Status Badge */}
                                     <AdminCell mono onClick={() => setSelectedReport(item)}>
                                         {item.status === 'pending' ? (
                                             <span className="text-[9px] px-2 py-0.5 border uppercase text-yellow-500 border-yellow-900/50 bg-yellow-900/10 inline-flex items-center gap-1">
@@ -244,7 +244,6 @@ export default function ModerationPage() {
                                             <button 
                                                 onClick={() => setSelectedReport(item)}
                                                 className="p-1.5 hover:bg-white/10 text-zinc-500 hover:text-white transition-all ml-2"
-                                                title="View Details"
                                             >
                                                 <Eye size={14} />
                                             </button>
@@ -255,7 +254,6 @@ export default function ModerationPage() {
                             ))}
                         </AdminTable>
 
-                       {/* NEW PAGINATION COMPONENT */}
                       <Pagination 
                         currentPage={page}
                         totalPages={totalPages}
@@ -281,13 +279,6 @@ export default function ModerationPage() {
                             <span className="text-white font-bold">SPAM / BOT ACTIVITY</span>
                         </div>
                     </div>
-                    <div className="h-[1px] bg-white/10" />
-                    <div className="text-xs text-zinc-400">
-                        <span className="block text-zinc-500 mb-1">Resolution Rate</span>
-                        <div className="flex items-center gap-2">
-                            <span className="text-green-500 font-bold">94%</span>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -298,7 +289,7 @@ export default function ModerationPage() {
         report={selectedReport} 
         isOpen={!!selectedReport} 
         onClose={() => setSelectedReport(null)}
-        onResolve={onModalResolve} // <--- PASS THE CALLBACK HERE
+        onResolve={onModalResolve} 
       />
 
     </div>

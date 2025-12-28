@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { MoreHorizontal, Shield, Ban, Mail, Key, ShieldAlert, CheckCircle2, User, Trash2 } from "lucide-react";
+import { MoreHorizontal, Shield, Ban, Mail, Key, ShieldAlert, CheckCircle2, User, Trash2, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import AdminTable, { AdminRow, AdminCell } from "../_components/AdminTable";
 import UserDetailModal from "./_components/UserDetailModal"; 
@@ -24,42 +24,87 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Add Pagination State
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   
-
-  // Update Fetch Logic
   const fetchUsers = async () => {
     setLoading(true);
     
-    // Calculate Range
     const from = (page - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
 
-    const { data, count, error } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact' }) // Get count
-        .order('created_at', { ascending: false })
-        .range(from, to); // Apply range
-    
-    if (error) {
-        toast.error("Failed to load users");
-    } else {
-        setUsers(data);
-        setTotalCount(count || 0); // Set total
+    try {
+        // 1. Fetch Users Base Data
+        const { data: usersData, count, error } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact' }) 
+            .order('created_at', { ascending: false })
+            .range(from, to);
+        
+        if (error) throw error;
+
+        const userIds = usersData.map(u => u.id);
+
+        if (userIds.length > 0) {
+            // 2. Parallel Fetch for Risk Stats (The Fix)
+            // We use !inner joins to filter reports based on the related table's owner/author
+            const [userRepRes, projRepRes, commRepRes] = await Promise.all([
+                // A. Direct User Reports
+                supabase.from('reports')
+                    .select('target_user_id')
+                    .in('target_user_id', userIds),
+                
+                // B. Project Reports (where project.owner_id is in userIds)
+                supabase.from('reports')
+                    .select('project:projects!inner(owner_id)')
+                    .in('project.owner_id', userIds),
+
+                // C. Comment Reports (where comment.user_id is in userIds)
+                supabase.from('reports')
+                    .select('comment:comments!inner(user_id)')
+                    .in('comment.user_id', userIds)
+            ]);
+
+            // 3. Map Results to Users
+            const processed = usersData.map(u => {
+                const uReports = userRepRes.data?.filter(r => r.target_user_id === u.id).length || 0;
+                const pReports = projRepRes.data?.filter(r => r.project?.owner_id === u.id).length || 0;
+                const cReports = commRepRes.data?.filter(r => r.comment?.user_id === u.id).length || 0;
+                const total = uReports + pReports + cReports;
+
+                return {
+                    ...u,
+                    reportStats: {
+                        total,
+                        user: uReports,
+                        project: pReports,
+                        comment: cReports
+                    }
+                };
+            });
+
+            setUsers(processed);
+        } else {
+            setUsers([]);
+        }
+        
+        setTotalCount(count || 0);
+        
+    } catch (err) {
+        console.error("User Fetch Error:", err);
+        toast.error("Failed to load user database");
+    } finally {
+        setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Re-fetch on page change
   useEffect(() => {
     fetchUsers();
   }, [page]);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
-  // --- 2. ACTIONS ---
+  // --- ACTIONS ---
   const toggleAdminRole = async (user) => {
     const newRole = user.role === 'admin' ? 'creator' : 'admin';
     toast.promise(
@@ -105,7 +150,7 @@ export default function UserManagementPage() {
       <div className="flex justify-between items-end">
         <div>
             <h1 className="text-2xl font-bold text-white mb-1">User Database</h1>
-            <p className="text-zinc-500 font-mono text-xs">TOTAL_RECORDS: {users.length}</p>
+            <p className="text-zinc-500 font-mono text-xs">TOTAL_RECORDS: {totalCount}</p>
         </div>
         <div className="flex gap-2">
             <input type="text" placeholder="Find user..." className="bg-black border border-white/10 text-xs font-mono text-white h-9 pl-3 pr-3 w-48 focus:border-red-600 focus:outline-none" />
@@ -115,7 +160,7 @@ export default function UserManagementPage() {
 
       <div className="bg-black border border-white/10 flex flex-col"> 
       {/* The Table */}
-            <AdminTable headers={["User Identity", "Role", "Status", "Joined", "Actions"]}>
+            <AdminTable headers={["User Identity", "Role", "Risk Profile", "Status", "Joined", "Actions"]}>
                 {users.map((user) => (
                     <AdminRow key={user.id} className="cursor-pointer">
                         
@@ -137,6 +182,19 @@ export default function UserManagementPage() {
                             <span className={`px-2 py-1 border text-[10px] uppercase ${user.role === 'admin' ? 'border-red-500/50 text-red-400 bg-red-900/20 font-bold' : user.role === 'banned' ? 'border-zinc-700 text-zinc-500 line-through' : 'border-zinc-700 text-zinc-400'}`}>
                                 {user.role}
                             </span>
+                        </AdminCell>
+
+                        {/* RISK PROFILE (Correctly Calculated) */}
+                        <AdminCell mono onClick={() => setSelectedUser(user)}>
+                            {user.reportStats?.total > 0 ? (
+                                <div className="flex gap-2 text-[10px]">
+                                    {user.reportStats.user > 0 && <span className="text-red-400 font-bold" title="Direct User Reports">U:{user.reportStats.user}</span>}
+                                    {user.reportStats.project > 0 && <span className="text-orange-400" title="Project Reports">P:{user.reportStats.project}</span>}
+                                    {user.reportStats.comment > 0 && <span className="text-yellow-400" title="Comment Reports">C:{user.reportStats.comment}</span>}
+                                </div>
+                            ) : (
+                                <span className="text-green-500/50 text-[10px]">CLEAN</span>
+                            )}
                         </AdminCell>
 
                         {/* Status */}
@@ -189,7 +247,8 @@ export default function UserManagementPage() {
                     </AdminRow>
                 ))}
             </AdminTable>
-      {/* NEW PAGINATION */}
+            
+            {/* PAGINATION */}
             <Pagination 
                 currentPage={page}
                 totalPages={totalPages}
@@ -204,7 +263,7 @@ export default function UserManagementPage() {
         user={selectedUser} 
         isOpen={!!selectedUser} 
         onClose={() => setSelectedUser(null)} 
-        onUpdate={fetchUsers} // Pass refetch function
+        onUpdate={fetchUsers} 
       />
 
     </div>
