@@ -1,6 +1,20 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Github, Globe, Star, Eye, Calendar, Edit3, Flag, AlertTriangle, Loader2 } from "lucide-react";
+import { 
+  Github, 
+  Globe, 
+  Star, 
+  Eye, 
+  Calendar, 
+  Edit3, 
+  Flag, 
+  AlertTriangle, 
+  Loader2,
+  Youtube,
+  Figma,
+  Play,
+  ExternalLink
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -63,16 +77,7 @@ export default function ProjectSidebar({ project }) {
       if (hasCountedRef.current) return;
       hasCountedRef.current = true;
 
-      // --- DISABLED OWNER CHECK FOR TESTING ---
-      // We commented this out so you can see the view count go up
-      /*
-      if (user?.id && user.id === project.author.id) {
-        console.log("👀 Owner viewing own project - View NOT counted.");
-        return;
-      }
-      */
-
-      // 2. Optimistic UI update: Increment immediately so user sees it
+      // 2. Optimistic UI update
       setViewCount(prev => prev + 1);
 
       // 3. Database update
@@ -82,8 +87,6 @@ export default function ProjectSidebar({ project }) {
 
       if (error) {
         console.error("❌ Failed to increment view in DB:", error);
-      } else {
-        console.log("✅ View counted in DB (Owner check disabled)");
       }
     };
 
@@ -169,6 +172,79 @@ export default function ProjectSidebar({ project }) {
     day: 'numeric'
   });
 
+  // --- ADAPTIVE ACTION BUTTONS RENDERER ---
+  const renderProjectActions = () => {
+    const projectType = project.type?.toLowerCase();
+
+    // 1. VIDEO UX
+    if (projectType === 'video') {
+      return (
+        <a href={project.source_link} target="_blank" rel="noopener noreferrer">
+          <Button className="w-full h-14 bg-[#FF0000] hover:bg-[#CC0000] text-white font-mono text-sm border border-transparent rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
+            <Youtube className="mr-2 h-5 w-5" />
+            Watch on YouTube
+          </Button>
+        </a>
+      );
+    }
+
+    // 2. DESIGN UX
+    if (projectType === 'design') {
+      return (
+        <div className="grid gap-3">
+          <a href={project.source_link} target="_blank" rel="noopener noreferrer">
+            <Button className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-mono text-sm border border-transparent rounded-none">
+              <Figma className="mr-2 h-4 w-4" />
+              View Design File
+            </Button>
+          </a>
+          
+          {project.demo_link ? (
+            <a href={project.demo_link} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent rounded-none transition-colors">
+                <Play className="mr-2 h-4 w-4" />
+                View Prototype
+              </Button>
+            </a>
+          ) : (
+            <Button disabled className="w-full h-12 bg-transparent text-muted-foreground font-mono text-sm border border-border rounded-none opacity-50 cursor-not-allowed">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              No Prototype
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    // 3. CODE UX
+    return (
+      <div className="grid gap-3">
+        {project.source_link && (
+          <a href={project.source_link} target="_blank" rel="noopener noreferrer">
+            <Button className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-mono text-sm border border-transparent rounded-none">
+              <Github className="mr-2 h-4 w-4" />
+              View Source Code
+            </Button>
+          </a>
+        )}
+        
+        {project.demo_link ? (
+          <a href={project.demo_link} target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent rounded-none transition-colors">
+              <Globe className="mr-2 h-4 w-4" />
+              Live Demo
+            </Button>
+          </a>
+        ) : (
+          <Button disabled className="w-full h-12 bg-transparent text-muted-foreground font-mono text-sm border border-border rounded-none opacity-50 cursor-not-allowed">
+            <Globe className="mr-2 h-4 w-4" />
+            No Live Demo
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8">
       {/* 1. The Quality Score Panel */}
@@ -194,33 +270,12 @@ export default function ProjectSidebar({ project }) {
       </div>
 
       {/* 2. Key Actions */}
-      <div className="grid gap-3">
-        {project.source_link && (
-          <a href={project.source_link} target="_blank" rel="noopener noreferrer">
-            <Button className="w-full h-12 bg-foreground hover:bg-foreground/90 text-background font-mono text-sm border border-transparent rounded-none">
-              <Github className="mr-2 h-4 w-4" />
-              View Source Code
-            </Button>
-          </a>
-        )}
-        
-        {project.demo_link ? (
-          <a href={project.demo_link} target="_blank" rel="noopener noreferrer">
-            <Button className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent rounded-none transition-colors">
-              <Globe className="mr-2 h-4 w-4" />
-              Live Demo
-            </Button>
-          </a>
-        ) : (
-          <Button disabled className="w-full h-12 bg-transparent text-muted-foreground font-mono text-sm border border-border rounded-none opacity-50 cursor-not-allowed">
-            <Globe className="mr-2 h-4 w-4" />
-            No Live Demo
-          </Button>
-        )}
+      <div className="space-y-3">
+        {renderProjectActions()}
 
         {user?.id === project.author.id && (
-          <Link href={`/project/${project.slug || project.id}/edit`} className="w-full">
-            <Button variant="outline" className="w-full h-12 bg-secondary/5 hover:bg-secondary/20 text-muted-foreground hover:text-foreground font-mono text-xs border border-dashed border-border hover:border-foreground rounded-none transition-colors uppercase tracking-widest">
+          <Link href={`/project/${project.slug || project.id}/edit`} className="w-full block">
+            <Button variant="outline" className="w-full h-12 mt-3 bg-secondary/5 hover:bg-secondary/20 text-muted-foreground hover:text-foreground font-mono text-xs border border-dashed border-border hover:border-foreground rounded-none transition-colors uppercase tracking-widest">
               <Edit3 className="mr-2 h-4 w-4" />
               Edit Configuration
             </Button>
@@ -228,60 +283,10 @@ export default function ProjectSidebar({ project }) {
         )}
       </div>
 
-      {/* 3. Tech Stack Grid */}
-      <div>
-        <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// TECH_STACK</h3>
-        <div className="flex flex-wrap gap-2">
-          {project.techStack.map((tech, i) => (
-            <div key={i} className="flex items-center border border-border bg-background px-3 py-1.5 hover:border-foreground transition-colors cursor-default">
-              <span className="text-xs font-medium">{tech.name || tech}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 4. Stats Row */}
-      <div className="grid grid-cols-3 gap-2 py-4 border-y border-border border-dashed select-none">
-        <div 
-          onClick={toggleLike}
-          className={`text-center p-2 cursor-pointer transition-colors group ${isLiked ? 'bg-accent/10' : 'hover:bg-secondary/20'}`}
-        >
-          <Star className={`w-4 h-4 mx-auto mb-1 transition-colors ${isLiked ? 'fill-accent text-accent' : 'text-muted-foreground group-hover:text-foreground'}`} />
-          <div className={`text-lg font-bold ${isLiked ? 'text-accent' : 'text-foreground'}`}>{likesCount}</div>
-          <div className="text-[9px] font-mono text-muted-foreground uppercase">STARS</div>
-        </div>
-
-        <StatBox icon={Eye} label="VIEWS" value={viewCount} />
-        <StatBox icon={Calendar} label="CREATED" value={createdDate} />
-      </div>
-
-      {/* 5. Author Card */}
+      {/* 3. Team Section (Moved Up) */}
       <div>
         <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// CREATED_BY</h3>
-        <Link 
-          href={`/profile/${project.author.username}`}
-          className="flex items-center gap-3 p-3 border border-border bg-background hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(var(--accent),0.1)] transition-all duration-300 group"
-        >
-          <div className="relative w-10 h-10 bg-secondary border border-transparent group-hover:border-accent/50 transition-colors">
-            <Image src={project.author.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} alt="Author" fill className="object-cover" />
-          </div>
-          <div className="flex-1">
-            <h4 className="text-sm font-bold group-hover:text-accent transition-colors">{project.author.name}</h4>
-            <p className="text-xs text-muted-foreground">@{project.author.username}</p>
-          </div>
-          {project.author.isForHire && (
-            <div className="flex flex-col items-end gap-1">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Available for hire" />
-            </div>
-          )}
-        </Link>
-      </div>
-
-      {/* 5. Author & Collaborators Card */}
-      <div>
-        <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// TEAM</h3>
         <div className="flex flex-col gap-2">
-            
             {/* Main Author */}
             <CreatorCard 
                 user={project.author} 
@@ -296,8 +301,36 @@ export default function ProjectSidebar({ project }) {
                     role="Collaborator" 
                 />
             ))}
-
         </div>
+      </div>
+
+      {/* 4. Tech Stack Grid */}
+      <div>
+        <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">
+          // {project.type?.toLowerCase() === 'video' ? 'TOOLKIT' : 'TECH_STACK'}
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {project.techStack.map((tech, i) => (
+            <div key={i} className="flex items-center border border-border bg-background px-3 py-1.5 hover:border-foreground transition-colors cursor-default">
+              <span className="text-xs font-medium">{tech.name || tech}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 5. Stats Row */}
+      <div className="grid grid-cols-3 gap-2 py-4 border-y border-border border-dashed select-none">
+        <div 
+          onClick={toggleLike}
+          className={`text-center p-2 cursor-pointer transition-colors group ${isLiked ? 'bg-accent/10' : 'hover:bg-secondary/20'}`}
+        >
+          <Star className={`w-4 h-4 mx-auto mb-1 transition-colors ${isLiked ? 'fill-accent text-accent' : 'text-muted-foreground group-hover:text-foreground'}`} />
+          <div className={`text-lg font-bold ${isLiked ? 'text-accent' : 'text-foreground'}`}>{likesCount}</div>
+          <div className="text-[9px] font-mono text-muted-foreground uppercase">STARS</div>
+        </div>
+
+        <StatBox icon={Eye} label="VIEWS" value={viewCount} />
+        <StatBox icon={Calendar} label="CREATED" value={createdDate} />
       </div>
 
       {/* 6. Footer Actions (Report Trigger) */}

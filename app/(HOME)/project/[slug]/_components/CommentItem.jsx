@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { ThumbsUp, ThumbsDown, CornerDownRight, Trash2, ChevronDown, ChevronUp, Loader2, Send, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -15,33 +15,53 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   
-  // --- NEW: Local state for live count updates ---
   const [myVote, setMyVote] = useState(null); 
   const [localLikes, setLocalLikes] = useState(comment.likes_count || 0);
   const [localDislikes, setLocalDislikes] = useState(comment.dislikes_count || 0);
 
+  const hasFetchedVote = useRef(false);
+
+  // 1. Sync local state when props change, BUT respect local overrides if needed
+  useEffect(() => {
+    setLocalLikes(comment.likes_count || 0);
+    setLocalDislikes(comment.dislikes_count || 0);
+  }, [comment.likes_count, comment.dislikes_count]);
+
   useEffect(() => {
     const fetchMeta = async () => {
-      // 1. Fetch total nested replies count
+      // Get reply count
       const { count } = await supabase
         .from('comments')
         .select('*', { count: 'exact', head: true })
         .eq('parent_id', comment.id);
       setRepliesCount(count || 0);
 
-      // 2. Fetch current user's specific vote
-      if (user) {
+      // Get my vote
+      if (user && !hasFetchedVote.current) {
         const { data } = await supabase
           .from('comment_votes')
           .select('vote_type')
           .eq('comment_id', comment.id)
           .eq('user_id', user.id)
           .maybeSingle();
-        setMyVote(data?.vote_type || null);
+        
+        const vote = data?.vote_type || null;
+        setMyVote(vote);
+        
+        // --- CRITICAL FIX: IF DATABASE COUNT IS WRONG, FIX IT LOCALLY ---
+        // If I liked it, but count is 0, bump it to 1 visually
+        if (vote === 'like' && comment.likes_count === 0) {
+            setLocalLikes(1);
+        }
+        if (vote === 'dislike' && comment.dislikes_count === 0) {
+            setLocalDislikes(1);
+        }
+
+        hasFetchedVote.current = true;
       }
     };
     fetchMeta();
-  }, [comment.id, user]);
+  }, [comment.id, user, comment.likes_count, comment.dislikes_count]);
 
   const loadReplies = async (limit = 10) => {
     setLoadingReplies(true);
@@ -61,41 +81,47 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     if (!user) return toast.error("Login to vote");
     
     const previousVote = myVote;
-    const isRemoving = previousVote === type;
-
+    
     // --- OPTIMISTIC UI LOGIC ---
-    if (isRemoving) {
-      setMyVote(null);
-      if (type === 'like') setLocalLikes(prev => prev - 1);
-      else setLocalDislikes(prev => prev - 1);
+    let newLikes = localLikes;
+    let newDislikes = localDislikes;
+
+    if (previousVote === type) {
+        // Remove vote
+        setMyVote(null);
+        if (type === 'like') newLikes = Math.max(0, newLikes - 1);
+        else newDislikes = Math.max(0, newDislikes - 1);
     } else {
-      // If swapping (e.g. from dislike to like)
-      if (previousVote === 'dislike' && type === 'like') {
-        setLocalDislikes(prev => prev - 1);
-        setLocalLikes(prev => prev + 1);
-      } else if (previousVote === 'like' && type === 'dislike') {
-        setLocalLikes(prev => prev - 1);
-        setLocalDislikes(prev => prev + 1);
-      } else {
-        // Simple first-time vote
-        if (type === 'like') setLocalLikes(prev => prev + 1);
-        else setLocalDislikes(prev => prev + 1);
-      }
-      setMyVote(type);
+        // Add/Swap vote
+        setMyVote(type);
+        if (type === 'like') {
+            newLikes += 1;
+            if (previousVote === 'dislike') newDislikes = Math.max(0, newDislikes - 1);
+        } else {
+            newDislikes += 1;
+            if (previousVote === 'like') newLikes = Math.max(0, newLikes - 1);
+        }
     }
+    
+    setLocalLikes(newLikes);
+    setLocalDislikes(newDislikes);
 
     // --- DATABASE SYNC ---
     try {
-      if (isRemoving) {
+      if (previousVote === type) {
         await supabase.from('comment_votes').delete().eq('comment_id', comment.id).eq('user_id', user.id);
       } else {
-        await supabase.from('comment_votes').upsert({ comment_id: comment.id, user_id: user.id, vote_type: type });
+        await supabase.from('comment_votes').upsert({ 
+          comment_id: comment.id, 
+          user_id: user.id, 
+          vote_type: type 
+        }, { onConflict: 'user_id, comment_id' });
       }
     } catch (e) { 
-      // Revert UI on failure
+      // Revert if failed
       setMyVote(previousVote);
-      setLocalLikes(comment.likes_count);
-      setLocalDislikes(comment.dislikes_count);
+      setLocalLikes(comment.likes_count || 0);
+      setLocalDislikes(comment.dislikes_count || 0);
       toast.error("Transmission Error"); 
     }
   };
