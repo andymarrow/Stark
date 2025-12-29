@@ -3,15 +3,22 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
+import { toast } from "sonner";
+
+// Icons
+import { Settings, Grid, Bell, LogOut, Loader2, Scale, Shield } from "lucide-react"; 
+
+// Components
 import PersonalHeader from "./_components/PersonalHeader";
 import DashboardStats from "./_components/DashboardStats";
 import MyProjectsManager from "./_components/MyProjectsManager";
 import SettingsForm from "./_components/SettingsForm";
 import NotificationsView from "./_components/NotificationsView";
-import { Settings, Grid, Bell, LogOut, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import LoginRequiredState from "@/components/LoginRequiredState"; // Import
+import LoginRequiredState from "@/components/LoginRequiredState";
 
+// NEW: Import Refactored Legal Components
+import TermsView from "./_components/legal/TermsView";
+import PrivacyView from "./_components/legal/PrivacyView";
 
 /**
  * The inner content component that handles search params
@@ -36,9 +43,6 @@ function ProfileContent() {
     nodeReach: 0
   });
 
-  /**
-   * Helper to change the view and update the URL
-   */
   const handleViewChange = (viewName) => {
     const params = new URLSearchParams(searchParams);
     params.set("view", viewName);
@@ -46,7 +50,7 @@ function ProfileContent() {
   };
 
  const fetchProfileAndStats = useCallback(async () => {
-    if (!user?.id) return; // Check ID specifically
+    if (!user?.id) return;
 
     try {
       setLoading(true);
@@ -54,7 +58,7 @@ function ProfileContent() {
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id) // This is safe, user.id is stable
+        .eq('id', user.id)
         .single();
 
       if (profileError) throw profileError;
@@ -120,7 +124,6 @@ function ProfileContent() {
     );
   }
 
-  // Show Cute State if no user
   if (!user) {
     return (
         <div className="min-h-screen bg-background pt-16">
@@ -132,7 +135,6 @@ function ProfileContent() {
     );
   }
 
-  // Loading data state (only if user exists)
   if (loading || !profile) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -144,7 +146,6 @@ function ProfileContent() {
     );
   }
 
-
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-10 ">
       
@@ -154,8 +155,11 @@ function ProfileContent() {
       <div className="container mx-auto px-4 mt-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
+            {/* SIDEBAR NAVIGATION */}
             <div className="lg:col-span-3">
                 <div className="sticky top-24 space-y-8">
+                    
+                    {/* Main Directories */}
                     <div className="space-y-1">
                         <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">System_Directories</h3>
                         
@@ -182,6 +186,24 @@ function ProfileContent() {
                         />
                     </div>
 
+                    {/* Legal Protocols */}
+                    <div className="space-y-1 pt-4 border-t border-border border-dashed">
+                        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">Legal_Protocols</h3>
+                        <NavButton 
+                            icon={Scale} 
+                            label="Terms of Service" 
+                            active={currentView === "terms"} 
+                            onClick={() => handleViewChange("terms")}
+                        />
+                        <NavButton 
+                            icon={Shield} 
+                            label="Privacy Policy" 
+                            active={currentView === "privacy"} 
+                            onClick={() => handleViewChange("privacy")}
+                        />
+                    </div>
+
+                    {/* Security */}
                     <div className="space-y-1 pt-4 border-t border-border border-dashed">
                         <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">Security</h3>
                         <NavButton 
@@ -193,6 +215,7 @@ function ProfileContent() {
                 </div>
             </div>
 
+            {/* MAIN CONTENT AREA */}
             <div className="lg:col-span-9">
                 <div className="bg-background min-h-[500px]">
                     {currentView === 'projects' && (
@@ -204,6 +227,10 @@ function ProfileContent() {
                     {currentView === 'notifications' && (
                       <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />
                     )}
+                    
+                    {/* Legal Views Rendered Here */}
+                    {currentView === 'terms' && <TermsView />}
+                    {currentView === 'privacy' && <PrivacyView />}
                 </div>
             </div>
         </div>
@@ -212,9 +239,6 @@ function ProfileContent() {
   );
 }
 
-/**
- * Main Page Component wrapped in Suspense for Next.js 15 useSearchParams
- */
 export default function PersonalProfilePage() {
     return (
         <Suspense fallback={
@@ -226,6 +250,8 @@ export default function PersonalProfilePage() {
         </Suspense>
     );
 }
+
+// --- SUB COMPONENTS ---
 
 function NavButton({ icon: Icon, label, badge, active, onClick }) {
     return (
