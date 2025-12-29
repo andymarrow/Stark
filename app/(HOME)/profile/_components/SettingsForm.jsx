@@ -1,18 +1,26 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTheme } from "next-themes"; // Import Theme Hook
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { User, Lock, Bell, Globe, Github, Twitter, Linkedin, Loader2, MapPin, CheckCircle2, AlertTriangle } from "lucide-react";
+import { 
+  User, Lock, Bell, Globe, Github, Twitter, Linkedin, 
+  Loader2, MapPin, CheckCircle2, AlertTriangle, 
+  Sun, Moon, Monitor, Palette 
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { COUNTRIES } from "@/constants/options";
 
 export default function SettingsForm({ user, onUpdate }) {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  
   const [isSaving, setIsSaving] = useState(false);
   const [useCustomLocation, setUseCustomLocation] = useState(false);
   
   // Username Validation States
-  const [usernameStatus, setUsernameStatus] = useState("idle"); // idle | checking | available | taken
+  const [usernameStatus, setUsernameStatus] = useState("idle"); 
   const [usernameError, setUsernameError] = useState("");
 
   // Initialize state with DB data
@@ -30,7 +38,12 @@ export default function SettingsForm({ user, onUpdate }) {
     is_for_hire: user?.is_for_hire || false
   });
 
-  // Alphabetize countries for the dropdown
+  // Ensure theme component is mounted to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Alphabetize countries
   const sortedCountries = useMemo(() => {
     return [...COUNTRIES].sort((a, b) => a.label.localeCompare(b.label));
   }, []);
@@ -54,7 +67,7 @@ export default function SettingsForm({ user, onUpdate }) {
     setUsernameStatus("checking");
 
     try {
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('profiles')
             .select('username')
             .eq('username', cleanName)
@@ -83,7 +96,7 @@ export default function SettingsForm({ user, onUpdate }) {
     return () => clearTimeout(timer);
   }, [formData.username, checkUsernameAvailability, user?.username]);
 
-  // Keep state in sync if parent fetches new data
+  // Keep state in sync
   useEffect(() => {
     if (user) {
         const isStandard = COUNTRIES.some(c => c.value === user.location);
@@ -127,7 +140,7 @@ export default function SettingsForm({ user, onUpdate }) {
     const val = e.target.value;
     if (val === "OTHER") {
         setUseCustomLocation(true);
-        setFormData(prev => ({ ...prev, location: "" }));
+        setFormData(prev => ({ ...prev, location: "" })); 
     } else {
         setUseCustomLocation(false);
         setFormData(prev => ({ ...prev, location: val }));
@@ -173,9 +186,39 @@ export default function SettingsForm({ user, onUpdate }) {
     }
   };
 
+  if (!mounted) return null;
+
   return (
     <div className="space-y-12 animate-in fade-in slide-in-from-right-4 duration-500">
       
+      {/* 0. Interface Theme (New) */}
+      <section className="space-y-6">
+        <SectionHeader icon={Palette} title="Interface Theme" description="Customize your visual environment." />
+        
+        <div className="grid grid-cols-3 gap-3">
+            <ThemeOption 
+                isActive={theme === 'light'} 
+                onClick={() => setTheme('light')} 
+                icon={Sun} 
+                label="Light" 
+            />
+            <ThemeOption 
+                isActive={theme === 'dark'} 
+                onClick={() => setTheme('dark')} 
+                icon={Moon} 
+                label="Dark" 
+            />
+            <ThemeOption 
+                isActive={theme === 'system'} 
+                onClick={() => setTheme('system')} 
+                icon={Monitor} 
+                label="System" 
+            />
+        </div>
+      </section>
+
+      <div className="h-[1px] bg-border border-t border-dashed w-full" />
+
       {/* 1. Public Profile Settings */}
       <section className="space-y-6">
         <SectionHeader icon={User} title="Public Profile" description="This is how others see you on the platform." />
@@ -187,7 +230,7 @@ export default function SettingsForm({ user, onUpdate }) {
                 onChange={(e) => handleInputChange("full_name", e.target.value)} 
             />
             
-            {/* USERNAME FIELD WITH AVAILABILITY CHECK */}
+            {/* USERNAME FIELD */}
             <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
                     Username (Identity Handle)
@@ -224,7 +267,7 @@ export default function SettingsForm({ user, onUpdate }) {
                 />
             </div>
             
-            {/* ALPHABETICAL LOCATION SELECTOR */}
+            {/* LOCATION SELECTOR */}
             <div className="space-y-1.5">
                 <label className="text-xs font-mono uppercase text-muted-foreground tracking-wider flex justify-between">
                     Location
@@ -257,7 +300,7 @@ export default function SettingsForm({ user, onUpdate }) {
                         <select
                             value={formData.location}
                             onChange={handleLocationSelect}
-                            className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors font-sans"
+                            className="w-full appearance-none bg-background border border-border px-3 h-10 text-sm focus:border-accent outline-none rounded-none transition-colors"
                         >
                             <option value="">Select Country / Region...</option>
                             {sortedCountries.map((c) => (
@@ -269,9 +312,7 @@ export default function SettingsForm({ user, onUpdate }) {
                             <option value="OTHER">Other / Not Listed...</option>
                         </select>
                         <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
+                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </div>
                     </div>
                 )}
@@ -338,7 +379,7 @@ export default function SettingsForm({ user, onUpdate }) {
         </Button>
         <Button 
             onClick={handleSave} 
-            disabled={isSaving || usernameStatus === "checking" || usernameStatus === "taken"}
+            disabled={isSaving}
             className="rounded-none bg-foreground text-background hover:bg-accent hover:text-white transition-colors min-w-[140px]"
         >
             {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : "Save Changes"}
@@ -408,7 +449,7 @@ function SocialInput({ icon: Icon, label, value, onChange, placeholder }) {
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
-                    className="w-full bg-background border-b border-border focus:border-accent outline-none py-2 text-sm transition-colors font-mono"
+                    className="w-full bg-background border-b border-border focus:border-accent outline-none py-2 text-sm transition-colors"
                 />
                 {value && value.length > 5 && (
                     <span className="absolute right-0 top-1/2 -translate-y-1/2 text-[10px] text-green-500 font-mono bg-green-500/10 px-2 py-0.5">
@@ -429,9 +470,27 @@ function ToggleRow({ label, description, checked, defaultChecked, onCheckedChang
             </div>
             <Switch 
                 checked={checked} 
+                defaultChecked={defaultChecked} 
                 onCheckedChange={onCheckedChange}
                 className="data-[state=checked]:bg-accent" 
             />
         </div>
+    )
+}
+
+function ThemeOption({ isActive, onClick, icon: Icon, label }) {
+    return (
+        <button 
+            onClick={onClick}
+            className={`
+                flex flex-col items-center justify-center gap-2 p-4 border transition-all duration-300
+                ${isActive 
+                    ? "bg-accent text-white border-accent shadow-md" 
+                    : "bg-background border-border text-muted-foreground hover:border-foreground hover:text-foreground hover:bg-secondary/10"}
+            `}
+        >
+            <Icon size={24} />
+            <span className="text-[10px] font-mono uppercase tracking-widest">{label}</span>
+        </button>
     )
 }
