@@ -22,8 +22,8 @@ export default function ProfilePage({ params }) {
   const [loading, setLoading] = useState(true);
   
   // Filtering State
-  const [sortOrder, setSortOrder] = useState("latest"); // 'latest' | 'oldest' | 'popular'
-  const [popularMetric, setPopularMetric] = useState("hype"); // 'views' | 'likes' | 'hype'
+  const [sortOrder, setSortOrder] = useState("latest");
+  const [popularMetric, setPopularMetric] = useState("hype");
 
   // Data State
   const [profile, setProfile] = useState(null);
@@ -48,7 +48,7 @@ export default function ProfilePage({ params }) {
         // B. Work
         const { data: projectsData } = await supabase
           .from('projects').select('*, author:profiles!owner_id(*)')
-          .eq('owner_id', profileData.id).eq('status', 'published'); // We sort locally
+          .eq('owner_id', profileData.id).eq('status', 'published'); 
         setWorkProjects(projectsData || []);
 
         // C. Saved
@@ -81,27 +81,22 @@ export default function ProfilePage({ params }) {
     supabase.rpc('increment_profile_view', { _profile_id: profile.id });
   }, [profile, currentUser]);
 
-  // 3. Reset pagination when tab/sort changes
+  // 3. Reset pagination
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, sortOrder, popularMetric]);
 
-  // 4. SORTING LOGIC
+  // 4. Sorting Logic
   const sortedProjects = useMemo(() => {
     let list = activeTab === "work" ? [...workProjects] : [...savedProjects];
 
     return list.sort((a, b) => {
-        if (sortOrder === 'latest') {
-            return new Date(b.created_at) - new Date(a.created_at);
-        }
-        if (sortOrder === 'oldest') {
-            return new Date(a.created_at) - new Date(b.created_at);
-        }
+        if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
+        if (sortOrder === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
         if (sortOrder === 'popular') {
             if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
             if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
             if (popularMetric === 'hype') {
-                // Hype Score: Views + (Likes * 5)
                 const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
                 const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
                 return scoreB - scoreA;
@@ -123,14 +118,18 @@ export default function ProfilePage({ params }) {
     </div>
   );
 
+  // --- UPDATED STATS CALCULATION ---
   const publicStats = {
     projects: workProjects.length,
     followers: followerStats.followers,
     following: followerStats.following,
-    likes: workProjects.reduce((acc, p) => acc + (p.likes_count || 0), 0)
+    likes: workProjects.reduce((acc, p) => acc + (p.likes_count || 0), 0),
+    // 1. Node Reach: Direct from profile table
+    nodeReach: profile.views || 0,
+    // 2. Project Traffic: Sum of all project views
+    projectTraffic: workProjects.reduce((acc, p) => acc + (p.views || 0), 0)
   };
 
-  // --- PAGINATION LOGIC ---
   const totalPages = Math.ceil(sortedProjects.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentProjects = sortedProjects.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -151,7 +150,6 @@ export default function ProfilePage({ params }) {
             </div>
         </div>
 
-        {/* Updated Tabs with Sorting Props */}
         <ProfileTabs 
             activeTab={activeTab} 
             setActiveTab={setActiveTab} 
@@ -176,7 +174,6 @@ export default function ProfilePage({ params }) {
                     ))}
                 </div>
                 
-                {/* --- PAGINATION COMPONENT --- */}
                 {totalPages > 1 && (
                     <div className="mt-12">
                         <Pagination 

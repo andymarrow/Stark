@@ -194,6 +194,18 @@ export default function PersonalHeader({ user, onUpdate }) {
     }
   };
 
+  const handleShare = () => {
+    if (typeof window !== "undefined") {
+        // Construct the full public profile URL using the username from formData or user object
+        const username = formData.username || user?.username;
+        const url = `${window.location.origin}/profile/${username}`;
+        
+        navigator.clipboard.writeText(url);
+        toast.success("Link Copied", { description: "Profile URL copied to clipboard." });
+    }
+  };
+
+
   // --- 3. SAVE PROFILE DATA ---
   const handleSave = async () => {
     if (usernameStatus === "taken") {
@@ -335,7 +347,12 @@ export default function PersonalHeader({ user, onUpdate }) {
                         <Button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase">
                             <Edit3 size={14} className="mr-2" /> Edit Profile
                         </Button>
-                        <Button className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground rounded-none font-mono text-xs uppercase"><Share2 size={14} className="mr-2" /> Share</Button>
+                        <Button 
+                            onClick={handleShare} 
+                            className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:bg-secondary hover:border-accent hover:text-accent transition-all rounded-none font-mono text-xs uppercase"
+                        >
+                            <Share2 size={14} className="mr-2" /> Share
+                        </Button>
                     </div>
                 </div>
             </div>
