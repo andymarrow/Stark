@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { 
   MapPin, 
   Link as LinkIcon, 
@@ -207,146 +208,178 @@ export default function ProfileHeader({ user, currentUser }) {
   if (!user) return null;
 
   return (
-    <div className="w-full bg-background border border-border relative overflow-hidden group">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/30 rounded-bl-[100px] -mr-12 -mt-12 pointer-events-none z-0" />
-
-      <div className="p-6 md:p-10 flex flex-col md:flex-row gap-8 items-start relative z-10">
-        
-        {/* Avatar Section */}
-        <div className="flex-shrink-0 relative">
-          <div className="w-28 h-28 md:w-36 md:h-36 relative border border-border bg-secondary p-1">
-            <div className="relative w-full h-full overflow-hidden bg-zinc-900">
-              <Image 
-                src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"} 
-                alt={user.username || "User"} 
+    <div className="w-full bg-background border border-border relative overflow-hidden group mb-6">
+      
+      {/* 
+        ========================================
+        1. CINEMATIC BANNER AREA
+        ========================================
+      */}
+      <div className="h-48 md:h-64 w-full relative bg-secondary/30 overflow-hidden">
+        {user.banner_url ? (
+            <Image 
+                src={user.banner_url} 
+                alt="Profile Banner" 
                 fill 
-                className="object-cover" 
-              />
-            </div>
-          </div>
-          {user.is_for_hire && (
-            <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-background border border-accent px-3 py-1 shadow-sm whitespace-nowrap z-20">
-              <span className="text-[10px] font-mono font-bold text-accent uppercase flex items-center gap-1.5 tracking-widest">
-                <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-                HIREABLE
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Info Section */}
-        <div className="flex-1 min-w-0 space-y-5 pt-2">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground uppercase leading-none">
-                {user.full_name || user.username}
-              </h1>
-              <div className="flex items-center gap-3 mt-2">
-                <p className="text-muted-foreground font-mono text-sm tracking-tighter">NODE_ID: @{user.username}</p>
-                {isFollowing && followsMe && (
-                  <span className="text-[9px] bg-green-500/10 text-green-500 border border-green-500/30 px-1.5 font-mono flex items-center gap-1">
-                    <ShieldCheck size={10} /> MUTUAL_LINK_ACTIVE
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {user.socials?.github && <SocialButton icon={Github} href={user.socials.github} />}
-              {user.socials?.twitter && <SocialButton icon={Twitter} href={user.socials.twitter} />}
-              {user.socials?.linkedin && <SocialButton icon={Linkedin} href={user.socials.linkedin} />}
-            </div>
-          </div>
-
-          <p className="text-sm md:text-base leading-relaxed max-w-2xl text-foreground/80 font-light italic">
-            "{user.bio || 'No system biography provided.'}"
-          </p>
-
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono text-muted-foreground uppercase tracking-wide">
-            <div className="flex items-center gap-2">
-              <MapPin size={12} className="text-accent" />
-              <span>{user.location || 'Global'}</span>
-            </div>
-            {user.website && (
-              <div className="flex items-center gap-2">
-                <LinkIcon size={12} className="text-accent" />
-                <a href={user.website} target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline decoration-dotted transition-colors">
-                  {user.website.replace('https://', '').replace('http://', '')}
-                </a>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <Calendar size={12} className="text-accent" />
-              <span>Joined {new Date(user.created_at).getFullYear()}</span>
-            </div>
-          </div>
-        </div>
-
-         {!isOwner && (
-          <div className="flex md:flex-col gap-3 w-full md:w-auto mt-4 md:mt-0">
-            
-            {/* CONNECT BUTTON */}
-            <Button 
-              onClick={handleFollowToggle}
-              className={`flex-1 md:w-36 h-11 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
-                ${isFollowing 
-                  ? 'bg-secondary text-foreground hover:bg-red-600 hover:text-white' 
-                  : 'bg-foreground text-background hover:bg-accent hover:text-white'}`}
-            >
-              {isFollowing ? <><UserMinus size={14} className="mr-2" /> Disconnect</> : <><UserPlus size={14} className="mr-2" /> Connect</>}
-            </Button>
-            
-            <div className="flex gap-2 md:w-36">
-              {/* MESSAGE BUTTON */}
-              <Button 
-                variant="outline" 
-                onClick={handleMessageClick}
-                disabled={isInitializingChat}
-                className="flex-1 h-11 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
-              >
-                {isInitializingChat ? (
-                  <Loader2 className="animate-spin" size={14} />
-                ) : isFollowing && followsMe ? (
-                  <>
-                    <MessageSquare size={14} className="mr-2" /> Msg
-                  </>
-                ) : (
-                  <>
-                    <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
-                  </>
-                )}
-              </Button>
-
-              {/* REPORT DROPDOWN */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-11 w-11 p-0 rounded-none border-border hover:bg-secondary">
-                    <MoreHorizontal size={16} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl">
-                  <DropdownMenuItem 
-                    onClick={() => setIsReportOpen(true)} 
-                    className="text-xs font-mono text-red-500 focus:text-red-500 focus:bg-red-500/10 cursor-pointer rounded-none"
-                  >
-                    <Flag size={14} className="mr-2" /> Flag Node
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
+                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                priority
+            />
+        ) : (
+             // Fallback Pattern if no banner is set
+            <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.1)_50%,transparent_75%,transparent_100%)] bg-[length:20px_20px] opacity-50" />
         )}
         
-        {/* OPTIONAL: ADD AN "EDIT PROFILE" BUTTON FOR OWNERS */}
-        {isOwner && (
-           <div className="flex md:flex-col gap-3 w-full md:w-auto mt-4 md:mt-0">
-               <Button 
-                 onClick={() => router.push('/profile')} // Redirect to personal dashboard
-                 className="flex-1 md:w-36 h-11 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
-               >
-                 Edit Profile
-               </Button>
-           </div>
+        {/* Gradient Overlay for Text Readability & Depth */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+        
+        {/* Decorative shape if no banner */}
+        {!user.banner_url && (
+            <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/50 rounded-bl-[100px] -mr-12 -mt-12 pointer-events-none z-0" />
         )}
+      </div>
+
+      {/* 
+        ========================================
+        2. CONTENT LAYER (Overlapping Banner)
+        ========================================
+      */}
+      <div className="px-6 md:px-10 pb-10 -mt-20 relative z-10">
+        
+        <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start">
+            
+            {/* AVATAR SECTION (Overlaps the Banner) */}
+            <div className="flex-shrink-0 relative">
+                <div className="w-32 h-32 md:w-40 md:h-40 relative border-4 border-background bg-secondary shadow-xl">
+                    <div className="relative w-full h-full overflow-hidden bg-zinc-900">
+                    <Image 
+                        src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400"} 
+                        alt={user.username || "User"} 
+                        fill 
+                        className="object-cover" 
+                    />
+                    </div>
+                </div>
+                {user.is_for_hire && (
+                    <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-background border border-accent px-3 py-1 shadow-sm whitespace-nowrap z-20">
+                    <span className="text-[10px] font-mono font-bold text-accent uppercase flex items-center gap-1.5 tracking-widest">
+                        <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+                        HIREABLE
+                    </span>
+                    </div>
+                )}
+            </div>
+
+            {/* USER INFO & META */}
+            <div className="flex-1 min-w-0 pt-4 md:pt-20 space-y-4">
+                
+                {/* Top Row: Name & Socials */}
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground uppercase leading-none truncate">
+                            {user.full_name || user.username}
+                        </h1>
+                        <div className="flex items-center gap-3 mt-2">
+                            <p className="text-muted-foreground font-mono text-sm tracking-tighter">NODE_ID: @{user.username}</p>
+                            {isFollowing && followsMe && (
+                                <span className="text-[9px] bg-green-500/10 text-green-500 border border-green-500/30 px-1.5 font-mono flex items-center gap-1">
+                                    <ShieldCheck size={10} /> MUTUAL_LINK
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        {user.socials?.github && <SocialButton icon={Github} href={user.socials.github} />}
+                        {user.socials?.twitter && <SocialButton icon={Twitter} href={user.socials.twitter} />}
+                        {user.socials?.linkedin && <SocialButton icon={Linkedin} href={user.socials.linkedin} />}
+                    </div>
+                </div>
+
+                {/* Bio */}
+                <p className="text-sm md:text-base leading-relaxed max-w-2xl text-foreground/80 font-light italic">
+                    "{user.bio || 'No system biography provided.'}"
+                </p>
+
+                {/* Meta Details */}
+                <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono text-muted-foreground uppercase tracking-wide border-t border-border pt-4 w-full">
+                    <div className="flex items-center gap-2">
+                        <MapPin size={12} className="text-accent" />
+                        <span>{user.location || 'Global'}</span>
+                    </div>
+                    {user.website && (
+                        <div className="flex items-center gap-2">
+                        <LinkIcon size={12} className="text-accent" />
+                        <a href={user.website} target="_blank" rel="noopener noreferrer" className="hover:text-foreground underline decoration-dotted transition-colors">
+                            {user.website.replace('https://', '').replace('http://', '')}
+                        </a>
+                        </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                        <Calendar size={12} className="text-accent" />
+                        <span>Joined {new Date(user.created_at).getFullYear()}</span>
+                    </div>
+                </div>
+            </div>
+            
+            {/* ACTION BUTTONS (Right Column on Desktop) */}
+            <div className="flex flex-row md:flex-col gap-3 w-full md:w-auto pt-4 md:pt-20">
+                 {!isOwner ? (
+                    <>
+                        <Button 
+                            onClick={handleFollowToggle}
+                            className={`flex-1 md:w-36 h-10 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
+                            ${isFollowing 
+                                ? 'bg-secondary text-foreground hover:bg-red-600 hover:text-white' 
+                                : 'bg-foreground text-background hover:bg-accent hover:text-white'}`}
+                        >
+                            {isFollowing ? <><UserMinus size={14} className="mr-2" /> Disconnect</> : <><UserPlus size={14} className="mr-2" /> Connect</>}
+                        </Button>
+                        
+                        <div className="flex gap-2">
+                            <Button 
+                                variant="outline" 
+                                onClick={handleMessageClick}
+                                disabled={isInitializingChat}
+                                className="flex-1 h-10 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
+                            >
+                                {isInitializingChat ? (
+                                  <Loader2 className="animate-spin" size={14} />
+                                ) : isFollowing && followsMe ? (
+                                  <>
+                                    <MessageSquare size={14} className="mr-2" /> Msg
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
+                                  </>
+                                )}
+                            </Button>
+                            
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="h-10 w-10 p-0 rounded-none border-border hover:bg-secondary">
+                                    <MoreHorizontal size={16} />
+                                </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-none border-border bg-background">
+                                <DropdownMenuItem onClick={() => setIsReportOpen(true)} className="text-xs font-mono text-red-500 cursor-pointer focus:bg-red-500/10 focus:text-red-500">
+                                    <Flag size={14} className="mr-2" /> Flag Node
+                                </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    </>
+                 ) : (
+                    <Button 
+                        onClick={() => router.push('/profile')} 
+                        className="flex-1 md:w-36 h-10 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
+                    >
+                        Edit Profile
+                    </Button>
+                 )}
+            </div>
+
+        </div>
       </div>
 
       {/* --- MESSAGE GATE MODAL --- */}
