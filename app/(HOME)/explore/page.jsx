@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import ExploreFilters from "./_components/ExploreFilters";
 import TechMap from "./_components/TechMap";
 import ActiveFilters from "./_components/ActiveFilters";
+import ExploreSortBar from "./_components/ExploreSortBar"; // IMPORTED
 import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
 import Pagination from "@/components/ui/Pagination";
@@ -12,28 +13,18 @@ import { COUNTRIES } from "@/constants/options";
 
 const ITEMS_PER_PAGE = 6;
 
-// --- SMART REGION MAPPER ---
+// --- SMART REGION MAPPER (Kept same as before) ---
 const getRegionFromLocation = (location) => {
     if (!location) return "global";
-    
-    // 1. Normalize the input (lowercase, trim whitespace)
     const input = location.toLowerCase().trim();
-
-    // 2. Check against our Master Country List
     const matchedCountry = COUNTRIES.find(c => input.includes(c.value.toLowerCase()));
-    
-    if (matchedCountry) {
-        return matchedCountry.region;
-    }
-
-    // 3. Fallback: Check for Continent Names or Common Abbreviations
-    if (input.includes("usa") || input.includes("america") || input.includes("states") || input.includes("canada") || input.includes("mexico")) return "na";
-    if (input.includes("europe") || input.includes("uk") || input.includes("england") || input.includes("germany") || input.includes("france")) return "eu";
+    if (matchedCountry) return matchedCountry.region;
+    if (input.includes("usa") || input.includes("america") || input.includes("states")) return "na";
+    if (input.includes("europe") || input.includes("uk") || input.includes("germany") || input.includes("france")) return "eu";
     if (input.includes("asia") || input.includes("china") || input.includes("india") || input.includes("japan")) return "as";
-    if (input.includes("south america") || input.includes("brazil") || input.includes("argentina")) return "sa";
-    if (input.includes("africa") || input.includes("nigeria") || input.includes("kenya") || input.includes("ethiopia") || input.includes("egypt")) return "af";
-    if (input.includes("australia") || input.includes("zealand") || input.includes("oceania")) return "au";
-    
+    if (input.includes("south america") || input.includes("brazil")) return "sa";
+    if (input.includes("africa") || input.includes("nigeria") || input.includes("kenya")) return "af";
+    if (input.includes("australia")) return "au";
     return "global"; 
 };
 
@@ -42,22 +33,21 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // --- 1. Centralized Filter State ---
+  // --- 1. Filter State ---
   const [filters, setFilters] = useState({
-    region: null,
-    stack: [],
-    category: [],
-    search: "",
-    minQuality: 0,
-    forHire: false
+    region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false
   });
 
-  // --- Reset to Page 1 whenever filters change ---
+  // --- 2. Sorting State (NEW) ---
+  const [sortOrder, setSortOrder] = useState("latest"); // 'latest', 'oldest', 'popular'
+  const [popularMetric, setPopularMetric] = useState("hype"); // 'views', 'likes', 'hype'
+
+  // Reset page when filters OR sort change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters]);
+  }, [filters, sortOrder, popularMetric]);
 
-  // --- 2. Fetch Data from Supabase ---
+  // --- 3. Fetch Data ---
   useEffect(() => {
     const fetchProjects = async () => {
       setLoading(true);
@@ -67,23 +57,16 @@ export default function ExplorePage() {
           .select(`
             *,
             author:profiles!projects_owner_id_fkey(
-                full_name, 
-                username, 
-                avatar_url, 
-                location, 
-                is_for_hire
+                full_name, username, avatar_url, location, is_for_hire
             )
           `)
-          .eq('status', 'published')
-          .order('quality_score', { ascending: false });
+          .eq('status', 'published');
+          // Note: We remove .order() here because we do complex sorting client-side
 
         if (error) throw error;
 
-        // Transform data
         const formatted = (data || []).map(p => {
             const rawLocation = p.author?.location;
-            const regionCode = getRegionFromLocation(rawLocation);
-
             return {
                 id: p.id,
                 slug: p.slug,
@@ -93,9 +76,10 @@ export default function ExplorePage() {
                 thumbnail_url: p.thumbnail_url,
                 tags: p.tags || [],
                 qualityScore: p.quality_score,
-                views: p.views,
-                likes_count: p.likes_count,
-                region: regionCode, 
+                views: p.views || 0,
+                likes_count: p.likes_count || 0,
+                created_at: p.created_at, // Needed for sorting
+                region: getRegionFromLocation(rawLocation), 
                 forHire: p.author?.is_for_hire,
                 author: {
                     name: p.author?.full_name || "Anonymous",
@@ -104,7 +88,6 @@ export default function ExplorePage() {
                 }
             };
         });
-
         setProjects(formatted);
       } catch (err) {
         console.error("Explore Fetch Error:", err);
@@ -112,64 +95,67 @@ export default function ExplorePage() {
         setLoading(false);
       }
     };
-
     fetchProjects();
   }, []);
 
-  // --- 3. The Filter Logic Engine ---
-  const filteredProjects = useMemo(() => {
-    return projects.filter(project => {
+  // --- 4. Logic Engine (Filtering + Sorting) ---
+  const processedProjects = useMemo(() => {
+    
+    // A. Filter Step
+    let result = projects.filter(project => {
+        if (filters.region && project.region !== filters.region) return false;
         
-        // --- REGION FILTER LOGIC ---
-        if (filters.region) {
-            if (project.region !== filters.region) return false;
-        }
-        
-        // Search Filter
         if (filters.search) {
             const q = filters.search.toLowerCase();
-            const match = 
-                project.title.toLowerCase().includes(q) || 
-                project.description?.toLowerCase().includes(q) ||
-                project.author.username.toLowerCase().includes(q);
+            const match = project.title.toLowerCase().includes(q) || 
+                          project.description?.toLowerCase().includes(q) ||
+                          project.author.username.toLowerCase().includes(q);
             if (!match) return false;
         }
 
-        // Quality Filter
         if (project.qualityScore < filters.minQuality) return false;
-
-        // For Hire Filter
         if (filters.forHire && !project.forHire) return false;
 
-        // Stack Filter
         if (filters.stack.length > 0) {
-            const hasStack = project.tags.some(tag => 
-                filters.stack.some(f => tag.toLowerCase().includes(f.toLowerCase()))
-            );
-            if (!hasStack) return false;
+            if (!project.tags.some(tag => filters.stack.some(f => tag.toLowerCase().includes(f.toLowerCase())))) return false;
         }
 
-        // Category Filter
         if (filters.category.length > 0) {
-            const hasCategory = filters.category.some(cat => {
-                const c = cat.toLowerCase();
-                return project.category.toLowerCase().includes(c) || 
-                       project.tags.some(t => t.toLowerCase().includes(c));
-            });
-            if (!hasCategory) return false;
+            if (!filters.category.some(cat => project.category.toLowerCase().includes(cat.toLowerCase()))) return false;
         }
 
         return true;
     });
-  }, [filters, projects]);
 
-  // --- 4. Pagination Logic ---
-  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
-  
+    // B. Sorting Step (NEW)
+    return result.sort((a, b) => {
+        if (sortOrder === 'latest') {
+            return new Date(b.created_at) - new Date(a.created_at);
+        }
+        if (sortOrder === 'oldest') {
+            return new Date(a.created_at) - new Date(b.created_at);
+        }
+        if (sortOrder === 'popular') {
+            if (popularMetric === 'views') return b.views - a.views;
+            if (popularMetric === 'likes') return b.likes_count - a.likes_count;
+            if (popularMetric === 'hype') {
+                // Weighted Score: Views + (Likes * 5)
+                const scoreA = a.views + (a.likes_count * 5);
+                const scoreB = b.views + (b.likes_count * 5);
+                return scoreB - scoreA;
+            }
+        }
+        return 0;
+    });
+
+  }, [filters, projects, sortOrder, popularMetric]);
+
+  // --- 5. Pagination ---
+  const totalPages = Math.ceil(processedProjects.length / ITEMS_PER_PAGE);
   const paginatedProjects = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredProjects, currentPage]);
+    return processedProjects.slice(start, start + ITEMS_PER_PAGE);
+  }, [processedProjects, currentPage]);
 
   const handleRegionSelect = (regionId) => {
     setFilters(prev => ({ ...prev, region: prev.region === regionId ? null : regionId }));
@@ -182,12 +168,13 @@ export default function ExplorePage() {
         <div className="mb-8">
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Explore <span className="text-accent">Hub</span></h1>
             <p className="text-muted-foreground font-light max-w-2xl text-xs md:text-sm uppercase font-mono tracking-tighter">
-                // System_Index: {filteredProjects.length} Records_Found
+                // System_Index: {processedProjects.length} Records_Found
             </p>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
             
+            {/* Sidebar */}
             <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto pr-2 scrollbar-hide">
                 <div>
                     <div className="flex items-center justify-between mb-2">
@@ -203,12 +190,23 @@ export default function ExplorePage() {
                 <ExploreFilters filters={filters} setFilters={setFilters} />
             </aside>
 
+            {/* Mobile Filter Sheet */}
             <div className="lg:hidden mb-4">
                 <FilterSheet filters={filters} setFilters={setFilters} />
             </div>
 
+            {/* Main Content Area */}
             <div className="flex-1 flex flex-col">
+                
                 <ActiveFilters filters={filters} setFilters={setFilters} />
+
+                {/* NEW: Sorting Controls */}
+                <ExploreSortBar 
+                    sortOrder={sortOrder} 
+                    setSortOrder={setSortOrder}
+                    popularMetric={popularMetric}
+                    setPopularMetric={setPopularMetric}
+                />
 
                 <div className="flex-1 min-h-[600px]">
                     {loading ? (
@@ -234,12 +232,15 @@ export default function ExplorePage() {
                     )}
                 </div>
 
-                {!loading && filteredProjects.length > 0 && (
+                {!loading && processedProjects.length > 0 && (
                     <div className="mt-12">
                         <Pagination 
                             currentPage={currentPage}
                             totalPages={totalPages}
-                            onPageChange={setCurrentPage}
+                            onPageChange={(p) => {
+                                setCurrentPage(p);
+                                window.scrollTo({ top: 300, behavior: 'smooth' });
+                            }}
                             isLoading={loading}
                         />
                     </div>

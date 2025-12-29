@@ -30,6 +30,7 @@ import {
   DialogFooter,
   DialogClose
 } from "@/components/ui/dialog";
+import { getAvatar } from "@/constants/assets";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -423,12 +424,7 @@ function CreatorCard({ user, role }) {
           className="flex items-center gap-3 p-3 border border-border bg-background hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(var(--accent),0.1)] transition-all duration-300 group"
         >
           <div className="relative w-10 h-10 bg-secondary border border-transparent group-hover:border-accent/50 transition-colors shrink-0">
-            <Image 
-                src={user.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} 
-                alt={user.name} 
-                fill 
-                className="object-cover" 
-            />
+            <Image src={getAvatar(user)} alt={user.name} fill className="object-cover" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-baseline">

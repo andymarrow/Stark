@@ -8,6 +8,7 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { getAvatar } from "@/constants/assets";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -282,7 +283,12 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     <div className={`group animate-in fade-in slide-in-from-bottom-2 ${depth > 0 ? 'ml-6 md:ml-10 border-l border-border/50 pl-4 mt-4' : 'mb-6'}`}>
       <div className="flex gap-3">
         <div className="w-8 h-8 relative border border-border bg-secondary flex-shrink-0">
-          <Image src={comment.author?.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} alt="av" fill className="object-cover" />
+          <Image 
+            src={getAvatar(comment.author)} 
+            alt="User Avatar" 
+            fill 
+            className="object-cover" 
+          />
         </div>
         <div className="flex-1 min-w-0">
           

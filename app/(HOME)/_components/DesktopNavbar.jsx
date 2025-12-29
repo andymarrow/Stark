@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image"; // Ensure Image is imported for the fallback
 import { usePathname } from "next/navigation";
 import { 
   Search, 
@@ -25,19 +26,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getAvatar, DEFAULT_AVATAR } from "@/constants/assets";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function DesktopNavbar() {
   const { user, loading, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // NEW: Store real DB profile for consistent avatar
+  const [userProfile, setUserProfile] = useState(null);
   const pathname = usePathname();
 
-  // --- REALTIME NOTIFICATIONS LOGIC ---
+  // --- 1. FETCH REAL PROFILE (Avatar Sync) ---
+  useEffect(() => {
+    const fetchProfile = async () => {
+        if (!user) return;
+        const { data } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        
+        if (data) setUserProfile(data);
+    };
+    fetchProfile();
+  }, [user]);
+
+  // --- 2. REALTIME NOTIFICATIONS LOGIC ---
   useEffect(() => {
     if (!user) return;
 
-    // 1. Initial Count Fetch
+    // Initial Count Fetch
     const fetchUnreadCount = async () => {
       const { count } = await supabase
         .from('notifications')
@@ -48,7 +67,7 @@ export default function DesktopNavbar() {
     };
     fetchUnreadCount();
 
-    // 2. Realtime Listener
+    // Realtime Listener
     const channel = supabase
       .channel(`navbar-notifs-${user.id}`)
       .on('postgres_changes', { 
@@ -134,9 +153,18 @@ export default function DesktopNavbar() {
               <DropdownMenuTrigger asChild>
                 <div className="relative ml-2 cursor-pointer group">
                   <Avatar className="h-9 w-9 rounded-none border border-border group-hover:border-accent transition-colors">
-                    <AvatarImage src={user.user_metadata?.avatar_url} className="object-cover" />
-                    <AvatarFallback className="rounded-none bg-secondary font-mono text-xs">
-                      {user.email?.substring(0, 2).toUpperCase()}
+                    {/* UPDATED: Prioritize userProfile, fall back to auth user, then default */}
+                    <AvatarImage 
+                        src={getAvatar(userProfile || user)} 
+                        className="object-cover" 
+                    />
+                    <AvatarFallback className="rounded-none bg-secondary p-0 overflow-hidden">
+                       <Image 
+                          src={DEFAULT_AVATAR} 
+                          alt="Fallback" 
+                          fill 
+                          className="object-cover" 
+                       />
                     </AvatarFallback>
                   </Avatar>
                   {unreadCount > 0 && (

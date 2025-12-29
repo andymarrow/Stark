@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import CommentItem from "./CommentItem";
+import { getAvatar } from "@/constants/assets";
 
 export default function ProjectComments({ projectId }) {
   const { user } = useAuth();
@@ -17,9 +18,26 @@ export default function ProjectComments({ projectId }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const [userProfile, setUserProfile] = useState(null);
+
   useEffect(() => {
     if (projectId) fetchComments();
   }, [projectId]);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+        if (!user) return;
+        // Fetch only the avatar field from the public profile
+        const { data } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+        
+        if (data) setUserProfile(data);
+    };
+    fetchProfile();
+  }, [user]);
 
   const fetchComments = async () => {
     try {
@@ -99,7 +117,12 @@ export default function ProjectComments({ projectId }) {
       <div className="flex gap-4 mb-12">
         <div className="w-10 h-10 bg-secondary border border-border flex-shrink-0 relative overflow-hidden hidden sm:block">
             {user ? (
-                <Image src={user.user_metadata?.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} alt="me" fill className="object-cover" />
+                <Image 
+                    src={userProfile ? getAvatar(userProfile) : getAvatar(null)} 
+                    alt="me" 
+                    fill 
+                    className="object-cover" 
+                />
             ) : (
                 <div className="w-full h-full bg-zinc-900" />
             )}

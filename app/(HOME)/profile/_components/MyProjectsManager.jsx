@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 
+
 const ITEMS_PER_PAGE = 5;
 
 export default function MyProjectsManager({ user }) {

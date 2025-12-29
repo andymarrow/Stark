@@ -19,7 +19,8 @@ import {
   Lock,
   ShieldCheck,
   UserPlus,
-  UserMinus
+  UserMinus,
+  Share2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -29,6 +30,7 @@ import {
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import {
   Dialog, 
@@ -205,6 +207,14 @@ export default function ProfileHeader({ user, currentUser }) {
     }
   };
 
+  // 5. Handle Share
+  const handleShareProfile = () => {
+    if (typeof window !== "undefined") {
+        navigator.clipboard.writeText(window.location.href);
+        toast.success("Link Copied", { description: "Profile URL copied to clipboard." });
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -361,7 +371,11 @@ export default function ProfileHeader({ user, currentUser }) {
                                     <MoreHorizontal size={16} />
                                 </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="rounded-none border-border bg-background">
+                                <DropdownMenuContent align="end" className="rounded-none border-border bg-background min-w-[140px]">
+                                <DropdownMenuItem onClick={handleShareProfile} className="text-xs font-mono cursor-pointer focus:bg-secondary">
+                                    <Share2 size={14} className="mr-2" /> Share Node
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-border" />
                                 <DropdownMenuItem onClick={() => setIsReportOpen(true)} className="text-xs font-mono text-red-500 cursor-pointer focus:bg-red-500/10 focus:text-red-500">
                                     <Flag size={14} className="mr-2" /> Flag Node
                                 </DropdownMenuItem>
@@ -370,12 +384,21 @@ export default function ProfileHeader({ user, currentUser }) {
                         </div>
                     </>
                  ) : (
-                    <Button 
-                        onClick={() => router.push('/profile')} 
-                        className="flex-1 md:w-36 h-10 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
-                    >
-                        Edit Profile
-                    </Button>
+                    <div className="flex md:flex-col gap-2 w-full md:w-36">
+                        <Button 
+                            onClick={() => router.push('/profile')} 
+                            className="flex-1 h-10 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
+                        >
+                            Edit Profile
+                        </Button>
+                        {/* Share button for owner */}
+                        <Button 
+                            onClick={handleShareProfile}
+                            className="flex-1 md:flex-none h-10 bg-transparent hover:bg-accent/10 text-foreground border border-border hover:border-accent rounded-none font-mono text-xs uppercase tracking-wider"
+                        >
+                            <Share2 size={16} />
+                        </Button>
+                    </div>
                  )}
             </div>
 
