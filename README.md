@@ -1,154 +1,136 @@
-📐 Stark // The Creator Protocol
+# 📐 Stark // The Creator Protocol
 
-Build. Share. Inspire.
-Design isn't real until it ships.
+**Build. Share. Inspire.**  
+*Design isn't real until it ships.*
 
-<img width="1236" height="607" alt="2" src="https://github.com/user-attachments/assets/85c24007-0ff1-4e09-8bb0-5180c389404e" />
-<img width="1366" height="867" alt="1" src="https://github.com/user-attachments/assets/e8fda599-6490-4649-b16a-11ba2bc094d2" />
-<img width="1366" height="1333" alt="3" src="https://github.com/user-attachments/assets/88833918-96e3-427c-aafc-2c47c7287ab7" />
+![Stark Hero](https://github.com/user-attachments/assets/85c24007-0ff1-4e09-8bb0-5180c389404e)
 
+![Explore Hub](https://github.com/user-attachments/assets/e8fda599-6490-4649-b16a-11ba2bc094d2)
 
-Stark is a unified, context-first portfolio network engineered for the modern "Full-Stack Creator." Unlike traditional creative platforms that focus only on the visual facade, Stark bridges the gap between the Soul (the source code) and the Body (the live deployment).
+![Global Trending](https://github.com/user-attachments/assets/88833918-96e3-427c-aafc-2c47c7287ab7)
 
-👁️ The Vision
+Stark is a **unified, context-first portfolio network** built for the modern **Full-Stack Creator**.  
 
-Traditional platforms like Dribbble or Behance treat design as a static image. Stark treats every project as a functional entity. We believe that for developers, designers, and motion artists, the context (tech stack, repository health, and live performance) is as inspiring as the aesthetic.
+Unlike traditional platforms (Dribbble, Behance) that treat design as static images, Stark bridges the **Soul** (source code) and the **Body** (live deployment). Every project is a living, functional entity — complete with tech stack, repo health, and real-world performance.
 
-Core Philosophy: "Technical Minimalism"
+## 👁️ The Vision
 
-The Stark UI is a physical manifestation of the brand:
+We believe context is just as inspiring as aesthetics. For developers, designers, and motion artists:
 
-Honesty: Grids and measurement lines are visible parts of the aesthetic.
+- See the **code behind the pixels**
+- Explore **live deployments**
+- Discover **repository insights** (stars, languages, documentation)
 
-Precision: Strictly 0px border radius. Sharp edges represent engineered accuracy.
+> **"Technical Minimalism"** — Honesty in design through visible grids, precision in sharp edges, and power in high contrast.
 
-High Contrast: A palette of Deep Zinc (#09090b), Stark White (#FFFFFF), and Hyper Red (#FF0000).
+### Brand Palette & Principles
+- **Deep Zinc** `#09090b` — Background
+- **Stark White** `#FFFFFF` — Primary text
+- **Hyper Red** `#FF0000` — Accents & highlights
+- No border radius. Sharp. Engineered. Accurate.
 
-🛠️ System Features
-1. The "Scout Bot" (Intelligence Engine)
+## 🛠️ Core Features
 
-Stark doesn't just ask for project info; it hunts for it.
+### 1. Scout Bot (Intelligence Engine)
+Automated project enrichment — no manual entry required.
 
-GitHub Integration: Automatically extracts Readme, Stars, Language, and Deploy URLs.
+- **GitHub Integration** → Auto-pulls README, stars, primary language, deploy URLs
+- **Auto-Capture** → Server-side Puppeteer generates pixel-perfect desktop + mobile screenshots
+- **Quality Scoring** → Proprietary 0–100 algorithm based on documentation depth and repo health
 
-Auto-Capture: Uses server-side Puppeteer to generate pixel-perfect Desktop and Mobile screenshots of live sites.
+### 2. Hype Engine (Trending System)
+Real-time leaderboard capturing system momentum.
 
-Quality Scoring: A proprietary algorithm (0-100) that ranks projects based on documentation depth and repository health.
+- **Weighted Ranking**: Followers (20×), Stars (10×), Node Reach (1×)
+- **Daily Velocity Calculation** → Surfaces rising creators and projects
+- Metrics updated every 24 hours
 
-2. The "Hype Engine" (Trending)
+### 3. Dossier (Creator Profiles)
+Technical passports meets RPG character sheets.
 
-A high-velocity leaderboard tracking the system's pulse.
+- **Node Reach** → Unique profile interactions in real-time
+- **Activity Heatmap** → Visualizes deployment frequency
+- **The Handshake** → Gated messaging: only mutual followers can connect
 
-Weighted Ranking: Creators and Projects are ranked via a balanced algorithm of Followers (20x), Stars (10x), and Node Reach (1x).
+### 4. God Mode (Admin Panel)
+Terminal-style control center for operators.
 
-Real-time Metrics: System velocity is calculated every 24 hours to highlight rising stars.
+- Immutable security audit logs
+- Moderation queue with automated risk scoring
+- High-fidelity incident tools
 
-3. The "Dossier" (Creator Profiles)
+## 💻 Tech Stack
 
-Profiles designed like technical passports or RPG character sheets.
+| Layer          | Technology                          |
+|----------------|-------------------------------------|
+| Frontend       | Next.js 15 (App Router)             |
+| Styling        | Tailwind CSS (`rounded-none`)       |
+| Animations     | Framer Motion                       |
+| Backend/DB     | Supabase (PostgreSQL)               |
+| Realtime       | Supabase Realtime                   |
+| Intelligence   | Puppeteer (Headless Chrome)         |
+| Validation     | Zod                                 |
 
-Node Reach: Real-time tracking of unique profile interactions.
+## 🚀 Getting Started
 
-Activity Heatmap: Visualizes deployment frequency over time.
+### 1. Environment Setup
+```bash
+git clone https://github.com/your-repo/stark.git
+cd stark
+cp .env.example .env.local
+```
 
-The Handshake: A gated messaging system where communication is only possible between mutual connections.
-
-4. "God Mode" (Administrative Power)
-
-A terminal-style control center for system operators.
-
-Security Audit Logs: An immutable ledger of all system actions.
-
-Moderation Queue: High-fidelity tools for processing incident reports with automated risk scoring.
-
-💻 Tech Stack
-
-Frontend: Next.js 15 (App Router)
-
-Styling: Tailwind CSS (Rounded-none utility set)
-
-Animations: Framer Motion
-
-Backend/Database: Supabase (PostgreSQL)
-
-Realtime: Supabase Realtime (Broadcast & Postgres Changes)
-
-Intelligence: Puppeteer (Headless Chrome)
-
-Validation: Zod
-
-🚀 Getting Started
-
-1. Initialize Environment
-
-Clone the repository and create a .env.local file:
-
-code
-Bash
-download
-content_copy
-expand_less
+Edit `.env.local`:
+```env
 NEXT_PUBLIC_SUPABASE_URL=your_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_key
 RESEND_API_KEY=your_resend_key
+```
 
-2. Database Setup
+### 2. Database Setup
+Run the migrations in `/supabase/migrations` or execute the key RPC:
 
-Stark requires specific PostgreSQL functions for its analytics engine. Execute the SQL found in /supabase/migrations or run the register_view RPC manually:
+```sql
+CREATE OR REPLACE FUNCTION public.register_view(
+  p_entity_type TEXT,
+  p_entity_id UUID,
+  p_viewer_hash TEXT
+) RETURNS BOOLEAN AS $$
+  -- Full implementation in project docs
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
 
-code
-SQL
-download
-content_copy
-expand_less
-create or replace function public.register_view(p_entity_type text, p_entity_id uuid, p_viewer_hash text)
-returns boolean as $$
--- Detailed logic in documentation...
-$$ language plpgsql security definer;
-
-
-3. Install & Run
-code
-Bash
-download
-content_copy
-expand_less
+### 3. Install & Run
+```bash
 npm install
 npm run dev
+```
 
+## 📡 Protocol Roadmap
 
-📡 Protocol Roadmap
+| Phase                  | Focus                                      |
+|-----------------------|--------------------------------------------|
+| **Phase 1**           | Core UI + Industrial component library     |
+| **Phase 2**           | Scout Bot — Auto-metadata & screenshots    |
+| **Phase 3**           | Social Layer — Realtime chat & notifications |
+| **Phase 4**           | Global Index — Search & filtering           |
+| **Phase 5**           | Collaborative Nodes — Multi-author support |
 
-Phase 1: Core UI - Industrial component library and grid systems.
+## 🤝 Contribution Protocol
 
-Phase 2: Scout Bot - Automated screenshot and metadata extraction.
+We welcome contributors who vibe with the Stark aesthetic.
 
-Phase 3: The Social Layer - Realtime chat, mutual-follow gating, and notifications.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/YourFeature`
+3. Commit: `git commit -m 'feat: YourFeature description'`
+4. Push: `git push origin feature/YourFeature`
+5. Open a Pull Request
 
-Phase 4: Global Index - Algorithmic search and advanced category filtering.
+---
 
-Phase 5: Collaborative Nodes - Multiple authors and contributor attribution.
+**Website** · **Report Issue** · **Request Access**
 
-🤝 Contribution Protocol
+Built with precision. Deployed with intent.  
 
-We welcome contributors who appreciate the "Stark" aesthetic.
-
-Fork the node.
-
-Create a feature branch (git checkout -b feature/AmazingFeature).
-
-Commit changes (git commit -m 'Add: AmazingFeature').
-
-Push to branch (git push origin feature/AmazingFeature).
-
-Open a Pull Request.
-
-
-// END_OF_TRANSMISSION
-
-Website · Report Issue · Request Access
-
-
-
-make the above into a  very polished readable eaiser for developers and all users read me file
+**Stark // The Creator Protocol**
