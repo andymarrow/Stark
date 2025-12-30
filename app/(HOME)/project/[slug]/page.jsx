@@ -19,34 +19,42 @@ import ShareAction from "./_components/ShareAction";
  */
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  const supabase = await createClient();
 
+  // Fetch data for the meta tags
   const { data: p } = await supabase
     .from("projects")
-    .select("title, description")
+    .select("title, description, thumbnail_url, likes_count, views")
     .eq("slug", slug)
     .single();
 
-  // Use a relative protocol-agnostic check or environment variable
-  const domain = process.env.NEXT_PUBLIC_SITE_URL || "https://stark-01.vercel.app";
-  const ogUrl = `${domain}/api/og/project?slug=${slug}&v=${Date.now()}`;
+  if (!p) return { title: "Project Not Found | Stark" };
+
+  // URL for the Dynamic OG Image API
+  // Adding a timestamp (v) helps bypass Telegram's cache for updated stats
+  const ogUrl = `https://stark-01.vercel.app/api/og/project?slug=${slug}&v=${Date.now()}`;
 
   return {
-    title: `${p?.title} | Stark`,
-    description: p?.description?.substring(0, 160),
+    title: `${p.title} | Stark`,
+    description: p.description?.substring(0, 160),
     openGraph: {
-      title: p?.title,
-      description: p?.description?.substring(0, 160),
+      title: p.title,
+      description: p.description?.substring(0, 160),
+      url: `https://stark-01.vercel.app/project/${slug}`,
+      siteName: "Stark Network",
       images: [
         {
           url: ogUrl,
           width: 1200,
           height: 630,
+          alt: p.title,
         },
       ],
+      type: "website",
     },
     twitter: {
       card: "summary_large_image",
+      title: p.title,
+      description: p.description?.substring(0, 160),
       images: [ogUrl],
     },
   };
