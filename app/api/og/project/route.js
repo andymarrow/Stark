@@ -1,83 +1,168 @@
 import { ImageResponse } from 'next/og';
 import { createClient } from '@supabase/supabase-js';
 
+export const runtime = 'edge';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL, 
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-export const runtime = 'edge';
-
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const slug = searchParams.get('slug');
+  try {
+    const { searchParams } = new URL(request.url);
+    const slug = searchParams.get('slug');
 
-  const { data: p } = await supabase
-    .from('projects')
-    .select('title, thumbnail_url, likes_count, views, type')
-    .eq('slug', slug)
-    .single();
+    if (!slug) return new Response('Missing Slug', { status: 400 });
 
-  if (!p) return new Response('Not Found', { status: 404 });
+    // 1. Fetch Project Data
+    const { data: p, error } = await supabase
+      .from('projects')
+      .select('title, thumbnail_url, likes_count, views, type')
+      .eq('slug', slug)
+      .single();
 
-  return new ImageResponse(
-    (
-      <div style={{
-        height: '100%', width: '100%', display: 'flex', flexDirection: 'column',
-        backgroundColor: '#09090b', color: 'white', padding: '50px',
-        border: '1px solid #27272a', position: 'relative'
-      }}>
-        {/* 1. Industrial Grid Background */}
+    if (error || !p) {
+      return new Response('Project Not Found', { status: 404 });
+    }
+
+    // Image Validation
+    let imageSource = p.thumbnail_url;
+    if (!imageSource || !imageSource.startsWith('http')) {
+        imageSource = 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200';
+    }
+
+    return new ImageResponse(
+      (
         <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: 'radial-gradient(circle, #27272a 1px, transparent 1px)',
-          backgroundSize: '30px 30px', opacity: 0.2
-        }} />
+          height: '100%',
+          width: '100%',
+          display: 'flex', // EXPLICIT
+          flexDirection: 'column',
+          backgroundColor: '#09090b',
+          color: 'white',
+          padding: '50px',
+          border: '1px solid #27272a',
+          position: 'relative'
+        }}>
+          {/* 1. Industrial Grid Background */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'radial-gradient(circle, #27272a 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+            opacity: 0.2,
+            display: 'flex' // EXPLICIT (Fixes background crash)
+          }} />
 
-        {/* 2. Top Bar: System ID */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '40px', width: '100%', borderBottom: '1px solid #ff0000', paddingBottom: '15px' }}>
-          <span style={{ fontSize: '20px', letterSpacing: '4px', color: '#ff0000', fontWeight: 'bold' }}>STARK_SYSTEM_INDEX //</span>
-          <span style={{ fontSize: '20px', opacity: 0.5 }}>STATUS: ACTIVE</span>
-        </div>
-
-        <div style={{ display: 'flex', flex: 1, gap: '40px' }}>
-          {/* 3. Left: The Visual Artifact */}
-          <div style={{ display: 'flex', width: '60%', border: '1px solid #27272a', position: 'relative' }}>
-            <img 
-              src={p.thumbnail_url || 'https://stark-01.vercel.app/og-image.png'} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-            />
-            <div style={{ position: 'absolute', bottom: '15px', left: '15px', backgroundColor: 'rgba(0,0,0,0.8)', padding: '5px 15px', fontSize: '14px', border: '1px solid #ff0000' }}>
-              SCAN_REF: {p.type?.toUpperCase()}
+          {/* 2. Top Bar */}
+          <div style={{ 
+            display: 'flex', // EXPLICIT
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '40px', 
+            width: '100%', 
+            borderBottom: '2px solid #ff0000', 
+            paddingBottom: '20px' 
+          }}>
+            <div style={{ display: 'flex' }}>
+                <span style={{ fontSize: '24px', letterSpacing: '6px', color: '#ff0000', fontWeight: 'bold' }}>STARK_SYSTEM_INDEX //</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ff0000', marginRight: '10px' }} />
+                <span style={{ fontSize: '20px', opacity: 0.8, letterSpacing: '2px' }}>LIVE_NODE_SYNC</span>
             </div>
           </div>
 
-          {/* 4. Right: Telemetry Data */}
-          <div style={{ display: 'flex', flexDirection: 'column', width: '40%', gap: '25px' }}>
-            <h1 style={{ fontSize: '56px', margin: 0, fontWeight: '900', lineHeight: 1, textTransform: 'uppercase', letterSpacing: '-2px' }}>
-              {p.title}
-            </h1>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: 'auto' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '4px solid #ff0000', paddingLeft: '15px' }}>
-                <span style={{ fontSize: '14px', color: '#71717a', letterSpacing: '2px' }}>METRIC_STARS</span>
-                <span style={{ fontSize: '36px', fontWeight: 'bold' }}>{p.likes_count}</span>
+          <div style={{ display: 'flex', flex: 1, gap: '50px' }}>
+            {/* 3. Left Side */}
+            <div style={{ 
+                display: 'flex', // EXPLICIT
+                width: '65%', 
+                border: '1px solid #27272a', 
+                position: 'relative', 
+                overflow: 'hidden',
+                backgroundColor: '#000' 
+            }}>
+              <img 
+                src={imageSource} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+              <div style={{ 
+                display: 'flex', // EXPLICIT
+                position: 'absolute', 
+                bottom: '20px', 
+                left: '20px', 
+                backgroundColor: '#ff0000', 
+                color: 'white', 
+                padding: '5px 20px', 
+                fontSize: '16px', 
+                fontWeight: 'bold' 
+              }}>
+                <span style={{ display: 'flex' }}>DATA_TYPE: {p.type?.toUpperCase()}</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '4px solid #27272a', paddingLeft: '15px' }}>
-                <span style={{ fontSize: '14px', color: '#71717a', letterSpacing: '2px' }}>METRIC_VIEWS</span>
-                <span style={{ fontSize: '36px', fontWeight: 'bold' }}>{p.views}</span>
+            </div>
+
+            {/* 4. Right Side */}
+            <div style={{ display: 'flex', flexDirection: 'column', width: '35%', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex' }}>
+                <h1 style={{ 
+                    fontSize: '64px', 
+                    margin: 0, 
+                    fontWeight: '900', 
+                    lineHeight: 0.9, 
+                    textTransform: 'uppercase', 
+                    letterSpacing: '-3px' 
+                }}>
+                    {p.title}
+                </h1>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    borderLeft: '5px solid #ff0000', 
+                    paddingLeft: '20px', 
+                    backgroundColor: 'rgba(255,255,255,0.02)', 
+                    padding: '15px' 
+                }}>
+                  <span style={{ fontSize: '14px', color: '#71717a', letterSpacing: '3px', display: 'flex' }}>STARK_STARS</span>
+                  <span style={{ fontSize: '48px', fontWeight: 'bold', color: '#ff0000', display: 'flex' }}>{p.likes_count || 0}</span>
+                </div>
+                <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    borderLeft: '5px solid #27272a', 
+                    paddingLeft: '20px', 
+                    backgroundColor: 'rgba(255,255,255,0.02)', 
+                    padding: '15px' 
+                }}>
+                  <span style={{ fontSize: '14px', color: '#71717a', letterSpacing: '3px', display: 'flex' }}>STARK_VIEWS</span>
+                  <span style={{ fontSize: '48px', fontWeight: 'bold', display: 'flex' }}>{p.views || 0}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer Coordinate */}
-        <div style={{ position: 'absolute', bottom: '30px', right: '50px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '40px', height: '1px', backgroundColor: '#ff0000' }} />
-            <span style={{ fontSize: '12px', color: '#71717a' }}>NODE_ID: {slug}</span>
+          {/* Footer */}
+          <div style={{ 
+            position: 'absolute', 
+            bottom: '30px', 
+            left: '50px', 
+            display: 'flex', 
+            alignItems: 'center' 
+          }}>
+              <span style={{ fontSize: '12px', color: '#52525b', letterSpacing: '2px', display: 'flex' }}>STARK_PROTOCOL_V1.0.4</span>
+              <div style={{ display: 'flex', width: '100px', height: '1px', backgroundColor: '#27272a', marginLeft: '15px', marginRight: '15px' }} />
+              <span style={{ fontSize: '12px', color: '#52525b', display: 'flex' }}>NODE: {slug}</span>
+          </div>
         </div>
-      </div>
-    ),
-    { width: 1200, height: 630 }
-  );
+      ),
+      { width: 1200, height: 630 }
+    );
+  } catch (e) {
+    console.error("OG Generation Error:", e.message);
+    return new Response(`Failed to generate image: ${e.message}`, { status: 500 });
+  }
 }
