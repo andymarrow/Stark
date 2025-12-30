@@ -1,136 +1,137 @@
-"use client";
-import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { ChevronRight, Home, Share2, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { toast } from "sonner";
+import { notFound } from "next/navigation";
+import { getAvatar } from "@/constants/assets";
 
+// Import your existing Client Components
 import ProjectGallery from "./_components/ProjectGallery";
 import ProjectSidebar from "./_components/ProjectSidebar";
 import ProjectReadme from "./_components/ProjectReadme";
 import ProjectComments from "./_components/ProjectComments";
 
-export default function ProjectDetailPage({ params }) {
-  const { slug } = use(params);
+// Import a small client wrapper for the share functionality
+import ShareAction from "./_components/ShareAction"; 
 
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+/**
+ * 1. DYNAMIC METADATA GENERATION (The Intelligence Preview)
+ * This is what Telegram, WhatsApp, and Twitter see.
+ */
+export async function generateMetadata({ params }) {
+  const { slug } = await params;
 
-  useEffect(() => {
-    const fetchProject = async () => {
-      try {
-        setLoading(true);
-        console.log("🔍 Fetching project:", slug);
+  // Fetch data for the meta tags
+  const { data: p } = await supabase
+    .from("projects")
+    .select("title, description, thumbnail_url, likes_count, views")
+    .eq("slug", slug)
+    .single();
 
-        // 1. Fetch Project + Owner
-        const { data: projectData, error: projectError } = await supabase
-          .from('projects')
-          .select(`
-            *,
-            author:profiles!projects_owner_id_fkey(*) 
-          `)
-          .eq('slug', slug)
-          .single();
+  if (!p) return { title: "Project Not Found | Stark" };
 
-        if (projectError || !projectData) {
-          console.error("❌ Supabase Error:", projectError);
-          setError(true);
-          return;
-        }
+  // URL for the Dynamic OG Image API
+  // Adding a timestamp (v) helps bypass Telegram's cache for updated stats
+  const ogUrl = `https://stark-01.vercel.app/api/og/project?slug=${slug}&v=${Date.now()}`;
 
-        // 2. Fetch Collaborators (Only existing users, excluding ghost emails)
-        const { data: collabData, error: collabError } = await supabase
-          .from('collaborations')
-          .select(`
-            role,
-            status,
-            profile:profiles(*) 
-          `)
-          .eq('project_id', projectData.id)
-          .not('user_id', 'is', null); // Filter out ghosts who haven't signed up
+  return {
+    title: `${p.title} | Stark`,
+    description: p.description?.substring(0, 160),
+    openGraph: {
+      title: p.title,
+      description: p.description?.substring(0, 160),
+      url: `https://stark-01.vercel.app/project/${slug}`,
+      siteName: "Stark Network",
+      images: [
+        {
+          url: ogUrl,
+          width: 1200,
+          height: 630,
+          alt: p.title,
+        },
+      ],
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: p.title,
+      description: p.description?.substring(0, 160),
+      images: [ogUrl],
+    },
+  };
+}
 
-        if (collabError) {
-            console.error("Collaborator Fetch Error:", collabError);
-        }
+/**
+ * 2. SERVER-SIDE PAGE COMPONENT
+ * Fetches all project and collaborator data on the server.
+ */
+export default async function ProjectDetailPage({ params }) {
+  const { slug } = await params;
 
-        // 3. Format Collaborator Data
-        const collaborators = (collabData || []).map(c => ({
-            id: c.profile.id,
-            name: c.profile.full_name || c.profile.username,
-            username: c.profile.username,
-            avatar: c.profile.avatar_url,
-            isForHire: c.profile.is_for_hire,
-            role: c.role || "Collaborator"
-        }));
+  // --- A. FETCH PROJECT & OWNER ---
+  const { data: projectData, error: projectError } = await supabase
+    .from('projects')
+    .select(`
+      *,
+      author:profiles!projects_owner_id_fkey(*) 
+    `)
+    .eq('slug', slug)
+    .single();
 
-        // 4. Construct Final Data Object
-        const formattedData = {
-            ...projectData,
-            images: projectData.images || [],
-            techStack: projectData.tags ? projectData.tags.map(t => ({ name: t })) : [],
-            collaborators: collaborators, // Pass the team list here
-            
-            // Map the joined author profile data
-            author: {
-                id: projectData.author?.id, 
-                name: projectData.author?.full_name || "Anonymous",
-                username: projectData.author?.username || "user",
-                avatar: projectData.author?.avatar_url,
-                isForHire: projectData.author?.is_for_hire,
-                role: projectData.author?.bio ? projectData.author.bio.split('.')[0] : "Creator"
-            },
-            
-            stats: {
-                stars: projectData.likes_count || 0,
-                views: projectData.views || 0,
-                forks: 0
-            }
-        };
-        setProject(formattedData);
+  if (projectError || !projectData) {
+    return notFound();
+  }
 
-      } catch (err) {
-        console.error("Catch Error:", err);
-        setError(true);
-      } finally {
-        setLoading(false);
+  // --- B. FETCH COLLABORATORS ---
+  const { data: collabData, error: collabError } = await supabase
+    .from('collaborations')
+    .select(`
+      role,
+      status,
+      profile:profiles(*) 
+    `)
+    .eq('project_id', projectData.id)
+    .not('user_id', 'is', null);
+
+  // --- C. DATA FORMATTING ---
+  const collaborators = (collabData || []).map(c => ({
+      id: c.profile.id,
+      name: c.profile.full_name || c.profile.username,
+      username: c.profile.username,
+      avatar: c.profile.avatar_url,
+      isForHire: c.profile.is_for_hire,
+      role: c.role || "Collaborator"
+  }));
+
+  const project = {
+      ...projectData,
+      images: projectData.images || [],
+      techStack: projectData.tags ? projectData.tags.map(t => ({ name: t })) : [],
+      collaborators: collaborators,
+      author: {
+          id: projectData.author?.id, 
+          name: projectData.author?.full_name || "Anonymous",
+          username: projectData.author?.username || "user",
+          avatar: projectData.author?.avatar_url,
+          isForHire: projectData.author?.is_for_hire,
+          role: projectData.author?.bio ? projectData.author.bio.split('.')[0] : "Creator"
+      },
+      stats: {
+          stars: projectData.likes_count || 0,
+          views: projectData.views || 0,
+          forks: 0
       }
-    };
-
-    if (slug) {
-        fetchProject();
-    }
-  }, [slug]);
-
-  // 1. Loading State
-  if (loading) {
-    return (
-        <div className="min-h-screen bg-background pt-32 px-4 flex flex-col items-center">
-            <Loader2 className="animate-spin text-accent mb-4" size={40} />
-            <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest">Retrieving Asset Bundle...</p>
-        </div>
-    );
-  }
-
-  // 2. Error / Not Found State
-  if (error || !project) {
-    return (
-        <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center p-4">
-            <h1 className="text-4xl font-bold text-foreground mb-2">404</h1>
-            <p className="text-muted-foreground font-mono text-sm mb-6">Project coordinates not found in sector.</p>
-            <Link href="/explore" className="text-accent hover:underline font-mono text-xs uppercase">Return to Explore</Link>
-        </div>
-    );
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-10">
       
-      {/* 3. Navigation Breadcrumb */}
+      {/* Navigation Breadcrumb */}
       <header className="border-b border-border/40 bg-background/50 backdrop-blur-sm sticky top-0 md:top-16 z-40">
         <div className="container mx-auto px-4 h-12 flex items-center justify-between text-xs font-mono text-muted-foreground">
           <div className="flex items-center gap-2">
-            <Link href="/" className="hover:text-accent transition-colors"><Home size={14} /></Link>
+            <Link href="/" className="hover:text-accent transition-colors">
+                <Home size={14} />
+            </Link>
             <ChevronRight size={12} />
             <Link href="/explore" className="hover:text-foreground transition-colors">Projects</Link>
             <ChevronRight size={12} />
@@ -138,30 +139,22 @@ export default function ProjectDetailPage({ params }) {
           </div>
           
           <div className="flex items-center gap-4">
-             <button 
-                onClick={() => {
-                    navigator.clipboard.writeText(window.location.href);
-                    toast.success("Link Copied", { description: "Project URL copied to clipboard." });
-                }}
-                className="flex items-center gap-2 hover:text-foreground transition-colors"
-             >
-                <Share2 size={14} />
-                <span className="hidden sm:inline">Share</span>
-             </button>
+             {/* Client Component Wrapper for Copy-to-Clipboard */}
+             <ShareAction />
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
         
-        {/* 4. The Gallery */}
+        {/* The Gallery */}
         <div className="mb-12">
            <ProjectGallery images={project.images.length > 0 ? project.images : [project.thumbnail_url]} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
             
-            {/* 5. Left Content: Title & Readme & Comments */}
+            {/* Left Content: Title, Readme, and Comments */}
             <div className="lg:col-span-8 space-y-10">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">
@@ -183,7 +176,7 @@ export default function ProjectDetailPage({ params }) {
                 <ProjectComments projectId={project.id} />
             </div>
 
-            {/* 6. Right Content: Sticky Sidebar */}
+            {/* Right Content: Sticky Sidebar */}
             <div className="lg:col-span-4">
                 <div className="sticky top-32">
                     <ProjectSidebar project={project} />
@@ -192,6 +185,8 @@ export default function ProjectDetailPage({ params }) {
 
         </div>
       </main>
+
+      
     </div>
   );
 }
