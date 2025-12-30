@@ -8,13 +8,13 @@ import LeaderboardRow from "./_components/LeaderboardRow";
 import TrendingToggle from "./_components/TrendingToggle";
 import CreatorCard from "./_components/CreatorCard";
 import ProjectCard from "../_components/ProjectCard";
-import TrendingSortBar from "./_components/TrendingSortBar"; // NEW IMPORT
+import TrendingSortBar from "./_components/TrendingSortBar"; 
 
 export default function TrendingPage() {
   const [view, setView] = useState("projects");
   const [loading, setLoading] = useState(true);
   
-  // Only Metric State Needed (Sort Order is implicitly 'popular')
+  // Metric State
   const [popularMetric, setPopularMetric] = useState("hype"); // 'views' | 'likes' | 'hype'
 
   const [projects, setProjects] = useState([]);
@@ -24,18 +24,17 @@ export default function TrendingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // --- 1. Determine Sort Column ---
-        let sortColumn = 'views'; 
-        if (popularMetric === 'likes') sortColumn = 'likes_count';
-        // 'hype' defaults to views fetch, then client sort
+        // --- 1. PROJECTS FETCH LOGIC ---
+        let projSortColumn = 'views'; 
+        if (popularMetric === 'likes') projSortColumn = 'likes_count';
+        // 'hype' handled client side
 
-        // --- 2. Fetch Trending Projects ---
         const { data: projectsData, error: projError } = await supabase
           .from('projects')
           .select(`*, author:profiles!projects_owner_id_fkey(*)`)
           .eq('status', 'published')
-          .order(sortColumn, { ascending: false })
-          .limit(30);
+          .order(projSortColumn, { ascending: false })
+          .limit(50); // Fetch buffer for client sort
 
         if (projError) throw projError;
 
@@ -55,73 +54,110 @@ export default function TrendingPage() {
             }
         }));
 
-        // Client-side Hype Sort
+        // Client-side Project Hype Sort
         if (popularMetric === 'hype') {
             formattedProjects.sort((a, b) => {
-                const scoreA = (a.stats.views) + (a.stats.stars * 5);
-                const scoreB = (b.stats.views) + (b.stats.stars * 5);
+                const scoreA = (a.stats.views) + (a.stats.stars * 10);
+                const scoreB = (b.stats.views) + (b.stats.stars * 10);
                 return scoreB - scoreA;
             });
         }
         
-        setProjects(formattedProjects);
+        // LIMIT TO TOP 11
+        setProjects(formattedProjects.slice(0, 11));
 
-        // --- 3. Fetch Trending Creators ---
-        let profileQuery = supabase.from('profiles').select('*').limit(40);
 
+        // --- 2. CREATORS FETCH LOGIC ---
+        // We need followers count, so we fetch profiles + raw counts
+        
+        // A. Base Query
+        let profileQuery = supabase.from('profiles').select('*').limit(50);
+
+        // Basic Database Sorting
         if (popularMetric === 'likes') {
              profileQuery = profileQuery.order('likes_count', { ascending: false });
         } else {
+             // Default to views (Node Reach) for other modes to get high traffic users
              profileQuery = profileQuery.order('views', { ascending: false });
         }
 
         const { data: profilesData, error: profError } = await profileQuery;
         if (profError) throw profError;
 
-        // Fetch Projects for activity check
+        // B. Fetch Real Follower Counts & Projects
         const userIds = profilesData.map(p => p.id);
-        const { data: userProjectsData } = await supabase
-            .from('projects')
-            .select('owner_id, thumbnail_url')
-            .in('owner_id', userIds)
-            .eq('status', 'published')
-            .limit(100);
+        
+        const [projectsRes, followersRes] = await Promise.all([
+            // Get projects for previews AND likes summing
+            supabase.from('projects')
+                .select('owner_id, thumbnail_url, likes_count') // ADDED likes_count
+                .in('owner_id', userIds)
+                .eq('status', 'published')
+                .limit(500),
+            // Get follower counts
+            supabase.from('follows').select('following_id') 
+        ]);
 
-        const projectsByOwner = {};
-        (userProjectsData || []).forEach(p => {
-            if (!projectsByOwner[p.owner_id]) projectsByOwner[p.owner_id] = [];
-            if (projectsByOwner[p.owner_id].length < 3) projectsByOwner[p.owner_id].push(p.thumbnail_url);
+        const userProjects = projectsRes.data || [];
+        const allFollows = followersRes.data || [];
+
+        // Map Data
+        let activeCreators = (profilesData || []).map(p => {
+            // Filter projects for this user
+            const myUserProjects = userProjects.filter(up => up.owner_id === p.id);
+            
+            // Calculate real total likes (Sum of project stars)
+            const totalProjectLikes = myUserProjects.reduce((sum, proj) => sum + (proj.likes_count || 0), 0);
+
+            // Get thumbnails for display
+            const myWork = myUserProjects.map(up => up.thumbnail_url).slice(0,3);
+            if (myWork.length === 0) return null; // Filter inactive
+            
+            // Followers
+            const myFollowers = allFollows.filter(f => f.following_id === p.id).length;
+
+            return {
+                id: p.id,
+                name: p.full_name || p.username,
+                username: p.username,
+                role: p.bio ? p.bio.split('.')[0].substring(0, 30) : "Creator",
+                bio: p.bio,
+                avatar: p.avatar_url,
+                coverImage: p.avatar_url, 
+                isForHire: p.is_for_hire,
+                
+                // DATA FOR SORTING
+                stats: { 
+                    followers: myFollowers, // Real Follower Count
+                    likes: totalProjectLikes, // Sum of Project Stars (FIXED)
+                    views: p.views          // Node Reach
+                },
+                topProjects: myWork
+            };
+        }).filter(Boolean);
+
+        // C. ADVANCED CREATOR SORTING
+        activeCreators.sort((a, b) => {
+            if (popularMetric === 'views') {
+                return b.stats.views - a.stats.views; // Sort by Node Reach
+            }
+            if (popularMetric === 'likes') {
+                return b.stats.likes - a.stats.likes; // Sort by Total Stars
+            }
+            if (popularMetric === 'hype') {
+                // THE ALGORITHM:
+                // Followers = 50 pts (Loyalty)
+                // Stars = 10 pts (Quality)
+                // Views = 1 pt (Reach)
+                const scoreA = (a.stats.followers * 50) + (a.stats.likes * 10) + (a.stats.views);
+                const scoreB = (b.stats.followers * 50) + (b.stats.likes * 10) + (b.stats.views);
+                return scoreB - scoreA;
+            }
+            return 0;
         });
 
-        let activeCreators = (profilesData || [])
-            .map(p => {
-                const userWork = projectsByOwner[p.id] || [];
-                if (userWork.length === 0) return null;
-                return {
-                    id: p.id,
-                    name: p.full_name || p.username,
-                    username: p.username,
-                    role: p.bio ? p.bio.split('.')[0].substring(0, 30) : "Creator",
-                    bio: p.bio,
-                    avatar: p.avatar_url,
-                    coverImage: p.avatar_url, 
-                    isForHire: p.is_for_hire,
-                    stats: { followers: p.views, likes: p.likes_count },
-                    topProjects: userWork
-                };
-            })
-            .filter(Boolean);
-
-        // Client-side Hype Sort
-        if (popularMetric === 'hype') {
-            activeCreators.sort((a, b) => {
-                const scoreA = (a.stats.followers) + (a.stats.likes * 10);
-                const scoreB = (b.stats.followers) + (b.stats.likes * 10);
-                return scoreB - scoreA;
-            });
-        }
-
-        setCreators(activeCreators);
+        // LIMIT TO TOP 11
+        setCreators(activeCreators.slice(0, 11));
 
       } catch (err) {
         console.error("Trending Fetch Error:", err);
@@ -131,7 +167,7 @@ export default function TrendingPage() {
     };
 
     fetchData();
-  }, [popularMetric]); // Re-fetch on metric change only
+  }, [popularMetric]); // Re-fetch on metric change
   
   const currentData = view === "projects" ? projects : creators;
   const topItem = currentData[0];
@@ -195,7 +231,7 @@ export default function TrendingPage() {
                                     <div className="flex justify-between items-end mb-2 border-b border-border pb-2">
                                         <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Top Movers</span>
                                         <span className="text-[10px] font-mono text-accent">
-                                            {popularMetric === 'hype' ? 'Hype Score' : popularMetric.toUpperCase()}
+                                            {popularMetric === 'hype' ? 'Weighted Score' : popularMetric.toUpperCase()}
                                         </span>
                                     </div>
                                     {leaderBoard.map((item, index) => (
