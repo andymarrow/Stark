@@ -13,13 +13,9 @@ import TrendingSortBar from "./_components/TrendingSortBar";
 // --- HELPER: EXTRACT YOUTUBE THUMBNAIL ---
 const getThumbnail = (url) => {
     if (!url) return "/placeholder.jpg";
-    
-    // If it's already a direct image link (supabase, cloudinary, etc), return it
     if (url.startsWith("http") && (url.includes("supabase") || url.includes("cloudinary") || url.match(/\.(jpeg|jpg|gif|png)$/))) {
         return url;
     }
-
-    // If it's a YouTube link, extract ID
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
         let videoId = "";
         if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1];
@@ -31,8 +27,6 @@ const getThumbnail = (url) => {
             return `https://img.youtube.com/vi/${cleanId}/mqdefault.jpg`;
         }
     }
-
-    // Fallback if we can't parse it but it's a string
     return url;
 };
 
@@ -40,7 +34,8 @@ export default function TrendingPage() {
   const [view, setView] = useState("projects");
   const [loading, setLoading] = useState(true);
   
-  const [popularMetric, setPopularMetric] = useState("hype"); 
+  // Metric State
+  const [popularMetric, setPopularMetric] = useState("hype"); // 'views' | 'likes' | 'hype'
 
   const [projects, setProjects] = useState([]);
   const [creators, setCreators] = useState([]);
@@ -49,9 +44,12 @@ export default function TrendingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // --- 1. PROJECTS FETCH LOGIC ---
+        // ====================================================
+        // 1. PROJECTS FETCH LOGIC
+        // ====================================================
         let projSortColumn = 'views'; 
         if (popularMetric === 'likes') projSortColumn = 'likes_count';
+        // 'hype' handled client side
 
         const { data: projectsData, error: projError } = await supabase
           .from('projects')
@@ -68,7 +66,6 @@ export default function TrendingPage() {
             title: p.title,
             description: p.description,
             category: p.type,
-            // FIX: Run thumbnail through the helper
             thumbnail: getThumbnail(p.thumbnail_url), 
             tags: p.tags || [],
             stats: { stars: p.likes_count, views: p.views },
@@ -79,6 +76,7 @@ export default function TrendingPage() {
             }
         }));
 
+        // Client-side Project Hype Sort
         if (popularMetric === 'hype') {
             formattedProjects.sort((a, b) => {
                 const scoreA = (a.stats.views) + (a.stats.stars * 10);
@@ -87,11 +85,18 @@ export default function TrendingPage() {
             });
         }
         
+        // LIMIT PROJECTS TO TOP 11
         setProjects(formattedProjects.slice(0, 11));
 
-        // --- 2. CREATORS FETCH LOGIC ---
-        let profileQuery = supabase.from('profiles').select('*').limit(50);
 
+        // ====================================================
+        // 2. CREATORS FETCH LOGIC (ADVANCED AGGREGATION)
+        // ====================================================
+        
+        // A. Initial Pool: Fetch top 100 profiles to ensure we catch rising stars
+        // We sort by views initially just to get active users, but we re-sort later
+        let profileQuery = supabase.from('profiles').select('*').limit(100);
+        
         if (popularMetric === 'likes') {
              profileQuery = profileQuery.order('likes_count', { ascending: false });
         } else {
@@ -103,28 +108,39 @@ export default function TrendingPage() {
 
         const userIds = profilesData.map(p => p.id);
         
+        // B. Bulk Fetch Data for these 100 users
         const [projectsRes, followersRes] = await Promise.all([
+            // Get ALL published projects for these users to calculate total likes accurately
             supabase.from('projects')
                 .select('owner_id, thumbnail_url, likes_count') 
                 .in('owner_id', userIds)
-                .eq('status', 'published')
-                .limit(500),
-            supabase.from('follows').select('following_id') 
+                .eq('status', 'published'),
+            
+            // Get follower records
+            supabase.from('follows')
+                .select('following_id')
+                .in('following_id', userIds)
         ]);
 
         const userProjects = projectsRes.data || [];
         const allFollows = followersRes.data || [];
 
+        // C. Map & Aggregate Data
         let activeCreators = (profilesData || []).map(p => {
+            // Get this user's projects
             const myUserProjects = userProjects.filter(up => up.owner_id === p.id);
+            
+            // Filter inactive users (must have at least 1 project)
+            if (myUserProjects.length === 0) return null; 
+            
+            // Calculate Cumulative Stats
             const totalProjectLikes = myUserProjects.reduce((sum, proj) => sum + (proj.likes_count || 0), 0);
-
-            // FIX: Map thumbnails using the helper for creators too
-            const myWork = myUserProjects.map(up => getThumbnail(up.thumbnail_url)).slice(0,3);
-            
-            if (myWork.length === 0) return null; 
-            
             const myFollowers = allFollows.filter(f => f.following_id === p.id).length;
+
+            // Get thumbnails for display (first 3)
+            const myWork = myUserProjects
+                .slice(0,3)
+                .map(up => getThumbnail(up.thumbnail_url));
 
             return {
                 id: p.id,
@@ -135,23 +151,38 @@ export default function TrendingPage() {
                 avatar: p.avatar_url,
                 coverImage: p.avatar_url, 
                 isForHire: p.is_for_hire,
+                
+                // DATA FOR SORTING
                 stats: { 
-                    followers: myFollowers,
-                    likes: totalProjectLikes,
-                    views: p.views          
+                    followers: myFollowers, // Real Follower Count
+                    likes: totalProjectLikes, // Sum of Project Stars
+                    views: p.views          // Node Reach (Profile Views)
                 },
                 topProjects: myWork
             };
-        }).filter(Boolean);
+        }).filter(Boolean); // Remove nulls
 
-        if (popularMetric === 'hype') {
-            activeCreators.sort((a, b) => {
-                const scoreA = (a.stats.followers * 50) + (a.stats.likes * 10) + (a.stats.views);
-                const scoreB = (b.stats.followers * 50) + (b.stats.likes * 10) + (b.stats.views);
+        // D. APPLY SORTING ALGORITHM
+        activeCreators.sort((a, b) => {
+            if (popularMetric === 'views') {
+                return b.stats.views - a.stats.views; // Sort by Node Reach
+            }
+            if (popularMetric === 'likes') {
+                return b.stats.likes - a.stats.likes; // Sort by Total Stars
+            }
+            if (popularMetric === 'hype') {
+                // THE ALGORITHM:
+                // Followers = 20 pts (Network Influence)
+                // Stars = 10 pts (Technical Quality)
+                // Views = 1 pt (Raw Visibility)
+                const scoreA = (a.stats.followers * 20) + (a.stats.likes * 10) + (a.stats.views);
+                const scoreB = (b.stats.followers * 20) + (b.stats.likes * 10) + (b.stats.views);
                 return scoreB - scoreA;
-            });
-        }
+            }
+            return 0;
+        });
 
+        // LIMIT CREATORS TO TOP 11
         setCreators(activeCreators.slice(0, 11));
 
       } catch (err) {
@@ -162,7 +193,7 @@ export default function TrendingPage() {
     };
 
     fetchData();
-  }, [popularMetric]);
+  }, [popularMetric]); 
   
   const currentData = view === "projects" ? projects : creators;
   const topItem = currentData[0];
