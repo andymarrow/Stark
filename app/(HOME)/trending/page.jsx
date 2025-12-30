@@ -8,11 +8,15 @@ import LeaderboardRow from "./_components/LeaderboardRow";
 import TrendingToggle from "./_components/TrendingToggle";
 import CreatorCard from "./_components/CreatorCard";
 import ProjectCard from "../_components/ProjectCard";
+import TrendingSortBar from "./_components/TrendingSortBar"; // NEW IMPORT
 
 export default function TrendingPage() {
   const [view, setView] = useState("projects");
   const [loading, setLoading] = useState(true);
   
+  // Only Metric State Needed (Sort Order is implicitly 'popular')
+  const [popularMetric, setPopularMetric] = useState("hype"); // 'views' | 'likes' | 'hype'
+
   const [projects, setProjects] = useState([]);
   const [creators, setCreators] = useState([]);
 
@@ -20,21 +24,22 @@ export default function TrendingPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // --- 1. Fetch Trending Projects ---
-        // (Logic remains the same: Most viewed published projects)
+        // --- 1. Determine Sort Column ---
+        let sortColumn = 'views'; 
+        if (popularMetric === 'likes') sortColumn = 'likes_count';
+        // 'hype' defaults to views fetch, then client sort
+
+        // --- 2. Fetch Trending Projects ---
         const { data: projectsData, error: projError } = await supabase
           .from('projects')
-          .select(`
-            *,
-            author:profiles!projects_owner_id_fkey(*)
-          `)
+          .select(`*, author:profiles!projects_owner_id_fkey(*)`)
           .eq('status', 'published')
-          .order('views', { ascending: false })
-          .limit(10);
+          .order(sortColumn, { ascending: false })
+          .limit(30);
 
         if (projError) throw projError;
 
-        const formattedProjects = (projectsData || []).map(p => ({
+        let formattedProjects = (projectsData || []).map(p => ({
             id: p.id,
             slug: p.slug,
             title: p.title,
@@ -49,52 +54,49 @@ export default function TrendingPage() {
                 avatar: p.author?.avatar_url 
             }
         }));
+
+        // Client-side Hype Sort
+        if (popularMetric === 'hype') {
+            formattedProjects.sort((a, b) => {
+                const scoreA = (a.stats.views) + (a.stats.stars * 5);
+                const scoreB = (b.stats.views) + (b.stats.stars * 5);
+                return scoreB - scoreA;
+            });
+        }
+        
         setProjects(formattedProjects);
 
-        // --- 2. Fetch Trending Creators (With Activity Check) ---
-        
-        // A. Fetch a buffer (20) of users sorted by STARS first (Quality), then Views (Reach)
-        const { data: profilesData, error: profError } = await supabase
-          .from('profiles')
-          .select('*')
-          .order('likes_count', { ascending: false }) // Prioritize Stars
-          .order('views', { ascending: false })       // Then Views
-          .limit(20);                                 // Fetch extra to allow filtering
+        // --- 3. Fetch Trending Creators ---
+        let profileQuery = supabase.from('profiles').select('*').limit(40);
 
+        if (popularMetric === 'likes') {
+             profileQuery = profileQuery.order('likes_count', { ascending: false });
+        } else {
+             profileQuery = profileQuery.order('views', { ascending: false });
+        }
+
+        const { data: profilesData, error: profError } = await profileQuery;
         if (profError) throw profError;
 
+        // Fetch Projects for activity check
         const userIds = profilesData.map(p => p.id);
-
-        // B. Bulk Fetch Projects for these 20 users
-        const { data: userProjectsData, error: userProjError } = await supabase
+        const { data: userProjectsData } = await supabase
             .from('projects')
-            .select('owner_id, thumbnail_url, created_at')
+            .select('owner_id, thumbnail_url')
             .in('owner_id', userIds)
-            .eq('status', 'published') // Only count published work
-            .order('created_at', { ascending: false });
+            .eq('status', 'published')
+            .limit(100);
 
-        if (userProjError) throw userProjError;
-
-        // C. Group projects
         const projectsByOwner = {};
         (userProjectsData || []).forEach(p => {
-            if (!projectsByOwner[p.owner_id]) {
-                projectsByOwner[p.owner_id] = [];
-            }
-            if (projectsByOwner[p.owner_id].length < 3 && p.thumbnail_url) {
-                projectsByOwner[p.owner_id].push(p.thumbnail_url);
-            }
+            if (!projectsByOwner[p.owner_id]) projectsByOwner[p.owner_id] = [];
+            if (projectsByOwner[p.owner_id].length < 3) projectsByOwner[p.owner_id].push(p.thumbnail_url);
         });
 
-        // D. Map & FILTER Empty Creators
-        const activeCreators = (profilesData || [])
+        let activeCreators = (profilesData || [])
             .map(p => {
-                // Check if they actually have published projects
                 const userWork = projectsByOwner[p.id] || [];
-                
-                // If NO work, return null (we will filter this out)
                 if (userWork.length === 0) return null;
-
                 return {
                     id: p.id,
                     name: p.full_name || p.username,
@@ -108,8 +110,16 @@ export default function TrendingPage() {
                     topProjects: userWork
                 };
             })
-            .filter(Boolean) // Remove the nulls (Empty profiles)
-            .slice(0, 10);   // Take top 10 of the survivors
+            .filter(Boolean);
+
+        // Client-side Hype Sort
+        if (popularMetric === 'hype') {
+            activeCreators.sort((a, b) => {
+                const scoreA = (a.stats.followers) + (a.stats.likes * 10);
+                const scoreB = (b.stats.followers) + (b.stats.likes * 10);
+                return scoreB - scoreA;
+            });
+        }
 
         setCreators(activeCreators);
 
@@ -121,7 +131,7 @@ export default function TrendingPage() {
     };
 
     fetchData();
-  }, []);
+  }, [popularMetric]); // Re-fetch on metric change only
   
   const currentData = view === "projects" ? projects : creators;
   const topItem = currentData[0];
@@ -130,22 +140,13 @@ export default function TrendingPage() {
 
   if (loading) {
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
             <Loader2 className="animate-spin text-accent" size={32} />
+            <span className="font-mono text-xs text-muted-foreground uppercase tracking-widest">
+                Calculating_Velocity...
+            </span>
         </div>
     );
-  }
-
-  // Handle Empty State (If NO active creators exist)
-  if (currentData.length === 0) {
-      return (
-        <div className="min-h-screen bg-background flex flex-col items-center justify-center pt-20">
-            <h2 className="text-2xl font-bold font-mono uppercase">System Quiet</h2>
-            <p className="text-muted-foreground text-sm">
-                {view === 'projects' ? "No projects deployed yet." : "No active creators found."}
-            </p>
-        </div>
-      );
   }
 
   return (
@@ -153,7 +154,7 @@ export default function TrendingPage() {
       <div className="container mx-auto px-4">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12">
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8">
             <div>
                 <h1 className="text-4xl md:text-6xl font-black tracking-tighter uppercase mb-2">
                     Global <span className="text-accent">Trending</span>
@@ -164,65 +165,66 @@ export default function TrendingPage() {
             </div>
         </div>
 
-        {/* 1. The Switch */}
-        <TrendingToggle view={view} setView={setView} />
+        {/* Controls */}
+        <div className="flex flex-col items-center gap-6 mb-12">
+            <TrendingToggle view={view} setView={setView} />
+            <TrendingSortBar popularMetric={popularMetric} setPopularMetric={setPopularMetric} />
+        </div>
 
-        {/* Content Animation Wrapper */}
+        {/* Content */}
         <AnimatePresence mode="wait">
             <motion.div
-                key={view}
-                initial={{ opacity: 0, y: 20 }}
+                key={`${view}-${popularMetric}`}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
+                exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
             >
-                {/* 2. Top Section: Hero + Leaderboard */}
-                {topItem && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
-                        {/* Hero (Rank 1) */}
-                        <div className="lg:col-span-8">
-                            <TrendingHero item={topItem} type={view} />
-                        </div>
-                        
-                        {/* Leaderboard (Rank 2-5) */}
-                        <div className="lg:col-span-4 flex flex-col gap-3">
-                            <div className="flex justify-between items-end mb-2 border-b border-border pb-2">
-                                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Top Movers</span>
-                                <span className="text-[10px] font-mono text-accent">Last 24h</span>
-                            </div>
-                            {leaderBoard.map((item, index) => (
-                                <LeaderboardRow 
-                                    key={item.id} 
-                                    item={item} 
-                                    rank={index + 2} 
-                                    type={view} 
-                                />
-                            ))}
-                        </div>
+                 {currentData.length === 0 ? (
+                    <div className="h-64 border border-dashed border-border flex items-center justify-center text-muted-foreground font-mono text-sm uppercase">
+                        No Data Found For Current Metrics
                     </div>
-                )}
-
-                {/* 3. The Grid */}
-                {gridItems.length > 0 && (
+                ) : (
                     <>
-                        <div className="mb-8 flex items-center gap-4">
-                            <div className="h-[1px] bg-border flex-1" />
-                            <span className="text-xs font-mono uppercase text-muted-foreground">Rising Stars</span>
-                            <div className="h-[1px] bg-border flex-1" />
-                        </div>
+                        {topItem && (
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
+                                <div className="lg:col-span-8">
+                                    <TrendingHero item={topItem} type={view} />
+                                </div>
+                                <div className="lg:col-span-4 flex flex-col gap-3">
+                                    <div className="flex justify-between items-end mb-2 border-b border-border pb-2">
+                                        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Top Movers</span>
+                                        <span className="text-[10px] font-mono text-accent">
+                                            {popularMetric === 'hype' ? 'Hype Score' : popularMetric.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    {leaderBoard.map((item, index) => (
+                                        <LeaderboardRow key={item.id} item={item} rank={index + 2} type={view} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {gridItems.map((item) => (
-                                view === "projects" ? (
-                                    <ProjectCard key={item.id} project={item} />
-                                ) : (
-                                    <CreatorCard key={item.id} creator={item} />
-                                )
-                            ))}
-                        </div>
+                        {gridItems.length > 0 && (
+                            <>
+                                <div className="mb-8 flex items-center gap-4">
+                                    <div className="h-[1px] bg-border flex-1" />
+                                    <span className="text-xs font-mono uppercase text-muted-foreground">Rising Stars</span>
+                                    <div className="h-[1px] bg-border flex-1" />
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {gridItems.map((item) => (
+                                        view === "projects" ? (
+                                            <ProjectCard key={item.id} project={item} />
+                                        ) : (
+                                            <CreatorCard key={item.id} creator={item} />
+                                        )
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </>
                 )}
-
             </motion.div>
         </AnimatePresence>
 

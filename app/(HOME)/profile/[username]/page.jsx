@@ -9,6 +9,7 @@ import ProfileTabs from "./_components/ProfileTabs";
 import ProjectCard from "../../_components/ProjectCard";
 import Pagination from "@/components/ui/Pagination";
 import { Loader2 } from "lucide-react";
+import { registerView } from "@/app/actions/viewAnalytics";
 
 const ITEMS_PER_PAGE = 6;
 
@@ -74,29 +75,17 @@ export default function ProfilePage({ params }) {
     if (username) fetchCreatorData();
   }, [username]);
 
-  // 2. Increment View Count (Node Reach)
+  // 2. Increment View Count (Server Action Logic)
   useEffect(() => {
-    // Wait for profile to load
     if (!profile?.id) return;
-    
-    // Prevent double counting (React Strict Mode or Re-renders)
     if (hasCountedRef.current) return;
-    
-    // Don't count owner viewing own profile
     if (currentUser?.id === profile.id) return;
 
     hasCountedRef.current = true;
     
-    // FIX: Use correct parameter name 'target_user_id'
     const increment = async () => {
-        const { error } = await supabase.rpc('increment_profile_view', { 
-            target_user_id: profile.id 
-        });
-        if (error) {
-            console.error("Node Reach Error:", error);
-        } else {
-            console.log("✅ Node Reach Incremented");
-        }
+        // Updated to use Server Action for 24h debounce logic
+        await registerView('profile', profile.id);
     };
     increment();
   }, [profile, currentUser]);

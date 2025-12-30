@@ -34,6 +34,7 @@ import { getAvatar } from "@/constants/assets";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { registerView } from "@/app/actions/viewAnalytics"; 
 
 export default function ProjectSidebar({ project }) {
   const { user } = useAuth();
@@ -72,30 +73,35 @@ export default function ProjectSidebar({ project }) {
   }, [user, project.id, project.stats.stars]);
 
   // --- VIEW COUNTING LOGIC ---
-  useEffect(() => {
+ useEffect(() => {
     const incrementView = async () => {
-      // 1. Prevent double counting in Strict Mode
+      // Prevent double counting locally
       if (hasCountedRef.current) return;
+      
+      // Don't count owner viewing own project
+      if (user?.id === project.author.id) return;
+
       hasCountedRef.current = true;
 
-      // 2. Optimistic UI update
-      setViewCount(prev => prev + 1);
+      // Optimistic UI update (Optional, but feels faster)
+      // setViewCount(prev => prev + 1); 
 
-      // 3. Database update
-      const { error } = await supabase.rpc('increment_project_view', { 
-        project_id: project.id 
-      });
-
-      if (error) {
-        console.error("❌ Failed to increment view in DB:", error);
+      // Call Server Action for Debounced Analytics
+      const res = await registerView('project', project.id);
+      
+      // If server says it was a valid new view, update UI count
+      if (res && res.success) {
+         // If you removed the optimistic update above, you might want to re-fetch or just increment here
+         // For simple UI, we rely on the next refresh or realtime, 
+         // but incrementing local state here provides immediate feedback if successful.
+         // However, since registerView returns success even on cooldown (it just returns false internally in DB logic usually, 
+         // but our action returns {success: true} on successful execution), strict UI sync is tricky without re-fetch.
+         // A safe bet is just letting the optimistic update happen or waiting for re-fetch.
       }
     };
 
-    if(project?.id) {
-        incrementView();
-    }
-    
-  }, [project.id, user?.id, project.author.id]);
+    if(project?.id) incrementView();
+  }, [project.id, user, project.author.id]);
 
   const toggleLike = async () => {
     if (!user) {

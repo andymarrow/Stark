@@ -2,29 +2,16 @@
 const nextConfig = {
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'lh3.googleusercontent.com', // Google Auth Images
-      },
-      {
-        protocol: 'https',
-        hostname: 'avatars.githubusercontent.com', // GitHub Auth Images
-      },
-      {
-        protocol: 'https',
-        hostname: '**.supabase.co', // Supabase Storage
-      },
-      {
-        protocol: 'https',
-        hostname: 'img.youtube.com', // YouTube thumbnails
-      },
-      {
-        protocol: 'https',
-        hostname: 'www.youtube.com', // YouTube
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
+      { protocol: 'https', hostname: '**.supabase.co' },
+      { protocol: 'https', hostname: 'img.youtube.com' },
+      { protocol: 'https', hostname: 'www.youtube.com' },
+      { protocol: 'https', hostname: 'i.ytimg.com' },
+      { 
+        protocol: 'https', 
+        hostname: 'youtu.be' 
       },
     ],
   },
