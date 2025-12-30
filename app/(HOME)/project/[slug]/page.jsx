@@ -1,20 +1,24 @@
 import Link from "next/link";
-import { ChevronRight, Home } from "lucide-react";
-import { createClient } from "@/utils/supabase/server"; 
+import { ChevronRight, Home, Share2, Loader2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 import { notFound } from "next/navigation";
+import { getAvatar } from "@/constants/assets";
 
-// Client Components
+// Import your existing Client Components
 import ProjectGallery from "./_components/ProjectGallery";
 import ProjectSidebar from "./_components/ProjectSidebar";
 import ProjectReadme from "./_components/ProjectReadme";
 import ProjectComments from "./_components/ProjectComments";
+
+// Import a small client wrapper for the share functionality
 import ShareAction from "./_components/ShareAction"; 
 
 /**
- * 1. DYNAMIC METADATA GENERATION
+ * 1. DYNAMIC METADATA GENERATION (The Intelligence Preview)
+ * This is what Telegram, WhatsApp, and Twitter see.
  */
 export async function generateMetadata({ params }) {
-  const { slug } = await params; // MUST AWAIT
+  const { slug } = await params;
   const supabase = await createClient();
 
   const { data: p } = await supabase
@@ -23,44 +27,44 @@ export async function generateMetadata({ params }) {
     .eq("slug", slug)
     .single();
 
-  if (!p) return { title: "Project Not Found | Stark" };
-
+  // Use a relative protocol-agnostic check or environment variable
   const domain = process.env.NEXT_PUBLIC_SITE_URL || "https://stark-01.vercel.app";
   const ogUrl = `${domain}/api/og/project?slug=${slug}&v=${Date.now()}`;
 
   return {
-    title: `${p.title} | Stark`,
-    description: p.description?.substring(0, 160),
+    title: `${p?.title} | Stark`,
+    description: p?.description?.substring(0, 160),
     openGraph: {
-      title: p.title,
-      description: p.description?.substring(0, 160),
-      url: `${domain}/project/${slug}`,
-      siteName: "Stark Network",
-      images: [{ url: ogUrl, width: 1200, height: 630 }],
-      type: "website",
+      title: p?.title,
+      description: p?.description?.substring(0, 160),
+      images: [
+        {
+          url: ogUrl,
+          width: 1200,
+          height: 630,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
-      title: p.title,
       images: [ogUrl],
     },
   };
 }
 
 /**
- * 2. SERVER-SIDE DATA FETCHING
+ * 2. SERVER-SIDE PAGE COMPONENT
+ * Fetches all project and collaborator data on the server.
  */
 export default async function ProjectDetailPage({ params }) {
-  const { slug } = await params; // MUST AWAIT
-  const supabase = await createClient();
+  const { slug } = await params;
 
   // --- A. FETCH PROJECT & OWNER ---
-  // Simplified join to avoid potential fkey naming crashes
   const { data: projectData, error: projectError } = await supabase
     .from('projects')
     .select(`
       *,
-      author:profiles(*) 
+      author:profiles!projects_owner_id_fkey(*) 
     `)
     .eq('slug', slug)
     .single();
@@ -70,7 +74,7 @@ export default async function ProjectDetailPage({ params }) {
   }
 
   // --- B. FETCH COLLABORATORS ---
-  const { data: collabData } = await supabase
+  const { data: collabData, error: collabError } = await supabase
     .from('collaborations')
     .select(`
       role,
@@ -80,17 +84,15 @@ export default async function ProjectDetailPage({ params }) {
     .eq('project_id', projectData.id)
     .not('user_id', 'is', null);
 
-  // --- C. DATA FORMATTING (With Safety Checks) ---
-  const collaborators = (collabData || [])
-    .filter(c => c.profile) // Safety: ensure profile exists
-    .map(c => ({
+  // --- C. DATA FORMATTING ---
+  const collaborators = (collabData || []).map(c => ({
       id: c.profile.id,
-      name: c.profile.full_name || c.profile.username || "Unknown",
-      username: c.profile.username || "user",
+      name: c.profile.full_name || c.profile.username,
+      username: c.profile.username,
       avatar: c.profile.avatar_url,
       isForHire: c.profile.is_for_hire,
       role: c.role || "Collaborator"
-    }));
+  }));
 
   const project = {
       ...projectData,
@@ -99,7 +101,7 @@ export default async function ProjectDetailPage({ params }) {
       collaborators: collaborators,
       author: {
           id: projectData.author?.id, 
-          name: projectData.author?.full_name || projectData.author?.username || "Anonymous",
+          name: projectData.author?.full_name || "Anonymous",
           username: projectData.author?.username || "user",
           avatar: projectData.author?.avatar_url,
           isForHire: projectData.author?.is_for_hire,
@@ -129,6 +131,7 @@ export default async function ProjectDetailPage({ params }) {
           </div>
           
           <div className="flex items-center gap-4">
+             {/* Client Component Wrapper for Copy-to-Clipboard */}
              <ShareAction />
           </div>
         </div>
@@ -143,7 +146,7 @@ export default async function ProjectDetailPage({ params }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
             
-            {/* Left Content */}
+            {/* Left Content: Title, Readme, and Comments */}
             <div className="lg:col-span-8 space-y-10">
                 <div>
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">
@@ -158,7 +161,10 @@ export default async function ProjectDetailPage({ params }) {
                     </div>
                 </div>
                 
+                {/* Readme Content */}
                 <ProjectReadme content={project.description} />
+
+                {/* Comments Section */}
                 <ProjectComments projectId={project.id} />
             </div>
 
