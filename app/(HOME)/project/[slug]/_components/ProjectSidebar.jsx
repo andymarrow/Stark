@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { 
   Github, 
   Globe, 
@@ -13,7 +13,10 @@ import {
   Youtube,
   Figma,
   Play,
-  ExternalLink
+  ExternalLink,
+  Award,
+  Zap,
+  CheckCircle
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -52,10 +55,14 @@ export default function ProjectSidebar({ project }) {
   // View Count State
   const [viewCount, setViewCount] = useState(project.stats.views || 0);
   
+  // --- RANKING STATE ---
+  const [rankPercentile, setRankPercentile] = useState(null);
+  const [loadingRank, setLoadingRank] = useState(true);
+
   // Ref to ensure we don't count twice in React Strict Mode
   const hasCountedRef = useRef(false);
 
-  // Check if user liked this project on load
+  // 1. Check if user liked this project on load
   useEffect(() => {
     if (user && project.id) {
       const checkLike = async () => {
@@ -72,36 +79,58 @@ export default function ProjectSidebar({ project }) {
     setLikesCount(project.stats.stars || 0);
   }, [user, project.id, project.stats.stars]);
 
-  // --- VIEW COUNTING LOGIC ---
- useEffect(() => {
+  // 2. --- VIEW COUNTING LOGIC ---
+  useEffect(() => {
     const incrementView = async () => {
-      // Prevent double counting locally
       if (hasCountedRef.current) return;
       
-      // Don't count owner viewing own project
       if (user?.id === project.author.id) return;
 
       hasCountedRef.current = true;
-
-      // Optimistic UI update (Optional, but feels faster)
-      // setViewCount(prev => prev + 1); 
-
-      // Call Server Action for Debounced Analytics
       const res = await registerView('project', project.id);
-      
-      // If server says it was a valid new view, update UI count
-      if (res && res.success) {
-         // If you removed the optimistic update above, you might want to re-fetch or just increment here
-         // For simple UI, we rely on the next refresh or realtime, 
-         // but incrementing local state here provides immediate feedback if successful.
-         // However, since registerView returns success even on cooldown (it just returns false internally in DB logic usually, 
-         // but our action returns {success: true} on successful execution), strict UI sync is tricky without re-fetch.
-         // A safe bet is just letting the optimistic update happen or waiting for re-fetch.
+      if (res?.success) {
+          // View successfully registered in analytics ledger
       }
     };
 
     if(project?.id) incrementView();
   }, [project.id, user, project.author.id]);
+
+  // 3. --- DYNAMIC RANK CALCULATION ---
+  useEffect(() => {
+    const calculateGlobalRank = async () => {
+        try {
+            setLoadingRank(true);
+            
+            // Fetch total published projects count
+            const { count: totalProjects } = await supabase
+                .from('projects')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'published');
+
+            // Fetch count of projects with a strictly higher quality score
+            const { count: higherRanked } = await supabase
+                .from('projects')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'published')
+                .gt('quality_score', project.qualityScore);
+
+            if (totalProjects > 0) {
+                // Calculation: (Number of projects better than this / Total projects) * 100
+                const percentile = ((higherRanked || 0) / totalProjects) * 100;
+                setRankPercentile(percentile);
+            }
+        } catch (error) {
+            console.error("Rank Engine Error:", error);
+        } finally {
+            setLoadingRank(false);
+        }
+    };
+
+    if (project?.qualityScore !== undefined) {
+        calculateGlobalRank();
+    }
+  }, [project.qualityScore]);
 
   const toggleLike = async () => {
     if (!user) {
@@ -137,15 +166,12 @@ export default function ProjectSidebar({ project }) {
     }
   };
 
-  // --- FUNCTIONAL REPORT SUBMISSION ---
   const handleReportSubmit = async () => {
     if (!user) {
       toast.error("Authentication Required", { description: "Please login to report content." });
       return;
     }
-
     setIsSubmittingReport(true);
-
     try {
       const { error } = await supabase
         .from('reports')
@@ -155,17 +181,10 @@ export default function ProjectSidebar({ project }) {
           reason: reportReason,
           details: reportDetails,
         });
-
       if (error) throw error;
-
-      toast.success("Report Submitted", { 
-        description: "Thank you. Our moderation team has been alerted." 
-      });
-      
-      // Reset form and close
+      toast.success("Report Submitted", { description: "Moderators have been alerted." });
       setReportDetails("");
       setIsReportOpen(false);
-
     } catch (error) {
       toast.error("Submission Failed", { description: error.message });
     } finally {
@@ -179,11 +198,43 @@ export default function ProjectSidebar({ project }) {
     day: 'numeric'
   });
 
-  // --- ADAPTIVE ACTION BUTTONS RENDERER ---
+  // --- UI RENDERER: RANK BADGE ---
+  const renderRankBadge = () => {
+    if (loadingRank) return "Analyzing System Index...";
+    
+    // Top 5% logic
+    if (rankPercentile !== null && rankPercentile <= 5) {
+        const displayPercent = Math.max(1, Math.ceil(rankPercentile));
+        return (
+            <span className="flex items-center gap-1.5 text-accent animate-in fade-in slide-in-from-left-2 duration-700">
+                <Award size={12} className="fill-accent/20" />
+                TOP {displayPercent}% OF GLOBAL DEPLOYMENTS
+            </span>
+        );
+    }
+
+    // High Quality (Top 20%)
+    if (rankPercentile !== null && rankPercentile <= 20) {
+        return (
+            <span className="flex items-center gap-1.5 text-blue-500">
+                <Zap size={12} className="fill-blue-500/20" />
+                HIGH-VELOCITY ASSET
+            </span>
+        );
+    }
+
+    // Default status for everyone else
+    return (
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+            <CheckCircle size={12} />
+            VERIFIED SYSTEM SUBMISSION
+        </span>
+    );
+  };
+
   const renderProjectActions = () => {
     const projectType = project.type?.toLowerCase();
 
-    // 1. VIDEO UX
     if (projectType === 'video') {
       return (
         <a href={project.source_link} target="_blank" rel="noopener noreferrer">
@@ -195,7 +246,6 @@ export default function ProjectSidebar({ project }) {
       );
     }
 
-    // 2. DESIGN UX
     if (projectType === 'design') {
       return (
         <div className="grid gap-3">
@@ -223,7 +273,6 @@ export default function ProjectSidebar({ project }) {
       );
     }
 
-    // 3. CODE UX
     return (
       <div className="grid gap-3">
         {project.source_link && (
@@ -269,10 +318,10 @@ export default function ProjectSidebar({ project }) {
           <span className="text-4xl font-bold text-accent">{project.qualityScore}</span>
         </div>
         <div className="w-full h-1 bg-secondary mt-2">
-          <div className="h-full bg-accent" style={{ width: `${project.qualityScore}%` }} />
+          <div className="h-full bg-accent transition-all duration-1000" style={{ width: `${project.qualityScore}%` }} />
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2 font-mono">
-          Top 5% of submissions this week.
+        <p className="text-[10px] text-muted-foreground mt-3 font-mono uppercase tracking-tighter">
+            {renderRankBadge()}
         </p>
       </div>
 
@@ -290,23 +339,13 @@ export default function ProjectSidebar({ project }) {
         )}
       </div>
 
-      {/* 3. Team Section (Moved Up) */}
+      {/* 3. Team Section */}
       <div>
         <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// CREATED_BY</h3>
         <div className="flex flex-col gap-2">
-            {/* Main Author */}
-            <CreatorCard 
-                user={project.author} 
-                role="Owner" 
-            />
-
-            {/* Collaborators */}
+            <CreatorCard user={project.author} role="Owner" />
             {project.collaborators && project.collaborators.map(collab => (
-                <CreatorCard 
-                    key={collab.id} 
-                    user={collab} 
-                    role="Collaborator" 
-                />
+                <CreatorCard key={collab.id} user={collab} role="Collaborator" />
             ))}
         </div>
       </div>
@@ -340,7 +379,7 @@ export default function ProjectSidebar({ project }) {
         <StatBox icon={Calendar} label="CREATED" value={createdDate} />
       </div>
 
-      {/* 6. Footer Actions (Report Trigger) */}
+      {/* 6. Footer Actions */}
       <div className="pt-6 border-t border-border">
         <button 
           onClick={() => setIsReportOpen(true)}
@@ -388,7 +427,7 @@ export default function ProjectSidebar({ project }) {
               <Textarea 
                 value={reportDetails}
                 onChange={(e) => setReportDetails(e.target.value)}
-                placeholder="Describe the issue (e.g. 'Demo link redirects to ad site')..." 
+                placeholder="Describe the issue..." 
                 className="bg-secondary/5 border-border rounded-none focus-visible:ring-accent min-h-[80px] text-sm"
               />
             </div>
@@ -422,7 +461,6 @@ function StatBox({ icon: Icon, label, value }) {
   );
 }
 
-// Sub-component for consistent styling
 function CreatorCard({ user, role }) {
     return (
         <Link 
