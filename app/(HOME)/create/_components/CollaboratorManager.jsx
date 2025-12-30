@@ -1,164 +1,194 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Search, X, User, Mail, Check, Loader2, UserPlus } from "lucide-react";
+import { Search, UserPlus, X, Mail, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { toast } from "sonner";
 import Image from "next/image";
+import { toast } from "sonner";
+import { getAvatar } from "@/constants/assets";
 
-export default function CollaboratorManager({ collaborators, setCollaborators }) {
+export default function CollaboratorManager({ collaborators, onAdd, onRemove }) {
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
 
-  // Search Logic (Debounced)
+  // Search Users
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (!query || query.includes('@')) {
-        setSearchResults([]);
+    const searchUsers = async () => {
+      if (query.length < 3) {
+        setResults([]);
         return;
       }
-
       setIsSearching(true);
-      // Search by username or full_name
+      
       const { data } = await supabase
         .from('profiles')
-        .select('id, username, full_name, avatar_url')
-        .or(`username.ilike.%${query}%,full_name.ilike.%${query}%`)
+        .select('id, username, full_name, avatar_url, email')
+        .ilike('username', `%${query}%`)
         .limit(5);
-      
-      // Filter out already added users
-      const filtered = (data || []).filter(u => !collaborators.some(c => c.user_id === u.id));
-      setSearchResults(filtered);
+        
+      setResults(data || []);
       setIsSearching(false);
-    }, 500);
+    };
 
-    return () => clearTimeout(timer);
-  }, [query, collaborators]);
+    const debounce = setTimeout(searchUsers, 500);
+    return () => clearTimeout(debounce);
+  }, [query]);
 
+  // FIX: Use the prop 'onAdd' instead of local state setter
   const addExistingUser = (user) => {
-    setCollaborators(prev => [...prev, {
-      type: 'user',
-      user_id: user.id,
-      username: user.username,
-      avatar: user.avatar_url,
-      status: 'pending'
-    }]);
-    setQuery("");
-    setSearchResults([]);
-  };
-
-  const addGhostUser = () => {
-    // Simple email validation regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(query)) {
-      toast.error("Invalid Email Format");
-      return;
-    }
-
-    if (collaborators.some(c => c.email === query)) {
-        toast.error("Already Added");
+    // Check if already added
+    if (collaborators.some(c => c.id === user.id || c.username === user.username)) {
+        toast.error("User already added");
         return;
     }
 
-    setCollaborators(prev => [...prev, {
-      type: 'ghost',
-      email: query,
-      status: 'invite_queued'
-    }]);
+    // Call Parent Handler
+    onAdd({
+      type: 'user',
+      id: user.id, // Using 'id' consistent with EditForm logic
+      username: user.username,
+      avatar_url: user.avatar_url,
+      status: 'pending'
+    });
+    
     setQuery("");
+    setResults([]);
   };
 
-  const removeCollaborator = (index) => {
-    setCollaborators(prev => prev.filter((_, i) => i !== index));
-  };
+  // FIX: Use the prop 'onAdd' instead of local state setter
+  const addGhostUser = () => {
+    if (!query.includes('@')) {
+        toast.error("Invalid Email Format");
+        return;
+    }
+    
+    // Check if already added
+    if (collaborators.some(c => c.email === query)) {
+        toast.error("Email already invited");
+        return;
+    }
 
-  const isEmail = query.includes('@');
+    // Call Parent Handler
+    onAdd({
+      type: 'ghost',
+      id: query, // Use email as ID for ghost users
+      email: query,
+      status: 'pending'
+    });
+    
+    setQuery("");
+    setResults([]);
+  };
 
   return (
     <div className="space-y-4">
-      <label className="text-xs font-mono uppercase text-muted-foreground">Collaborators / Credits</label>
       
-      {/* Search Input */}
-      <div className="relative group">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-            {isSearching ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-        </div>
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input 
             type="text" 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search username or enter email to invite..."
-            className="w-full h-12 pl-12 pr-24 bg-secondary/5 border border-border focus:border-accent outline-none font-mono text-sm transition-colors"
-            onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (isEmail) addGhostUser();
-                }
-            }}
+            placeholder="Search username or enter email..."
+            className="w-full h-10 pl-9 pr-4 bg-secondary/5 border border-border text-sm font-mono outline-none focus:border-accent transition-colors"
         />
-        {/* Email Add Button */}
-        {isEmail && query.length > 5 && (
-            <button 
-                onClick={addGhostUser}
-                className="absolute right-2 top-2 bottom-2 px-3 bg-accent text-white text-[10px] font-mono uppercase tracking-wider hover:bg-accent/90"
-            >
-                Invite
-            </button>
+        {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Loader2 className="animate-spin text-accent" size={14} />
+            </div>
         )}
       </div>
 
       {/* Search Results Dropdown */}
-      {searchResults.length > 0 && (
-        <div className="border border-border bg-background shadow-xl max-h-48 overflow-y-auto">
-            {searchResults.map(user => (
-                <button
-                    key={user.id}
-                    onClick={() => addExistingUser(user)}
-                    className="w-full flex items-center gap-3 p-3 hover:bg-secondary/10 transition-colors text-left"
+      {query.length >= 3 && (
+        <div className="border border-border bg-background shadow-lg max-h-60 overflow-y-auto">
+            {results.length > 0 ? (
+                results.map(user => (
+                    <button 
+                        key={user.id}
+                        onClick={() => addExistingUser(user)}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-secondary/10 text-left transition-colors border-b border-border/50 last:border-0"
+                    >
+                        <div className="w-8 h-8 relative bg-secondary border border-border">
+                            <Image 
+                                src={getAvatar(user)} 
+                                alt={user.username} 
+                                fill 
+                                className="object-cover" 
+                            />
+                        </div>
+                        <div>
+                            <p className="text-sm font-bold text-foreground leading-none">{user.full_name || user.username}</p>
+                            <p className="text-xs text-muted-foreground font-mono">@{user.username}</p>
+                        </div>
+                        <UserPlus size={14} className="ml-auto text-muted-foreground" />
+                    </button>
+                ))
+            ) : query.includes('@') ? (
+                <button 
+                    onClick={addGhostUser}
+                    className="w-full flex items-center gap-3 p-3 hover:bg-secondary/10 text-left transition-colors group"
                 >
-                    <div className="relative w-8 h-8 bg-secondary border border-border overflow-hidden">
-                        <Image src={user.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} alt={user.username} fill className="object-cover" />
+                    <div className="w-8 h-8 bg-secondary border border-border flex items-center justify-center">
+                        <Mail size={14} className="text-muted-foreground group-hover:text-accent" />
                     </div>
                     <div>
-                        <div className="text-sm font-bold">{user.full_name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">@{user.username}</div>
+                        <p className="text-sm font-bold text-foreground">Invite via Email</p>
+                        <p className="text-xs text-muted-foreground font-mono">{query}</p>
                     </div>
                     <UserPlus size={14} className="ml-auto text-muted-foreground" />
                 </button>
-            ))}
+            ) : (
+                <div className="p-4 text-center text-xs text-muted-foreground font-mono">
+                    No users found. Enter email to invite externally.
+                </div>
+            )}
         </div>
       )}
 
       {/* Selected List */}
       {collaborators.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-            {collaborators.map((collab, idx) => (
-                <div key={idx} className="flex items-center gap-2 pl-1 pr-2 py-1 bg-secondary/10 border border-border group">
-                    {collab.type === 'user' ? (
-                        <>
-                            <div className="relative w-5 h-5 bg-secondary border border-border overflow-hidden">
-                                <Image src={collab.avatar} alt={collab.username} fill className="object-cover" />
+        <div className="space-y-2 pt-2">
+            <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">
+                Active Squad
+            </span>
+            <div className="grid gap-2">
+                {collaborators.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-secondary/5 border border-border group">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 relative bg-secondary border border-border">
+                                {c.type === 'user' ? (
+                                    <Image src={getAvatar(c)} alt={c.username} fill className="object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                                        <Mail size={14} />
+                                    </div>
+                                )}
                             </div>
-                            <span className="text-xs font-bold">{collab.username}</span>
-                        </>
-                    ) : (
-                        <>
-                            <Mail size={14} className="text-muted-foreground ml-1" />
-                            <span className="text-xs font-mono">{collab.email}</span>
-                            <span className="text-[9px] bg-accent/10 text-accent px-1 border border-accent/20">INVITE</span>
-                        </>
-                    )}
-                    
-                    <button 
-                        onClick={() => removeCollaborator(idx)}
-                        className="ml-2 text-muted-foreground hover:text-red-500"
-                    >
-                        <X size={12} />
-                    </button>
-                </div>
-            ))}
+                            <div>
+                                <p className="text-xs font-bold text-foreground">
+                                    {c.type === 'user' ? `@${c.username}` : c.email}
+                                </p>
+                                <span className="text-[9px] font-mono text-muted-foreground uppercase flex items-center gap-1">
+                                    {c.type === 'ghost' && "Pending Invite"}
+                                    {c.type === 'user' && "Verified"}
+                                    {c.isNew && <span className="text-accent">• Unsaved</span>}
+                                </span>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => onRemove(c)} // Call Parent Handler
+                            className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                ))}
+            </div>
         </div>
       )}
+
     </div>
   );
 }
