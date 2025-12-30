@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation"; 
+import { useRouter } from "next/navigation";
 import {
   MoreHorizontal, Eye, Star, Edit3, Trash2,
   ExternalLink, Search, ChevronLeft, ChevronRight,
@@ -18,21 +18,37 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 
-
 const ITEMS_PER_PAGE = 5;
 
+/**
+ * MY_PROJECTS_MANAGER
+ * Refined for Stark Node Operations
+ */
 export default function MyProjectsManager({ user }) {
   const [projects, setProjects] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [totalTraffic, setTotalTraffic] = useState(0); 
+  const [totalTraffic, setTotalTraffic] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // --- 1. POINTER_EVENT RECOVERY LOGIC ---
+  // This hook ensures that if a modal crashes or closes improperly, 
+  // the app remains interactive by forcing pointer-events back to auto.
+  useEffect(() => {
+    if (!projectToDelete) {
+      const timer = setTimeout(() => {
+        document.body.style.pointerEvents = "auto";
+        document.body.style.overflow = "auto";
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [projectToDelete]);
+
   const fetchProjects = useCallback(async () => {
-    // GUARD: If user is null, stop immediately
+    // GUARD: If user is null (logging out), stop immediately
     if (!user?.id) return; 
     try {
       setLoading(true);
@@ -54,7 +70,7 @@ export default function MyProjectsManager({ user }) {
       const { data, error, count } = await query;
       if (error) throw error;
 
-      // 2. Calculate Total Traffic
+      // 2. Calculate Total Traffic (Sum of views from ALL user projects)
       const { data: trafficData, error: trafficError } = await supabase
         .from('projects')
         .select('views')
@@ -68,7 +84,7 @@ export default function MyProjectsManager({ user }) {
       setProjects(data || []);
       setTotalCount(count || 0);
     } catch (error) {
-      console.error(error);
+      console.error("Fetch Error:", error);
       toast.error("DATA_FETCH_FAILURE", { description: "Connection to node lost." });
     } finally {
       setLoading(false);
@@ -76,7 +92,7 @@ export default function MyProjectsManager({ user }) {
   }, [user?.id, currentPage, searchQuery]);
 
   useEffect(() => {
-    if (user?.id) { 
+    if (user?.id) {
       fetchProjects();
     }
   }, [fetchProjects]);
@@ -84,30 +100,23 @@ export default function MyProjectsManager({ user }) {
   const confirmDelete = async () => {
     if (!projectToDelete) return;
     setIsDeleting(true);
-    
     try {
       const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
       if (error) throw error;
       
       toast.success("PROJECT_PURGED", { description: "Resource removed from global index." });
       
-      // 1. Close the modal immediately
+      // 1. Close Modal
       setProjectToDelete(null);
 
-      // 2. FORCE CLEANUP: Remove pointer-events lock manually if Radix gets stuck
-      // This ensures the screen becomes clickable again even if focus is lost
-      document.body.style.pointerEvents = 'auto';
-
-      // 3. Wait a tiny bit for the modal animation to finish before re-fetching
-      // This prevents the "Focus Trap" error
+      // 2. Refresh List
       setTimeout(() => {
         fetchProjects();
       }, 150);
 
     } catch (error) {
+      console.error("Delete Error:", error);
       toast.error("COMMAND_FAILED");
-      // If error, we still want to close the modal usually, or keep it open to show error
-      // But we definitely need to stop loading
     } finally {
       setIsDeleting(false);
     }
@@ -117,13 +126,11 @@ export default function MyProjectsManager({ user }) {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 w-full max-w-[100vw] overflow-hidden">
-      {/* Header Controls */}
+      
+      {/* --- HEADER_CONTROLS --- */}
       <div className="flex flex-col gap-6 border-b border-border pb-6">
         
-        {/* Top Row: Title & Action Button - Responsive Stack */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-8">
-          
-          {/* Title Section */}
           <div className="flex-1 min-w-0">
             <h2 className="text-xl md:text-2xl font-bold tracking-tight uppercase truncate">Local Repository</h2>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
@@ -137,7 +144,6 @@ export default function MyProjectsManager({ user }) {
             </div>
           </div>
 
-          {/* Action Button - Full width on mobile, auto on desktop */}
           <Link href="/create" className="w-full md:w-auto">
             <Button className="w-full md:w-auto bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase h-11 md:h-10 px-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2">
               <Plus size={14} className="md:hidden" />
@@ -146,7 +152,6 @@ export default function MyProjectsManager({ user }) {
           </Link>
         </div>
 
-        {/* Search Bar */}
         <div className="relative group w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-accent transition-colors" />
           <input
@@ -159,9 +164,8 @@ export default function MyProjectsManager({ user }) {
         </div>
       </div>
 
-      {/* The List Table */}
+      {/* --- TABLE_VIEW --- */}
       <div className="border border-border bg-background min-h-[400px] flex flex-col relative shadow-sm">
-        {/* Table Header - Hides non-essential columns on mobile */}
         <div className="grid grid-cols-12 gap-2 md:gap-4 p-3 border-b border-border bg-secondary/10 text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
           <div className="col-span-8 md:col-span-5">Identity_Hash</div>
           <div className="col-span-3 hidden md:block">Analytics</div>
@@ -185,7 +189,7 @@ export default function MyProjectsManager({ user }) {
           )}
         </div>
 
-        {/* Footer Pagination */}
+        {/* FOOTER_PAGINATION */}
         {totalCount > 0 && (
           <div className="p-3 border-t border-border bg-secondary/5 flex justify-between items-center">
             <span className="text-[10px] font-mono text-muted-foreground uppercase">
@@ -215,9 +219,9 @@ export default function MyProjectsManager({ user }) {
         )}
       </div>
 
-      {/* Delete Confirmation Modal */}
-      <Dialog open={!!projectToDelete} onOpenChange={() => setProjectToDelete(null)}>
-        <DialogContent className="border-accent/50 bg-background rounded-none p-0 overflow-hidden sm:max-w-[400px] w-[95vw]">
+      {/* --- DELETE_CONFIRMATION_MODAL --- */}
+      <Dialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <DialogContent className="border-accent/50 bg-background rounded-none p-0 overflow-hidden sm:max-w-[400px] w-[95vw] z-[100]">
            <DialogHeader className="p-6 border-b border-border bg-accent/5">
             <div className="flex items-center gap-2 text-accent mb-2">
               <AlertTriangle size={20} />
@@ -230,7 +234,7 @@ export default function MyProjectsManager({ user }) {
           </DialogHeader>
           <DialogFooter className="p-4 bg-secondary/5 flex flex-col sm:flex-row gap-3 sm:justify-end">
             <Button variant="outline" onClick={() => setProjectToDelete(null)} className="w-full sm:w-auto rounded-none border-border font-mono text-xs uppercase h-10 px-6">Cancel</Button>
-            <Button onClick={confirmDelete} disabled={isDeleting} className="w-full sm:w-auto bg-accent hover:bg-red-700 text-white rounded-none font-mono text-xs uppercase h-10 px-6">
+            <Button onClick={confirmDelete} disabled={isDeleting} className="bg-accent hover:bg-red-700 text-white rounded-none font-mono text-xs uppercase h-10 px-6">
               {isDeleting ? <Loader2 className="animate-spin size={14}" /> : "Confirm Purge"}
             </Button>
           </DialogFooter>
@@ -240,15 +244,15 @@ export default function MyProjectsManager({ user }) {
   );
 }
 
+/**
+ * PROJECT_ROW
+ */
 function ProjectRow({ project, onDeleteRequest }) {
   const router = useRouter();
   const isDraft = project.status === 'draft';
 
-  // Handle row click for navigation
   const handleRowClick = (e) => {
-    // Prevent navigation if the user clicks the Dropdown menu or buttons
     if (e.target.closest('button') || e.target.closest('[role="menuitem"]')) return;
-    
     router.push(`/project/${project.slug}`);
   };
 
@@ -257,7 +261,7 @@ function ProjectRow({ project, onDeleteRequest }) {
       onClick={handleRowClick}
       className="grid grid-cols-12 gap-2 md:gap-4 p-4 items-center group hover:bg-secondary/10 transition-all border-l-2 border-transparent hover:border-accent cursor-pointer"
     >
-      {/* Identity Column: 8 cols on mobile, 5 on desktop */}
+      {/* Identity Column */}
       <div className="col-span-8 md:col-span-5 flex items-center gap-3 md:gap-4">
         <div className="relative w-12 h-12 md:w-16 md:h-10 bg-secondary border border-border flex-shrink-0 overflow-hidden">
           <Image
@@ -300,15 +304,16 @@ function ProjectRow({ project, onDeleteRequest }) {
         </span>
       </div>
 
-      {/* Action Column: 4 cols on mobile, 1 on desktop */}
+      {/* Action Column */}
       <div className="col-span-4 md:col-span-1 flex justify-end">
-        <DropdownMenu>
+        {/* modal={false} is critical to prevent scroll lock crash */}
+        <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none border border-transparent hover:border-border hover:bg-background z-10 relative">
               <MoreHorizontal size={16} />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl min-w-[140px]">
+          <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-2xl min-w-[140px] z-[110]">
             <DropdownMenuItem asChild className="text-[10px] font-mono cursor-pointer rounded-none focus:bg-secondary uppercase h-8">
               <Link href={`/project/${project.slug}/edit`}><Edit3 size={12} className="mr-2" /> Edit_Config</Link>
             </DropdownMenuItem>
