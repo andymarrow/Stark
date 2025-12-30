@@ -10,6 +10,7 @@ import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
 import Pagination from "@/components/ui/Pagination";
 import { COUNTRIES } from "@/constants/options";
+import ExploreTrendingBanner from "./_components/ExploreTrendingBanner"; 
 
 const ITEMS_PER_PAGE = 6;
 
@@ -190,6 +191,10 @@ export default function ExplorePage() {
                 <ExploreFilters filters={filters} setFilters={setFilters} />
             </aside>
 
+            <div className="lg:hidden">
+                <ExploreTrendingBanner />
+            </div>
+
             {/* Mobile Filter Sheet */}
             <div className="lg:hidden mb-4">
                 <FilterSheet filters={filters} setFilters={setFilters} />
@@ -198,6 +203,7 @@ export default function ExplorePage() {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col">
                 
+               
                 <ActiveFilters filters={filters} setFilters={setFilters} />
 
                 {/* NEW: Sorting Controls */}
