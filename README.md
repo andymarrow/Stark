@@ -133,4 +133,16 @@ We welcome contributors who vibe with the Stark aesthetic.
 
 Built with precision. Deployed with intent.  
 
+
+
+## ⚖️ License
+
+**Stark** is source-available. 
+
+- **Personal/Educational Use**: Feel free to fork, modify, and use this for your personal portfolio.
+- **Commercial Use**: Prohibited without prior written consent. If you intend to use this code for a paid product, startup, or commercial venture, you must contact the author.
+
+Licensed under the [Polyform Noncommercial 1.0.0](LICENSE).
+
+
 **Stark // The Creator Protocol**
