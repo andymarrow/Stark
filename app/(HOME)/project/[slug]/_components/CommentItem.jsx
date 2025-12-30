@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { 
   ThumbsUp, ThumbsDown, CornerDownRight, Trash2, ChevronDown, 
   ChevronUp, Loader2, Send, Plus, Edit2, MoreHorizontal, Flag, AlertTriangle 
@@ -90,7 +91,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
 
   // Permissions
   const isOwner = user?.id === comment.user_id;
-  const canDelete = isOwner || isAdminUser; // Uses the state we just fetched
+  const canDelete = isOwner || isAdminUser; 
   const showDislikeCount = isOwner || isAdminUser;
 
   // Sync props
@@ -240,24 +241,14 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     if (onDelete) onDelete(childId);
   };
 
-  // --- DELETE HANDLER (Admin/Owner) ---
   const handleDelete = async () => {
     try {
-        const { error } = await supabase
-            .from('comments')
-            .delete()
-            .eq('id', comment.id);
-
+        const { error } = await supabase.from('comments').delete().eq('id', comment.id);
         if (error) throw error;
-        
         toast.success(isAdminUser && !isOwner ? "Admin Purge Complete" : "Comment Deleted");
-        
-        // Trigger parent to remove this component from UI
         if (onDelete) onDelete(comment.id);
-        
     } catch (error) {
-        console.error("Delete error:", error);
-        toast.error("Delete Failed", { description: error.message });
+        toast.error("Delete Failed");
     }
   };
 
@@ -282,20 +273,29 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
   return (
     <div className={`group animate-in fade-in slide-in-from-bottom-2 ${depth > 0 ? 'ml-6 md:ml-10 border-l border-border/50 pl-4 mt-4' : 'mb-6'}`}>
       <div className="flex gap-3">
-        <div className="w-8 h-8 relative border border-border bg-secondary flex-shrink-0">
+        {/* AVATAR FIX: Use centralized helper with Navigation Link */}
+        <Link 
+            href={`/profile/${comment.author?.username}`}
+            className="w-8 h-8 relative border border-border bg-secondary flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <Image 
             src={getAvatar(comment.author)} 
-            alt="User Avatar" 
+            alt="av" 
             fill 
             className="object-cover" 
           />
-        </div>
+        </Link>
         <div className="flex-1 min-w-0">
           
           {/* Header Row */}
           <div className="flex justify-between items-start mb-1">
             <div className="flex items-center gap-2">
-                <span className="text-xs font-bold font-mono">{comment.author?.username}</span>
+                <Link 
+                    href={`/profile/${comment.author?.username}`}
+                    className="text-xs font-bold font-mono hover:text-accent hover:underline"
+                >
+                    {comment.author?.username || 'Unknown_Node'}
+                </Link>
                 <span className="text-[10px] font-mono text-muted-foreground opacity-50">
                     {new Date(comment.created_at).toLocaleDateString()}
                 </span>
@@ -310,21 +310,16 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="bg-black border border-border rounded-none shadow-xl min-w-[140px] z-50">
-                        
                         {isOwner && (
                             <DropdownMenuItem onClick={() => setIsEditing(true)} className="text-[10px] font-mono hover:bg-secondary cursor-pointer">
                                 <Edit2 size={12} className="mr-2" /> Edit
                             </DropdownMenuItem>
                         )}
-                        
-                        {/* Admin OR Owner can delete */}
                         {canDelete && (
                             <DropdownMenuItem onClick={handleDelete} className="text-[10px] font-mono text-red-500 hover:bg-red-500/10 cursor-pointer">
                                 <Trash2 size={12} className="mr-2" /> {isAdminUser && !isOwner ? "Admin Purge" : "Delete"}
                             </DropdownMenuItem>
                         )}
-
-                        {/* Everyone BUT Owner can report */}
                         {!isOwner && (
                             <DropdownMenuItem onClick={() => setIsReportOpen(true)} className="text-[10px] font-mono text-yellow-500 hover:bg-yellow-500/10 cursor-pointer">
                                 <Flag size={12} className="mr-2" /> Report
@@ -361,26 +356,12 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
           
           {/* Interaction Bar */}
           <div className="flex items-center gap-4 mt-2 select-none">
-            
-            {/* LIKE */}
-            <button 
-                onClick={() => handleVote('like')} 
-                className={`flex items-center gap-1 text-[10px] font-mono transition-colors ${myVote === 'like' ? 'text-accent font-bold' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              <ThumbsUp size={12} className={myVote === 'like' ? 'fill-accent' : ''} /> 
-              {localLikes}
+            <button onClick={() => handleVote('like')} className={`flex items-center gap-1 text-[10px] font-mono transition-colors ${myVote === 'like' ? 'text-accent font-bold' : 'text-muted-foreground hover:text-foreground'}`}>
+              <ThumbsUp size={12} className={myVote === 'like' ? 'fill-accent' : ''} /> {localLikes}
             </button>
-
-            {/* DISLIKE */}
-            <button 
-                onClick={() => handleVote('dislike')} 
-                className={`flex items-center gap-1 text-[10px] font-mono transition-colors ${myVote === 'dislike' ? 'text-red-500 font-bold' : 'text-muted-foreground hover:text-foreground'}`}
-                title={showDislikeCount ? `${localDislikes} Dislikes` : "Dislike"}
-            >
-              <ThumbsDown size={12} className={myVote === 'dislike' ? 'fill-red-500' : ''} /> 
-              {showDislikeCount && localDislikes}
+            <button onClick={() => handleVote('dislike')} className={`flex items-center gap-1 text-[10px] font-mono transition-colors ${myVote === 'dislike' ? 'text-red-500 font-bold' : 'text-muted-foreground hover:text-foreground'}`} title={showDislikeCount ? `${localDislikes} Dislikes` : "Dislike"}>
+              <ThumbsDown size={12} className={myVote === 'dislike' ? 'fill-red-500' : ''} /> {showDislikeCount && localDislikes}
             </button>
-
             <button onClick={() => setIsReplying(!isReplying)} className="text-[10px] font-mono hover:text-accent uppercase tracking-widest">Reply</button>
           </div>
 
