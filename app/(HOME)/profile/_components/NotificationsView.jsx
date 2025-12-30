@@ -9,7 +9,8 @@ import {
   CheckCheck,
   ArrowRightLeft,
   Eye,
-  Check 
+  Check,
+  ShieldCheck 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -17,6 +18,7 @@ import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 import Image from "next/image";
 import Link from "next/link";
+import { getAvatar } from "@/constants/assets";
 
 const PAGE_SIZE = 8;
 
@@ -26,6 +28,7 @@ export default function NotificationsView({ onNotificationRead }) {
   const [filter, setFilter] = useState("all"); 
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
 
   // --- 1. DATA FETCHING ---
   const fetchNotifications = useCallback(async (isLoadMore = false) => {
@@ -41,7 +44,7 @@ export default function NotificationsView({ onNotificationRead }) {
         .from('notifications')
         .select(`
           *,
-          sender:profiles!notifications_sender_id_fkey(id, username, avatar_url)
+          sender:profiles!notifications_sender_id_fkey(id, username, avatar_url, full_name)
         `)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false })
@@ -73,15 +76,12 @@ export default function NotificationsView({ onNotificationRead }) {
   const handleMarkAsSeen = async (id) => {
     // 1. Optimistic UI Update
     if (filter === "unread") {
-        // If unread tab, remove immediately
         setNotifications(prev => prev.filter(n => n.id !== id));
     } else {
-        // If all tab, dim it
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     }
 
     // 2. Database Sync
-    // NOTE: This requires an RLS UPDATE policy on the 'notifications' table!
     const { error } = await supabase
       .from('notifications')
       .update({ is_read: true })
@@ -91,24 +91,36 @@ export default function NotificationsView({ onNotificationRead }) {
       if (onNotificationRead) onNotificationRead();
     } else {
       console.error("Failed to update notification status", error);
-      // Revert fetch on error to ensure consistency
       fetchNotifications();
     }
   };
 
   const handleConnectBack = async (notif) => {
+    setProcessingId(notif.id);
     try {
       const { error } = await supabase
         .from('follows')
         .insert({ follower_id: user.id, following_id: notif.sender_id });
       
-      if (error) throw error;
+      // If error code is 23505, they are already connected. We treat this as success.
+      if (error && error.code !== '23505') throw error;
 
-      toast.success(`Connected with @${notif.sender.username}`);
-      handleMarkAsSeen(notif.id); // Mark as seen after connecting
+      toast.success(`Handshake established with @${notif.sender.username}`);
+      
+      // Update local state immediately to show the "Accepted" status
+      setNotifications(prev => prev.map(n => 
+        n.id === notif.id 
+          ? { ...n, is_read: true, message: "accepted your connection request." } 
+          : n
+      ));
+
+      // Mark as read in DB
+      await handleMarkAsSeen(notif.id); 
     } catch (err) {
-      toast.error("Handshake Failed", { description: "You might already be connected." });
-      handleMarkAsSeen(notif.id); // Still mark as seen to clear the queue
+      console.error(err);
+      toast.error("Transmission Error");
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -180,14 +192,14 @@ export default function NotificationsView({ onNotificationRead }) {
                         key={notif.id} 
                         className={`flex items-start gap-4 p-4 border border-border bg-background transition-all group relative 
                           ${!notif.is_read 
-                            ? 'border-l-2 border-l-accent bg-accent/[0.03] opacity-100 shadow-[inset_4px_0px_0px_0px_rgba(255,0,0,0.05)]' 
-                            : 'opacity-50 grayscale-[0.5]' // DIMMED STATE FOR SEEN
+                            ? 'border-l-2 border-l-accent bg-accent/[0.03] opacity-100 shadow-[inset_4px_0px_0px_rgba(255,0,0,0.05)]' 
+                            : 'opacity-50 grayscale-[0.3]' 
                           }`}
                     >
                         {/* Sender Avatar */}
                         <Link href={`/profile/${notif.sender?.username}`} className="relative w-10 h-10 border border-border bg-secondary flex-shrink-0 overflow-hidden hover:border-accent transition-colors">
                             <Image 
-                              src={notif.sender?.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} 
+                              src={getAvatar(notif.sender)} 
                               alt="sender" fill className="object-cover" 
                             />
                         </Link>
@@ -211,18 +223,31 @@ export default function NotificationsView({ onNotificationRead }) {
 
                         {/* DYNAMIC ACTION BUTTONS */}
                         <div className="flex items-center gap-2">
-                            {/* Connect Back Button for Follows (Only visible if Unread) */}
+                            
+                            {/* 1. Connect Back Logic */}
                             {notif.type === 'follow' && !notif.is_read && (
                                 <Button 
                                     onClick={() => handleConnectBack(notif)}
+                                    disabled={processingId === notif.id}
                                     variant="outline" 
                                     className="h-8 rounded-none border-accent/50 text-accent hover:bg-accent hover:text-white font-mono text-[10px] uppercase hidden sm:flex"
                                 >
-                                    <ArrowRightLeft size={12} className="mr-2" /> Connect_Back
+                                    {processingId === notif.id ? (
+                                        <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                        <><ArrowRightLeft size={12} className="mr-2" /> Connect_Back</>
+                                    )}
                                 </Button>
                             )}
 
-                            {/* View Button for Likes/Projects - CLICKING THIS NO LONGER MARKS AS READ */}
+                            {/* 2. Visual confirmation for mutual connection */}
+                            {notif.type === 'follow' && notif.is_read && (
+                                <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-mono text-green-600 uppercase border border-green-900/20 px-2 py-1 bg-green-500/5">
+                                    <ShieldCheck size={10} /> Link_Secure
+                                </div>
+                            )}
+
+                            {/* 3. View Button */}
                             {notif.link && (
                                 <Link href={notif.link}>
                                     <Button 
@@ -235,7 +260,7 @@ export default function NotificationsView({ onNotificationRead }) {
                                 </Link>
                             )}
 
-                            {/* Mark as Read Button (The "Check") */}
+                            {/* 4. Acknowledge (Check) Button */}
                             {!notif.is_read ? (
                                 <button 
                                     onClick={() => handleMarkAsSeen(notif.id)}
