@@ -129,7 +129,7 @@ We welcome contributors who vibe with the Stark aesthetic.
 
 ---
 
-**[Website]([https://your-live-site.com](https://stark-01.vercel.app/)** · **[Report Issue](https://github.com/andymarrow/stark/issues)** · **[Request Access](https://t.me/andymarrow)**
+**[Website](https://stark-01.vercel.app/)** · **[Report Issue](https://github.com/andymarrow/stark/issues)** · **[Request Access](https://t.me/andymarrow)**
 
 Built with precision. Deployed with intent.  
 
