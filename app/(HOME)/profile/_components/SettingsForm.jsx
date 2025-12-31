@@ -374,7 +374,7 @@ export default function SettingsForm({ user, onUpdate }) {
 
       {/* Footer Actions */}
       <div className="sticky bottom-0 bg-background/80 backdrop-blur-md py-4 border-t border-border flex justify-end gap-4 z-10">
-        <Button variant="outline" className="rounded-none border-border hover:bg-secondary" onClick={() => onUpdate && onUpdate()}>
+        <Button variant="outline" className="rounded-none border-border hover:text-foreground hover:bg-secondary" onClick={() => onUpdate && onUpdate()}>
             Reset
         </Button>
         <Button 

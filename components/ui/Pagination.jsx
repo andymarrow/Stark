@@ -1,6 +1,5 @@
 "use client";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, MoreHorizontal } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export default function Pagination({ 
   currentPage, 
@@ -11,35 +10,32 @@ export default function Pagination({
   // Logic to determine which page numbers to show
   const getPageNumbers = () => {
     const pages = [];
-    const maxVisible = 5; // How many buttons to show max
+    const maxVisible = 5; 
 
     if (totalPages <= maxVisible) {
-      // If few pages, show all: [1, 2, 3, 4]
       for (let i = 1; i <= totalPages; i++) pages.push(i);
     } else {
-      // Complex logic for ... separators
       if (currentPage <= 3) {
-        // Near start: [1, 2, 3, ..., 10]
         pages.push(1, 2, 3, '...', totalPages);
       } else if (currentPage >= totalPages - 2) {
-        // Near end: [1, ..., 8, 9, 10]
         pages.push(1, '...', totalPages - 2, totalPages - 1, totalPages);
       } else {
-        // Middle: [1, ..., 4, 5, 6, ..., 10]
         pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
       }
     }
     return pages;
   };
 
-  if (totalPages <= 1) return null; // Don't show if only 1 page
+  if (totalPages <= 1) return null;
 
   return (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-white/10 bg-zinc-900/30 backdrop-blur-sm select-none">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t transition-colors duration-300 select-none
+      border-zinc-200 bg-white/50 
+      dark:border-white/10 dark:bg-zinc-900/30 backdrop-blur-sm">
       
       {/* 1. Context Info */}
-      <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
-        Viewing Page <span className="text-white font-bold">{currentPage}</span> of <span className="text-white font-bold">{totalPages}</span>
+      <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+        Viewing Page <span className="font-bold text-zinc-900 dark:text-white">{currentPage}</span> of <span className="font-bold text-zinc-900 dark:text-white">{totalPages}</span>
       </div>
 
       {/* 2. Controls */}
@@ -97,7 +93,7 @@ function PageButton({ page, isActive, onClick, isLoading }) {
     
     if (isEllipsis) {
         return (
-            <div className="w-8 h-8 flex items-center justify-center text-zinc-600">
+            <div className="w-8 h-8 flex items-center justify-center text-zinc-400 dark:text-zinc-600">
                 <MoreHorizontal size={14} />
             </div>
         );
@@ -110,8 +106,10 @@ function PageButton({ page, isActive, onClick, isLoading }) {
             className={`
                 w-8 h-8 flex items-center justify-center text-xs font-mono border transition-all duration-200
                 ${isActive 
-                    ? "bg-white text-black border-white font-bold" 
-                    : "bg-transparent text-zinc-400 border-transparent hover:border-white/20 hover:text-white hover:bg-white/5"}
+                    // Light Mode: Black Block / Dark Mode: White Block
+                    ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-black dark:border-white font-bold" 
+                    // Light Mode: Gray Text / Dark Mode: Gray Text
+                    : "bg-transparent text-zinc-500 border-transparent hover:border-zinc-300 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:border-white/20 dark:hover:text-white dark:hover:bg-white/5"}
             `}
         >
             {page}
@@ -125,9 +123,10 @@ function NavButton({ onClick, disabled, icon: Icon }) {
             onClick={onClick}
             disabled={disabled}
             className={`
-                w-8 h-8 flex items-center justify-center text-zinc-400 transition-colors
+                w-8 h-8 flex items-center justify-center transition-colors
+                text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100
+                dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10
                 disabled:opacity-30 disabled:cursor-not-allowed
-                hover:text-white hover:bg-white/10
             `}
         >
             <Icon size={14} />

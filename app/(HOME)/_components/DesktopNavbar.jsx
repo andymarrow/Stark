@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image"; // Ensure Image is imported for the fallback
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { 
   Search, 
@@ -10,8 +10,7 @@ import {
   User, 
   Bell, 
   Settings, 
-  LogOut, 
-  ShieldCheck 
+  LogOut 
 } from "lucide-react";
 import ThemeToggle from "@/components/Themetoggle"; 
 import { Button } from "@/components/ui/button";
@@ -26,14 +25,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getAvatar, DEFAULT_AVATAR } from "@/constants/assets";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+// Helper for consistent avatar fetching logic
+// (Assuming you might not have the constants file in every environment, 
+// I've included a safe inline fallback logic here just in case)
+const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
+const getAvatar = (profile) => {
+    return profile?.avatar_url || profile?.user_metadata?.avatar_url || DEFAULT_AVATAR;
+};
 
 export default function DesktopNavbar() {
   const { user, loading, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  // NEW: Store real DB profile for consistent avatar
   const [userProfile, setUserProfile] = useState(null);
   const pathname = usePathname();
 
@@ -84,15 +89,15 @@ export default function DesktopNavbar() {
   }, [user]);
 
   return (
-    <header className="w-full border-b border-border/40 bg-background/80 backdrop-blur-md">
+    <header className="w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-black/80 backdrop-blur-md transition-colors duration-300">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         
         {/* Logo Section */}
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="h-8 w-8 bg-foreground text-background flex items-center justify-center font-bold text-lg">
+          <div className="h-8 w-8 bg-zinc-900 dark:bg-white text-white dark:text-black flex items-center justify-center font-bold text-lg">
             S
           </div>
-          <span className="font-bold text-xl tracking-tight group-hover:text-accent transition-colors">
+          <span className="font-bold text-xl tracking-tight text-zinc-900 dark:text-white group-hover:text-red-600 transition-colors">
             Stark
           </span>
         </Link>
@@ -103,15 +108,16 @@ export default function DesktopNavbar() {
                 className="relative group w-[300px] cursor-pointer"
                 onClick={() => setOpen(true)}
             >
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors pointer-events-none" />
-                <div className="w-full h-10 pl-10 pr-12 bg-secondary/50 border border-transparent 
-                             hover:border-accent/30 group-hover:bg-background
-                             flex items-center text-sm font-mono text-muted-foreground 
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-hover:text-red-600 transition-colors pointer-events-none" />
+                <div className="w-full h-10 pl-10 pr-12 
+                             bg-zinc-100 dark:bg-zinc-900 
+                             border border-transparent hover:border-zinc-300 dark:hover:border-zinc-700
+                             flex items-center text-sm font-mono text-zinc-500 dark:text-zinc-400 
                              transition-all rounded-none uppercase tracking-tighter">
                     search_index...
                 </div>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <kbd className="inline-flex h-5 select-none items-center gap-1 bg-background border border-border px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                    <kbd className="inline-flex h-5 select-none items-center gap-1 bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 px-1.5 font-mono text-[10px] font-medium text-zinc-500">
                         <span className="text-xs">⌘</span>K
                     </kbd>
                 </div>
@@ -122,43 +128,42 @@ export default function DesktopNavbar() {
         <div className="flex items-center gap-2">
           
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium mr-4 uppercase font-mono tracking-tighter">
-            <Link href="/explore" className={`transition-colors ${pathname === '/explore' ? 'text-accent' : 'hover:text-accent'}`}>Explore</Link>
-            <Link href="/trending" className={`transition-colors ${pathname === '/trending' ? 'text-accent' : 'hover:text-accent'}`}>Trending</Link>
+            <Link href="/explore" className={`transition-colors ${pathname === '/explore' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Explore</Link>
+            <Link href="/trending" className={`transition-colors ${pathname === '/trending' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Trending</Link>
           </nav>
 
           <div className="hidden md:flex items-center gap-1">
             <Link href="/chat">
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none hover:bg-secondary text-muted-foreground hover:text-foreground relative">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white relative">
                     <MessageSquare size={18} />
                 </Button>
             </Link>
             
             <Link href="/create">
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none hover:bg-secondary text-muted-foreground hover:text-accent border border-transparent hover:border-border">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-none hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 hover:text-red-600 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800">
                     <Plus size={20} />
                 </Button>
             </Link>
           </div>
           
-          <div className="hidden md:block h-4 w-[1px] bg-border mx-2" />
+          <div className="hidden md:block h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800 mx-2" />
           
           <ThemeToggle />
           
           {/* --- DYNAMIC AUTH SECTION --- */}
           {loading ? (
-             <div className="w-9 h-9 bg-secondary/50 animate-pulse ml-2" />
+             <div className="w-9 h-9 bg-zinc-100 dark:bg-zinc-800 animate-pulse ml-2" />
           ) : user ? (
             /* LOGGED IN: Profile Dropdown */
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div className="relative ml-2 cursor-pointer group">
-                  <Avatar className="h-9 w-9 rounded-none border border-border group-hover:border-accent transition-colors">
-                    {/* UPDATED: Prioritize userProfile, fall back to auth user, then default */}
+                  <Avatar className="h-9 w-9 rounded-none border border-zinc-200 dark:border-zinc-800 group-hover:border-red-600 transition-colors">
                     <AvatarImage 
                         src={getAvatar(userProfile || user)} 
                         className="object-cover" 
                     />
-                    <AvatarFallback className="rounded-none bg-secondary p-0 overflow-hidden">
+                    <AvatarFallback className="rounded-none bg-zinc-100 dark:bg-zinc-800 p-0 overflow-hidden">
                        <Image 
                           src={DEFAULT_AVATAR} 
                           alt="Fallback" 
@@ -169,60 +174,70 @@ export default function DesktopNavbar() {
                   </Avatar>
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-accent"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-600 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
                     </span>
                   )}
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 rounded-none border-border bg-background p-0 mt-2 shadow-2xl">
-                <DropdownMenuLabel className="font-mono text-[10px] uppercase text-muted-foreground px-4 py-3 bg-secondary/10">
+              
+              <DropdownMenuContent align="end" className="w-60 rounded-none border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black p-0 mt-2 shadow-2xl">
+                
+                {/* Header Label */}
+                <DropdownMenuLabel className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
                   User_Node: {user.user_metadata?.username || 'STARK_USER'}
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="m-0" />
                 
-                <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-secondary cursor-pointer">
-                  <Link href="/profile" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
-                    <User className="mr-3 h-4 w-4 text-muted-foreground" />
-                    My Dossier
-                  </Link>
-                </DropdownMenuItem>
+                {/* Menu Items */}
+                <div className="p-1">
+                    <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
+                      <Link href="/profile" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
+                        <User className="mr-3 h-4 w-4 opacity-70" />
+                        My Dossier
+                      </Link>
+                    </DropdownMenuItem>
 
-                <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-secondary cursor-pointer">
-                  <Link href="/profile?view=notifications" className="flex items-center justify-between w-full font-mono text-xs uppercase tracking-widest">
-                    <div className="flex items-center">
-                        <Bell className="mr-3 h-4 w-4 text-muted-foreground" />
-                        Signal_Inbox
-                    </div>
-                    {unreadCount > 0 && (
-                        <span className="bg-accent text-white px-1.5 py-0.5 text-[9px] font-bold">
-                            {unreadCount}
-                        </span>
-                    )}
-                  </Link>
-                </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
+                      <Link href="/profile?view=notifications" className="flex items-center justify-between w-full font-mono text-xs uppercase tracking-widest">
+                        <div className="flex items-center">
+                            <Bell className="mr-3 h-4 w-4 opacity-70" />
+                            Signal_Inbox
+                        </div>
+                        {unreadCount > 0 && (
+                            <span className="bg-red-600 text-white px-1.5 py-0.5 text-[9px] font-bold">
+                                {unreadCount}
+                            </span>
+                        )}
+                      </Link>
+                    </DropdownMenuItem>
 
-                <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-secondary cursor-pointer">
-                  <Link href="/profile?view=settings" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
-                    <Settings className="mr-3 h-4 w-4 text-muted-foreground" />
-                    Configuration
-                  </Link>
-                </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
+                      <Link href="/profile?view=settings" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
+                        <Settings className="mr-3 h-4 w-4 opacity-70" />
+                        Configuration
+                      </Link>
+                    </DropdownMenuItem>
+                </div>
 
-                <DropdownMenuSeparator className="m-0" />
-                <DropdownMenuItem 
-                  onClick={() => signOut()}
-                  className="rounded-none px-4 py-2.5 focus:bg-red-500/10 text-red-500 focus:text-red-500 cursor-pointer font-mono text-xs uppercase tracking-widest"
-                >
-                  <LogOut className="mr-3 h-4 w-4" />
-                  Terminate Session
-                </DropdownMenuItem>
+                <DropdownMenuSeparator className="m-0 bg-zinc-200 dark:bg-zinc-800" />
+                
+                {/* Logout */}
+                <div className="p-1">
+                    <DropdownMenuItem 
+                      onClick={() => signOut()}
+                      className="rounded-none px-4 py-2.5 focus:bg-red-50 dark:focus:bg-red-950/30 text-red-600 focus:text-red-700 dark:focus:text-red-500 cursor-pointer font-mono text-xs uppercase tracking-widest"
+                    >
+                      <LogOut className="mr-3 h-4 w-4" />
+                      Terminate Session
+                    </DropdownMenuItem>
+                </div>
+
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             /* LOGGED OUT: Login Button */
             <Link href="/login">
-              <Button className="bg-accent hover:bg-red-700 text-white font-mono text-xs uppercase tracking-widest h-9 px-6 rounded-none ml-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all">
+              <Button className="bg-zinc-900 dark:bg-red-600 hover:bg-zinc-800 dark:hover:bg-red-700 text-white font-mono text-xs uppercase tracking-widest h-9 px-6 rounded-none ml-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] dark:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all">
                   Login_Access
               </Button>
             </Link>

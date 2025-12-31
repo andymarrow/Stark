@@ -344,7 +344,7 @@ export default function PersonalHeader({ user, onUpdate }) {
                                 </Button>
                             </Link>
                         )}
-                        <Button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none h-10 bg-secondary/50 border border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase">
+                        <Button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none h-10 bg-secondary/50 border hover:bg-secondary border-border text-foreground hover:border-accent hover:text-accent rounded-none font-mono text-xs uppercase">
                             <Edit3 size={14} className="mr-2" /> Edit Profile
                         </Button>
                         <Button 

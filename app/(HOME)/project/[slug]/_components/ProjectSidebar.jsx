@@ -286,7 +286,7 @@ export default function ProjectSidebar({ project }) {
         
         {project.demo_link ? (
           <a href={project.demo_link} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent rounded-none transition-colors">
+            <Button variant="outline" className="w-full h-12 bg-transparent hover:bg-accent/10 text-foreground font-mono text-sm border border-border hover:border-accent hover:text-accent rounded-none transition-colors">
               <Globe className="mr-2 h-4 w-4" />
               Live Demo
             </Button>

@@ -350,29 +350,36 @@ export default function ProfileHeader({ user, currentUser }) {
                                 variant="outline" 
                                 onClick={handleMessageClick}
                                 disabled={isInitializingChat}
-                                className="flex-1 h-10 rounded-none font-mono text-xs uppercase border-border hover:border-accent hover:bg-accent hover:text-white transition-all group"
+                                className="flex-1 h-10 rounded-none font-mono text-xs uppercase transition-all group
+                                          border border-zinc-200 dark:border-zinc-800 
+                                          text-zinc-700 dark:text-zinc-300
+                                          hover:border-red-600 hover:bg-red-600 hover:text-white"
                             >
                                 {isInitializingChat ? (
-                                  <Loader2 className="animate-spin" size={14} />
+                                    <Loader2 className="animate-spin" size={14} />
                                 ) : isFollowing && followsMe ? (
-                                  <>
-                                    <MessageSquare size={14} className="mr-2" /> Msg
-                                  </>
+                                    <>
+                                        {/* Inherits parent hover:text-white automatically */}
+                                        <MessageSquare size={14} className="mr-2" /> 
+                                        Msg
+                                    </>
                                 ) : (
-                                  <>
-                                    <Lock size={14} className="mr-2 text-muted-foreground group-hover:text-white" /> Msg
-                                  </>
+                                    <>
+                                        {/* FIX: Changed group-hover:text-accent to group-hover:text-white/80 or inherit */}
+                                        <Lock size={14} className="mr-2   transition-colors" /> 
+                                        Msg
+                                    </>
                                 )}
                             </Button>
                             
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-10 w-10 p-0 rounded-none border-border hover:bg-secondary">
+                                <Button variant="outline" className="h-10 w-10 p-0 rounded-none border-border ">
                                     <MoreHorizontal size={16} />
                                 </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-none border-border bg-background min-w-[140px]">
-                                <DropdownMenuItem onClick={handleShareProfile} className="text-xs font-mono cursor-pointer focus:bg-secondary">
+                                <DropdownMenuItem onClick={handleShareProfile} className="text-xs font-mono cursor-pointer ">
                                     <Share2 size={14} className="mr-2" /> Share Node
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator className="bg-border" />

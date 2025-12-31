@@ -31,7 +31,7 @@ export default function SocialAuth() {
         variant="outline" 
         disabled={isLoading}
         onClick={() => handleSocialLogin("github")}
-        className="h-12 rounded-none border-border hover:bg-secondary hover:border-foreground transition-all font-mono text-xs uppercase"
+        className="h-12 rounded-none border-border hover:bg-secondary hover:text-foreground hover:border-foreground transition-all font-mono text-xs uppercase"
       >
         <Github size={16} className="mr-2" />
         GitHub
@@ -40,7 +40,7 @@ export default function SocialAuth() {
         variant="outline" 
         disabled={isLoading}
         onClick={() => handleSocialLogin("google")}
-        className="h-12 rounded-none border-border hover:bg-secondary hover:border-foreground transition-all font-mono text-xs uppercase"
+        className="h-12 rounded-none border-border hover:bg-secondary hover:text-foreground hover:border-foreground transition-all font-mono text-xs uppercase"
       >
         {/* Google SVG Icon */}
         <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
