@@ -1,13 +1,13 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Paperclip, Smile, X, Edit3, Loader2 } from "lucide-react";
+import { Send, Paperclip, Smile, X, Edit3, Loader2, Reply } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 
 const EMOJI_SET = ["💻", "🚀", "🔥", "✨", "🎨", "🛠️", "📦", "⚡", "💯", "✅", "❌", "❤️", "😂", "🤔", "🙌", "👋"];
 
-export default function ChatInput({ onSend, convId, editMessage, onCancelEdit }) {
+export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, replyMessage, onCancelReply }) {
   const { user } = useAuth();
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -15,13 +15,10 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // If entering edit mode, populate text
+  // Sync text if editing
   useEffect(() => {
-    if (editMessage) {
-        setText(editMessage.text);
-    } else {
-        setText("");
-    }
+    if (editMessage) setText(editMessage.text);
+    else setText("");
   }, [editMessage]);
 
   const broadcastTyping = (isTyping) => {
@@ -33,7 +30,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
 
   const handleInputChange = (e) => {
     setText(e.target.value);
-    if (!editMessage) { // Don't broadcast typing for edits
+    if (!editMessage) {
         if (e.target.value.length > 0) {
             broadcastTyping(true);
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -50,32 +47,32 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
     if (editMessage) {
         // --- EDIT LOGIC ---
         try {
-            // Check edit count limit (Max 2)
-            if ((editMessage.edit_count || 0) >= 2) {
-                toast.error("Edit limit reached (Max 2)");
-                onCancelEdit();
-                return;
-            }
-
-            const { error } = await supabase
+             if ((editMessage.edit_count || 0) >= 2) { 
+                 toast.error("Edit limit reached (Max 2)"); 
+                 onCancelEdit();
+                 return; 
+             }
+             const { error } = await supabase
                 .from('messages')
                 .update({ 
                     text: text, 
-                    edit_count: (editMessage.edit_count || 0) + 1,
-                    // If it was 'pending', it stays pending. We don't change status.
+                    edit_count: (editMessage.edit_count || 0) + 1 
                 })
                 .eq('id', editMessage.id);
 
-            if (error) throw error;
-            toast.success("Message patched");
-            onCancelEdit();
-        } catch (err) {
-            toast.error("Edit Failed");
+             if (error) throw error;
+             toast.success("Message patched");
+             onCancelEdit();
+        } catch(e) { 
+            toast.error("Edit Failed"); 
         }
     } else {
-        // --- SEND LOGIC ---
+        // --- NEW MESSAGE LOGIC ---
         broadcastTyping(false);
-        onSend(text, 'text');
+        // If replying, attach metadata
+        const metadata = replyMessage ? { reply_to: { id: replyMessage.id, text: replyMessage.text.substring(0, 50) + "..." } } : {};
+        onSend(text, 'text', metadata);
+        onCancelReply?.();
     }
     setText("");
     setShowEmoji(false);
@@ -95,6 +92,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
         const fileExt = file.name.split('.').pop();
         const fileName = `${convId}/${Date.now()}.${fileExt}`;
         
+        // Ensure bucket 'chat-media' exists in Supabase
         const { error: uploadError } = await supabase.storage
             .from('chat-media')
             .upload(fileName, file);
@@ -119,9 +117,9 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
   return (
     <div className="p-4 bg-background border-t border-border relative">
       
-      {/* Edit Mode Banner */}
+      {/* EDIT MODE BANNER */}
       {editMessage && (
-        <div className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4">
+        <div className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4 animate-in slide-in-from-bottom-2">
             <span className="text-[10px] font-mono text-accent uppercase flex items-center gap-2">
                 <Edit3 size={12} /> Editing Payload ({editMessage.edit_count || 0}/2)
             </span>
@@ -131,12 +129,28 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
         </div>
       )}
 
-      {/* Emoji Picker (Same as before) */}
+      {/* REPLY MODE BANNER */}
+      {replyMessage && !editMessage && (
+        <div className="absolute top-0 left-0 right-0 -translate-y-full bg-secondary/90 border-t border-border p-2 flex justify-between items-center px-4 backdrop-blur-md animate-in slide-in-from-bottom-2">
+            <span className="text-[10px] font-mono text-foreground uppercase flex items-center gap-2 truncate max-w-[80%]">
+                <Reply size={12} /> Replying to: "{replyMessage.text.substring(0, 30)}..."
+            </span>
+            <button onClick={onCancelReply} className="text-muted-foreground hover:text-foreground">
+                <X size={14} />
+            </button>
+        </div>
+      )}
+
+      {/* EMOJI PICKER */}
       {showEmoji && (
         <div className="absolute bottom-20 left-4 z-50 bg-background border border-border p-3 shadow-2xl animate-in slide-in-from-bottom-2 duration-200">
             <div className="grid grid-cols-4 gap-2">
                 {EMOJI_SET.map((emoji) => (
-                    <button key={emoji} onClick={() => setText(prev => prev + emoji)} className="w-10 h-10 hover:bg-secondary text-lg">
+                    <button 
+                        key={emoji} 
+                        onClick={() => setText(prev => prev + emoji)} 
+                        className="w-10 h-10 flex items-center justify-center hover:bg-secondary text-lg transition-colors"
+                    >
                         {emoji}
                     </button>
                 ))}
@@ -144,10 +158,10 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
         </div>
       )}
 
-      {/* Main Input */}
+      {/* MAIN INPUT AREA */}
       <div className="relative flex items-end gap-2 bg-secondary/5 border border-border focus-within:border-accent transition-colors p-2">
         
-        {/* Upload */}
+        {/* File Upload */}
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
         <button 
             onClick={() => fileInputRef.current?.click()}
@@ -178,7 +192,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit })
             <button 
                 onClick={handleSend}
                 disabled={!text.trim() && !editMessage}
-                className={`p-2 transition-all duration-300 ${text.trim() ? 'text-accent' : 'text-zinc-800'}`}
+                className={`p-2 transition-all duration-300 ${text.trim() ? 'text-accent' : 'text-zinc-800 pointer-events-none opacity-50'}`}
             >
                 <Send size={20} fill={text.trim() ? "currentColor" : "none"} />
             </button>

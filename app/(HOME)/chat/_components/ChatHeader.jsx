@@ -1,33 +1,45 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe, Share2, ShieldBan, Info } from "lucide-react";
 import dynamic from 'next/dynamic';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import GroupInfoDialog from "./GroupInfoDialog"; // Make sure this file exists from previous steps
+import { supabase } from "@/lib/supabaseClient";
 
-const LiveRoomWrapper = dynamic(
-  () => import("./live/LiveRoomWrapper"), 
-  { ssr: false }
-);
+// Lazy load Agora wrapper to prevent SSR issues
+const LiveRoomWrapper = dynamic(() => import("./live/LiveRoomWrapper"), { ssr: false });
 
-export default function ChatHeader({ conversation, onBack }) {
+export default function ChatHeader({ conversation, onBack, currentUser }) {
   const [isLiveOpen, setIsLiveOpen] = useState(false);
   const [isAudioOnly, setIsAudioOnly] = useState(false);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
 
-  // Safety checks for data
+  // Safety checks
   const isDirect = conversation?.type === 'direct';
   const name = isDirect ? conversation?.name : conversation?.title;
   
-  // Robust Fallback Image Logic
+  // Robust Image Fallback
   const image = conversation?.avatar || (isDirect 
     ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" 
     : "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100"
   );
 
-  // Determine if current user is the "Host" (Owner) of this group/channel
-  // Note: For Direct chats, both parties are effectively hosts/equals in Agora
-  const isOwner = conversation?.ownerId === conversation?.currentUserId; // Ensure currentUserId is passed in props if needed, or derived
+  const handleCopyLink = () => {
+    // Assuming deployed URL structure
+    const link = `${window.location.origin}/chat?id=${conversation?.id}`;
+    navigator.clipboard.writeText(link);
+    toast.success("Link Copied", { description: "Invite link copied to clipboard." });
+  };
 
-  const handleStartCall = (audioOnly = false) => {
+  const handleBlockUser = async () => {
+    toast.info("Block Protocol Initiated (Pending Backend Implementation)");
+  };
+
+  const startCall = (audioOnly) => {
     setIsAudioOnly(audioOnly);
     setIsLiveOpen(true);
   };
@@ -36,8 +48,8 @@ export default function ChatHeader({ conversation, onBack }) {
     <>
       <div className="h-16 border-b border-border bg-background/95 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm">
         
-        {/* Left: Info */}
-        <div className="flex items-center gap-3">
+        {/* Left: Info & Back Button */}
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isDirect && setIsInfoOpen(true)}>
           <button 
               onClick={onBack}
               className="md:hidden p-2 -ml-2 text-muted-foreground hover:text-foreground transition-colors"
@@ -95,19 +107,19 @@ export default function ChatHeader({ conversation, onBack }) {
         {/* Right: Actions */}
         <div className="flex items-center gap-1 text-muted-foreground">
           
-          {/* VIDEO CALL BUTTON */}
+          {/* VIDEO CALL */}
           <button 
-            onClick={() => handleStartCall(false)} // Video Mode
+            onClick={() => startCall(false)} 
             className={`p-2 hover:bg-secondary/20 hover:text-accent transition-colors ${!isDirect ? "text-red-500 hover:text-red-600 animate-pulse" : ""}`}
             title={isDirect ? "Video Call" : "Join Live Stream"}
           >
               <Video size={18} />
           </button>
 
-          {/* AUDIO CALL BUTTON (Only for Direct usually) */}
+          {/* AUDIO CALL (Direct Only) */}
           {isDirect && (
             <button 
-                onClick={() => handleStartCall(true)} // Audio Mode
+                onClick={() => startCall(true)} 
                 className="p-2 hover:bg-secondary/20 hover:text-accent transition-colors"
                 title="Voice Call"
             >
@@ -115,20 +127,49 @@ export default function ChatHeader({ conversation, onBack }) {
             </button>
           )}
 
-          <button className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors">
-              <MoreVertical size={18} />
-          </button>
+          {/* MENU DROPDOWN */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors">
+                    <MoreVertical size={18} />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-black border-border rounded-none">
+                <DropdownMenuItem onClick={handleCopyLink} className="text-xs font-mono cursor-pointer">
+                    <Share2 size={14} className="mr-2"/> Share Link
+                </DropdownMenuItem>
+                
+                {!isDirect && (
+                    <DropdownMenuItem onClick={() => setIsInfoOpen(true)} className="text-xs font-mono cursor-pointer">
+                        <Info size={14} className="mr-2"/> Node Info
+                    </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSeparator className="bg-border" />
+                
+                <DropdownMenuItem onClick={handleBlockUser} className="text-xs font-mono text-red-500 focus:text-red-500 cursor-pointer">
+                    <ShieldBan size={14} className="mr-2"/> {isDirect ? "Block User" : "Report Node"}
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* --- LIVE STAGE OVERLAY --- */}
+      {/* MODALS */}
       {isLiveOpen && (
         <LiveRoomWrapper 
             channelId={conversation?.id} 
-            // In Direct messages, everyone is a 'host' (publisher). In Groups, only owner is initially.
-            isHost={isDirect || isOwner} 
+            isHost={conversation?.owner_id === currentUser} 
             audioOnly={isAudioOnly}
             onClose={() => setIsLiveOpen(false)} 
+        />
+      )}
+      
+      {!isDirect && (
+        <GroupInfoDialog 
+            isOpen={isInfoOpen} 
+            onClose={() => setIsInfoOpen(false)} 
+            conversation={conversation} 
         />
       )}
     </>

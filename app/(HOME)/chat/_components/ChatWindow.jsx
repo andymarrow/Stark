@@ -19,8 +19,9 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   const [role, setRole] = useState('member'); // 'owner', 'admin', 'member'
   const [pinnedMsg, setPinnedMsg] = useState(null);
 
-  // Edit State
+  // Interactive States (Edit & Reply)
   const [messageToEdit, setMessageToEdit] = useState(null);
+  const [messageToReply, setMessageToReply] = useState(null);
 
   const scrollRef = useRef(null);
 
@@ -88,7 +89,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
           setIsOtherTyping(false);
       })
 
-      // B. Listen for Message Updates (Pins/Edits)
+      // B. Listen for Message Updates (Pins/Edits/Reactions)
       .on('postgres_changes', { 
           event: 'UPDATE', 
           schema: 'public', 
@@ -131,7 +132,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isOtherTyping]);
 
-  const handleSend = async (content, type = 'text') => {
+  const handleSend = async (content, type = 'text', metadata = {}) => {
     // If we are editing, ChatInput handles the update logic internally or via a separate handler.
     // This function is purely for NEW messages.
     if (!content) return;
@@ -143,7 +144,8 @@ export default function ChatWindow({ convId, onBack, initialData }) {
           conversation_id: convId,
           sender_id: user.id,
           text: content,
-          type: type 
+          type: type,
+          metadata: metadata // Pass reply metadata if exists
         });
 
       if (error) throw error;
@@ -168,7 +170,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     <div className="flex flex-col h-full bg-background relative">
       
       {/* 1. Header */}
-      {conversation && <ChatHeader conversation={conversation} onBack={onBack} />}
+      {conversation && <ChatHeader conversation={conversation} onBack={onBack} currentUser={user.id} />}
 
       {/* 2. Pinned Message (Sticky under header) */}
       {pinnedMsg && (
@@ -205,7 +207,9 @@ export default function ChatWindow({ convId, onBack, initialData }) {
                   isMe={msg.sender_id === user.id} 
                   role={role} // Pass role for context menu
                   chatId={convId}
+                  currentUserId={user.id} // Pass for reactions
                   onEdit={() => setMessageToEdit(msg)} // Hook up edit trigger
+                  onReply={(m) => setMessageToReply(m)} // Hook up reply trigger
                 />
             ))}
             
@@ -226,8 +230,14 @@ export default function ChatWindow({ convId, onBack, initialData }) {
           <ChatInput 
             onSend={handleSend} 
             convId={convId} 
+            
+            // Edit Props
             editMessage={messageToEdit}
             onCancelEdit={() => setMessageToEdit(null)}
+            
+            // Reply Props
+            replyMessage={messageToReply}
+            onCancelReply={() => setMessageToReply(null)}
           />
       )}
     </div>

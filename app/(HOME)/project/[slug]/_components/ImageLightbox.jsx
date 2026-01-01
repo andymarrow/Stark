@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import Image from "next/image";
@@ -7,8 +8,15 @@ import Image from "next/image";
 export default function ImageLightbox({ isOpen, onClose, images, initialIndex }) {
   const [index, setIndex] = useState(initialIndex);
   const [zoom, setZoom] = useState(1);
+  const [mounted, setMounted] = useState(false);
 
-  // Sync index when opening and reset zoom
+  // 1. Handle Mounting for Portal
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  // Sync index when opening
   useEffect(() => {
     if (isOpen) {
       setIndex(initialIndex);
@@ -45,7 +53,11 @@ export default function ImageLightbox({ isOpen, onClose, images, initialIndex })
     setZoom((prev) => (prev > 1 ? 1 : 2));
   };
 
-  return (
+  // If not mounted yet, return null (SSR safety)
+  if (!mounted) return null;
+
+  // 2. Render via Portal to document.body
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -53,31 +65,40 @@ export default function ImageLightbox({ isOpen, onClose, images, initialIndex })
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex flex-col select-none"
+          className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-sm flex flex-col w-screen h-screen select-none"
         >
-          {/* 1. Toolbar */}
-          <div className="flex justify-between items-center p-4 border-b border-white/10 bg-black/50 z-50">
+          {/* 1. Toolbar (Fixed Top) */}
+          <div className="absolute top-0 left-0 right-0 flex justify-between items-center p-4 border-b border-white/10 bg-black/50 z-[10000]">
             <div className="text-white font-mono text-xs">
               IMG_0{index + 1} <span className="text-zinc-500">/</span> 0{images.length}
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleZoomOut}
-                className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors rounded-full"
               >
                 <ZoomOut size={20} />
               </button>
               <button
-                onClick={handleZoomIn}
-                className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}
+                className="p-2 text-zinc-400 hover:text-white hover:bg-white/10 transition-colors rounded-full"
               >
                 <ZoomIn size={20} />
               </button>
               <div className="w-[1px] h-6 bg-white/10 mx-2" />
+              
+              {/* FIX: Robust Close Button */}
               <button
-                onClick={onClose}
-                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-white/10 transition-colors"
+                type="button"
+                onClick={(e) => { 
+                    e.preventDefault();
+                    e.stopPropagation(); 
+                    onClose(); 
+                }}
+                className="p-2 text-zinc-400 hover:text-red-500 hover:bg-white/10 transition-colors rounded-full cursor-pointer pointer-events-auto relative z-50"
               >
                 <X size={20} />
               </button>
@@ -85,67 +106,76 @@ export default function ImageLightbox({ isOpen, onClose, images, initialIndex })
           </div>
 
           {/* 2. Main Canvas */}
-          <div className="flex-1 relative overflow-hidden flex items-center justify-center">
+          <div 
+            className="flex-1 relative overflow-hidden flex items-center justify-center w-full h-full"
+            onClick={onClose} // Optional: Close when clicking empty space
+          >
             
-            {/* Prev Button Zone */}
-            <button
-              onClick={prevImage}
-              className="absolute left-0 top-0 bottom-0 w-20 flex items-center justify-center group z-40 outline-none"
-            >
-              <div className="p-3 bg-black/50 border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-                <ChevronLeft size={24} />
-              </div>
-            </button>
+            {/* Navigation Buttons */}
+            {images.length > 1 && (
+                <>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-black/50 border border-white/10 text-white rounded-full hover:bg-white/10 transition-colors z-[10000] cursor-pointer"
+                    >
+                    <ChevronLeft size={24} />
+                    </button>
 
-            {/* Next Button Zone */}
-            <button
-              onClick={nextImage}
-              className="absolute right-0 top-0 bottom-0 w-20 flex items-center justify-center group z-40 outline-none"
-            >
-              <div className="p-3 bg-black/50 border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
-                <ChevronRight size={24} />
-              </div>
-            </button>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-black/50 border border-white/10 text-white rounded-full hover:bg-white/10 transition-colors z-[10000] cursor-pointer"
+                    >
+                    <ChevronRight size={24} />
+                    </button>
+                </>
+            )}
 
             {/* The Image Container */}
-            <div className="w-full h-full flex items-center justify-center overflow-hidden cursor-move">
+            <div 
+                className="w-full h-full flex items-center justify-center overflow-hidden cursor-move"
+                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image wrapper
+            >
               <motion.div
-                key={index} // Reset animation when image changes
+                key={index}
                 drag={zoom > 1}
                 dragConstraints={{ left: -400 * zoom, right: 400 * zoom, top: -300 * zoom, bottom: 300 * zoom }}
                 dragElastic={0.1}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: zoom, x: zoom === 1 ? 0 : undefined, y: zoom === 1 ? 0 : undefined }}
-                transition={{ type: "spring", stiffness: 300, damping: 30, opacity: { duration: 0.3 } }}
-                className="relative w-full h-full"
-                onDoubleClick={toggleZoom}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="relative w-full h-full flex items-center justify-center"
+                onDoubleClick={(e) => { e.stopPropagation(); toggleZoom(); }}
               >
-                <Image
-                  src={images[index]}
-                  alt="Preview"
-                  fill
-                  className="object-contain pointer-events-none"
-                  quality={100}
-                  priority
-                />
+                {/* Image Wrapper */}
+                <div className="relative w-full h-full max-w-[95vw] max-h-[85vh]">
+                    <Image
+                        src={images[index]}
+                        alt="Preview"
+                        fill
+                        className="object-contain pointer-events-none"
+                        quality={100}
+                        priority
+                    />
+                </div>
               </motion.div>
             </div>
           </div>
 
           {/* 3. Footer Data */}
-          <div className="p-4 border-t border-white/10 bg-black/50 flex justify-between items-center text-xs font-mono text-zinc-500">
+          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10 bg-black/50 flex justify-between items-center text-xs font-mono text-zinc-500 z-[10000]">
             <div className="flex items-center gap-4">
                <div>ZOOM: {Math.round(zoom * 100)}%</div>
                <div className="hidden sm:block text-[10px] text-zinc-700">DBL_CLICK TO TOGGLE</div>
             </div>
-            <div className="flex gap-4">
-              <button className="hover:text-white flex items-center gap-1 transition-colors">
+            <button className="hover:text-white flex items-center gap-1 transition-colors">
                 <Download size={12} /> DOWNLOAD_SOURCE
-              </button>
-            </div>
+            </button>
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body // Renders at the root of the document
   );
 }
