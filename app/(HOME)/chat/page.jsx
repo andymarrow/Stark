@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth  } from "@/app/_context/AuthContext";
+import { useAuth } from "@/app/_context/AuthContext";
 import ChatSidebar from "./_components/ChatSidebar";
-import ChatWindow from "./_components/ChatWindow"; 
+import ChatWindow from "./_components/ChatWindow";
 import { MessageSquareDashed, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
@@ -18,29 +18,31 @@ function ChatContent() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // --- NEW: Filter State ---
-  const [activeTab, setActiveTab] = useState("ALL_CHATS"); 
+  // Tabs: PRIMARY, GROUPS, CHANNELS, REQUESTS
+  const [activeTab, setActiveTab] = useState("PRIMARY"); 
 
   useEffect(() => {
     if (chatIdFromUrl) setSelectedConvId(chatIdFromUrl);
   }, [chatIdFromUrl]);
 
-  /**
-   * Fetch real conversations with filtering metadata
-   */
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     try {
+      // Fetch conversations with the new Schema fields
       const { data, error } = await supabase
         .from('conversation_participants')
         .select(`
-          is_archived,
+          status,
+          role,
           unread_count,
           conversation:conversations (
             id, 
             type,
+            title,
+            is_public,
             last_message, 
             last_message_at,
+            owner_id,
             participants:conversation_participants (
               profile:profiles (id, username, avatar_url, full_name)
             )
@@ -54,22 +56,37 @@ function ChatContent() {
         const conv = item.conversation;
         const otherParticipant = conv.participants.find(p => p.profile.id !== user.id);
         
+        // Determine Display Name & Avatar
+        let displayName = "Unknown";
+        let displayAvatar = null;
+
+        if (conv.type === 'direct') {
+            displayName = otherParticipant?.profile.full_name || otherParticipant?.profile.username;
+            displayAvatar = otherParticipant?.profile.avatar_url;
+        } else {
+            displayName = conv.title || "Untitled Group";
+            // In a real app, groups have their own avatar column, fallback to initials
+            displayAvatar = null; 
+        }
+
         return {
           id: conv.id,
-          type: conv.type || 'direct',
-          isArchived: item.is_archived || false,
+          type: conv.type, // 'direct', 'group', 'channel'
+          myStatus: item.status, // 'active', 'pending', 'muted'
           unreadCount: item.unread_count || 0,
           lastMessage: conv.last_message,
           lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-          name: otherParticipant?.profile.full_name || otherParticipant?.profile.username || "Unknown Node",
-          avatar: otherParticipant?.profile.avatar_url,
+          name: displayName,
+          avatar: displayAvatar,
+          isPublic: conv.is_public,
+          ownerId: conv.owner_id
         };
       }).sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
 
       setConversations(formatted);
     } catch (err) {
       console.error(err);
-      toast.error("Frequency Sync Failed");
+      toast.error("Signal Sync Failed");
     } finally {
       setLoading(false);
     }
@@ -78,57 +95,38 @@ function ChatContent() {
   useEffect(() => {
     if (user) {
       fetchConversations();
+      // Subscribe to changes
       const channel = supabase
         .channel('sidebar-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversation_participants', filter: `user_id=eq.${user.id}` }, fetchConversations)
         .subscribe();
 
       return () => { supabase.removeChannel(channel); };
     }
   }, [user, fetchConversations]);
 
-  // --- FILTER LOGIC ---
+  // --- FILTER LOGIC (The Brain) ---
   const filteredConversations = conversations.filter(conv => {
-    if (activeTab === "ARCHIVED") return conv.isArchived;
-    if (conv.isArchived) return false; // Hide archived from other tabs
+    if (activeTab === "REQUESTS") {
+        // Incoming requests from strangers
+        return conv.type === 'direct' && conv.myStatus === 'pending'; 
+    }
+    if (activeTab === "GROUPS") return conv.type === 'group';
+    if (activeTab === "CHANNELS") return conv.type === 'channel';
     
-    if (activeTab === "UNREAD") return conv.unreadCount > 0;
-    if (activeTab === "GROUPS") return conv.type === "group";
-    return true; // ALL_CHATS
+    // PRIMARY: Direct chats that are ACTIVE (Accepted or Mutual)
+    // Note: Outgoing pending chats (sent by me) usually stay in Primary or a separate "Sent" list. 
+    // For now, we show them in Primary so the user can see their sent message status.
+    return conv.type === 'direct' && conv.myStatus !== 'pending'; 
   });
 
-   // --- 1. HANDLE AUTH LOADING ---
-  if (authLoading) {
-     return (
-        <div className="h-screen flex items-center justify-center bg-background">
-            <Loader2 className="animate-spin text-accent" />
-        </div>
-     );
-  }
+  if (authLoading) return <div className="h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-accent" /></div>;
+  if (!user) return <LoginRequiredState />;
 
-  // --- 2. HANDLE NOT LOGGED IN (SHOW CUTE STATE) ---
-  if (!user) {
-    return (
-        <LoginRequiredState 
-            message="Secure Channel Locked" 
-            description="You must be logged in to intercept or broadcast signals on this frequency."
-        />
-    );
-  }
-
-  // --- 3. NORMAL RENDER (Logged In) ---
-  if (loading) {
-    // This is the loading state for fetching chats, only show if user exists
-    return (
-        <div className="h-screen flex items-center justify-center bg-background">
-            <Loader2 className="animate-spin text-accent" />
-        </div>
-    );
-  }
   return (
     <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
-      
-      {/* SIDEBAR PANE */}
+      {/* SIDEBAR */}
       <div className={`
         w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full border-r border-border bg-background transition-transform duration-300 ease-in-out absolute md:relative z-10
         ${selectedConvId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
@@ -142,7 +140,7 @@ function ChatContent() {
         />
       </div>
 
-      {/* CHAT WINDOW PANE */}
+      {/* CHAT WINDOW */}
       <div className={`
         flex-1 h-full bg-secondary/5 relative transition-transform duration-300 ease-in-out absolute md:relative inset-0 md:inset-auto z-20 md:z-0
         ${selectedConvId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
@@ -152,6 +150,8 @@ function ChatContent() {
            <ChatWindow 
               convId={selectedConvId} 
               onBack={() => setSelectedConvId(null)} 
+              // Pass the full conversation object to Window for context
+              initialData={conversations.find(c => c.id === selectedConvId)}
            />
         ) : (
            <div className="hidden md:flex h-full flex-col items-center justify-center text-muted-foreground p-8 text-center bg-background/50">
