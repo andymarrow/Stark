@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 import Image from "next/image";
+import { motion,AnimatePresence } from "framer-motion";
 
 const EMOJI_SET = ["💻", "🚀", "🔥", "✨", "🎨", "🛠️", "📦", "⚡", "💯", "✅", "❌", "❤️", "😂", "🤔", "🙌", "👋"];
 
@@ -21,23 +22,32 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // Sync text if editing
+  // Sync text if editing mode is triggered
   useEffect(() => {
-    if (editMessage) setText(editMessage.text);
-    else if (!selectedFiles.length) setText(""); // Don't clear if we have files pending
-  }, [editMessage]);
+    if (editMessage) {
+      setText(editMessage.text);
+    } else if (!selectedFiles.length) {
+      setText(""); 
+    }
+  }, [editMessage, selectedFiles.length]);
 
+  // Realtime Typing Logic
   const broadcastTyping = (isTyping) => {
     if (!convId || !user) return;
     supabase.channel(`room-${convId}`).send({
-      type: 'broadcast', event: 'typing', payload: { userId: user.id, isTyping },
+      type: 'broadcast', 
+      event: 'typing', 
+      payload: { userId: user.id, isTyping },
     });
   };
 
   const handleInputChange = (e) => {
-    setText(e.target.value);
+    const val = e.target.value;
+    setText(val);
+
+    // Typing indicators only for new messages
     if (!editMessage) {
-        if (e.target.value.length > 0) {
+        if (val.length > 0) {
             broadcastTyping(true);
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
             typingTimeoutRef.current = setTimeout(() => broadcastTyping(false), 2000);
@@ -50,7 +60,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length + selectedFiles.length > 3) {
-        toast.error("Maximum 3 images allowed per message.");
+        toast.error("Security Protocol", { description: "Maximum 3 images allowed per transmission." });
         return;
     }
 
@@ -67,7 +77,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
     setSelectedFiles(prev => [...prev, ...newFiles]);
     setPreviews(prev => [...prev, ...newPreviews]);
     
-    // Clear input so user can select more if they haven't hit limit
+    // Reset input to allow re-selection of same files if needed
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -79,47 +89,55 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
   const handleSend = async () => {
     if (!text.trim() && selectedFiles.length === 0) return;
 
-    // --- 1. EDIT MODE ---
+    setIsSending(true);
+
+    // --- CASE 1: EDIT MODE ---
     if (editMessage) {
         try {
-             if ((editMessage.edit_count || 0) >= 2) { 
-                 toast.error("Edit limit reached (Max 2)"); 
+             const currentCount = editMessage.edit_count || 0;
+             
+             // Enforce the 2-edit limit (3 versions total)
+             if (currentCount >= 2) { 
+                 toast.error("Integrity Error", { description: "Signal refinement limit reached (Max 2 edits)." }); 
                  onCancelEdit();
+                 setIsSending(false);
                  return; 
              }
+
              const { error } = await supabase
                 .from('messages')
                 .update({ 
                     text: text, 
-                    edit_count: (editMessage.edit_count || 0) + 1 
+                    edit_count: currentCount + 1 
                 })
                 .eq('id', editMessage.id);
 
              if (error) throw error;
-             toast.success("Message patched");
+
+             toast.success("Signal Updated", { description: "The encrypted payload has been refined." });
              onCancelEdit();
              setText("");
         } catch(e) { 
-            toast.error("Edit Failed"); 
+            console.error(e);
+            toast.error("Update Failed", { description: "Check node connectivity." }); 
+        } finally {
+            setIsSending(false);
         }
         return;
     }
 
-    // --- 2. NEW MESSAGE MODE ---
-    setIsSending(true);
+    // --- CASE 2: NEW MESSAGE MODE ---
     broadcastTyping(false);
 
     try {
         let messageType = 'text';
-        let metadata = replyMessage ? { reply_to: { id: replyMessage.id, text: replyMessage.text.substring(0, 50) + "..." } } : {};
-        let finalCaption = text;
+        let metadata = replyMessage ? { 
+            reply_to: { id: replyMessage.id, text: replyMessage.text.substring(0, 50) + "..." } 
+        } : {};
 
-        // A. Handle Image Uploads
+        // A. Process Image Uploads
         if (selectedFiles.length > 0) {
-            messageType = 'image_group'; // New type we defined
-            const uploadedUrls = [];
-
-            // Parallel Uploads
+            messageType = 'image_group'; 
             const uploadPromises = selectedFiles.map(async (file) => {
                 const fileExt = file.name.split('.').pop();
                 const fileName = `${convId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -134,16 +152,14 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
                 return data.publicUrl;
             });
 
-            uploadedUrls.push(...(await Promise.all(uploadPromises)));
-            
-            // Add images to metadata
+            const uploadedUrls = await Promise.all(uploadPromises);
             metadata.images = uploadedUrls;
         }
 
-        // B. Send Message
-        await onSend(finalCaption, messageType, metadata);
+        // B. Execute the callback to parent
+        await onSend(text, messageType, metadata);
         
-        // C. Cleanup
+        // C. Local state cleanup
         setText("");
         setSelectedFiles([]);
         setPreviews([]);
@@ -152,20 +168,20 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
 
     } catch (error) {
         console.error(error);
-        toast.error("Transmission Failed");
+        toast.error("Transmission Error", { description: "The packet could not be dispatched." });
     } finally {
         setIsSending(false);
     }
   };
 
   return (
-    <div className="p-4 bg-background border-t border-border relative">
+    <div className="p-4 bg-background border-t border-border relative shrink-0">
       
-      {/* --- PREVIEWS TRAY --- */}
+      {/* --- IMAGE PREVIEW TRAY --- */}
       {previews.length > 0 && (
-        <div className="flex gap-4 mb-4 overflow-x-auto pb-2">
+        <div className="flex gap-4 mb-4 overflow-x-auto pb-2 custom-scrollbar">
             {previews.map((src, i) => (
-                <div key={i} className="relative w-20 h-20 bg-secondary border border-border rounded-md overflow-hidden shrink-0 group">
+                <div key={i} className="relative w-20 h-20 bg-secondary border border-border rounded-none overflow-hidden shrink-0 group">
                     <Image src={src} alt="Preview" fill className="object-cover" />
                     <button 
                         onClick={() => removeFile(i)}
@@ -178,42 +194,53 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
             {previews.length < 3 && (
                 <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-20 h-20 border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-accent hover:border-accent transition-colors rounded-md shrink-0"
+                    className="w-20 h-20 border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-accent hover:border-accent transition-colors shrink-0"
                 >
                     <div className="flex flex-col items-center">
                         <ImageIcon size={16} />
-                        <span className="text-[9px] font-mono mt-1">ADD</span>
+                        <span className="text-[9px] font-mono mt-1 uppercase">Add</span>
                     </div>
                 </button>
             )}
         </div>
       )}
 
-      {/* EDIT MODE BANNER */}
-      {editMessage && (
-        <div className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4 animate-in slide-in-from-bottom-2">
-            <span className="text-[10px] font-mono text-accent uppercase flex items-center gap-2">
-                <Edit3 size={12} /> Editing Payload ({editMessage.edit_count || 0}/2)
-            </span>
-            <button onClick={() => { onCancelEdit(); setText(""); }} className="text-muted-foreground hover:text-foreground">
-                <X size={14} />
-            </button>
-        </div>
-      )}
+      {/* --- UI BANNERS (ABSOLUTE OVERLAYS) --- */}
+      <AnimatePresence>
+        {editMessage && (
+            <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4 backdrop-blur-md z-50"
+            >
+                <span className="text-[10px] font-mono text-accent uppercase flex items-center gap-2">
+                    <Edit3 size={12} /> Refining Payload ({editMessage.edit_count || 0}/2)
+                </span>
+                <button onClick={() => { onCancelEdit(); setText(""); }} className="text-muted-foreground hover:text-foreground">
+                    <X size={14} />
+                </button>
+            </motion.div>
+        )}
 
-      {/* REPLY MODE BANNER */}
-      {replyMessage && !editMessage && (
-        <div className="absolute top-0 left-0 right-0 -translate-y-full bg-secondary/90 border-t border-border p-2 flex justify-between items-center px-4 backdrop-blur-md animate-in slide-in-from-bottom-2">
-            <span className="text-[10px] font-mono text-foreground uppercase flex items-center gap-2 truncate max-w-[80%]">
-                <Reply size={12} /> Replying to: "{replyMessage.text.substring(0, 30)}..."
-            </span>
-            <button onClick={onCancelReply} className="text-muted-foreground hover:text-foreground">
-                <X size={14} />
-            </button>
-        </div>
-      )}
+        {replyMessage && !editMessage && (
+            <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-0 left-0 right-0 -translate-y-full bg-secondary/95 border-t border-border p-2 flex justify-between items-center px-4 backdrop-blur-md z-50"
+            >
+                <span className="text-[10px] font-mono text-foreground uppercase flex items-center gap-2 truncate max-w-[80%]">
+                    <Reply size={12} /> Replying to: "{replyMessage.text.substring(0, 40)}..."
+                </span>
+                <button onClick={onCancelReply} className="text-muted-foreground hover:text-foreground">
+                    <X size={14} />
+                </button>
+            </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* EMOJI PICKER */}
+      {/* --- EMOJI PICKER MODAL --- */}
       {showEmoji && (
         <div className="absolute bottom-20 left-4 z-50 bg-background border border-border p-3 shadow-2xl animate-in slide-in-from-bottom-2 duration-200">
             <div className="grid grid-cols-4 gap-2">
@@ -227,13 +254,14 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
                     </button>
                 ))}
             </div>
+            <div className="absolute -bottom-2 left-4 w-4 h-4 bg-background border-r border-b border-border rotate-45" />
         </div>
       )}
 
-      {/* MAIN INPUT AREA */}
-      <div className="relative flex items-end gap-2 bg-secondary/5 border border-border focus-within:border-accent transition-colors p-2">
+      {/* --- MAIN INTERFACE BAR --- */}
+      <div className="relative flex items-end gap-2 bg-secondary/5 border border-border focus-within:border-accent transition-colors p-2 min-w-0">
         
-        {/* File Upload */}
+        {/* Hidden File System */}
         <input 
             type="file" 
             ref={fileInputRef} 
@@ -242,6 +270,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
             multiple 
             onChange={handleFileSelect} 
         />
+        
         <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isSending || previews.length >= 3}
@@ -259,23 +288,41 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
                     handleSend();
                 }
             }}
-            placeholder={editMessage ? "Refine message..." : selectedFiles.length > 0 ? "Add a caption..." : "TYPE_MESSAGE_INPUT..."}
+            placeholder={editMessage ? "Update signal..." : selectedFiles.length > 0 ? "Add a caption..." : "TYPE_MESSAGE_INPUT..."}
             className="flex-1 bg-transparent border-none outline-none text-sm font-mono placeholder:text-zinc-700 resize-none max-h-32 min-h-[40px] py-2 custom-scrollbar"
             rows={1}
         />
 
         <div className="flex items-center gap-1">
-            <button onClick={() => setShowEmoji(!showEmoji)} className={`p-2 transition-colors ${showEmoji ? 'text-accent' : 'text-zinc-500 hover:text-foreground'}`}>
+            <button 
+                onClick={() => setShowEmoji(!showEmoji)} 
+                className={`p-2 transition-colors ${showEmoji ? 'text-accent' : 'text-zinc-500 hover:text-foreground'}`}
+            >
                 <Smile size={20} />
             </button>
+            
             <button 
                 onClick={handleSend}
                 disabled={(!text.trim() && selectedFiles.length === 0) || isSending}
-                className={`p-2 transition-all duration-300 ${(!text.trim() && selectedFiles.length === 0) ? 'text-zinc-800 pointer-events-none opacity-50' : 'text-accent'}`}
+                className={`p-2 transition-all duration-300 
+                    ${(!text.trim() && selectedFiles.length === 0) 
+                        ? 'text-zinc-800 pointer-events-none opacity-50' 
+                        : 'text-accent scale-110'
+                    }`}
             >
-                {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} fill="currentColor" />}
+                {isSending ? (
+                    <Loader2 size={20} className="animate-spin" />
+                ) : (
+                    <Send size={20} fill="currentColor" />
+                )}
             </button>
         </div>
+      </div>
+
+      {/* Industrial Footer Hint */}
+      <div className="hidden md:flex justify-between mt-2 px-1">
+          <span className="text-[8px] font-mono text-zinc-600 uppercase">Status: Online</span>
+          <span className="text-[8px] font-mono text-zinc-600 uppercase tracking-tighter">Enter to transmit • Shift+Enter for line</span>
       </div>
     </div>
   );

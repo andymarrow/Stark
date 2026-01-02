@@ -150,7 +150,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
               )}
           </div>
 
-          <div className="leading-tight">
+          <div className="leading-tight min-w-0 flex-1">
               <div className="flex items-center gap-2">
                   <h3 className="font-bold text-sm text-foreground truncate max-w-[150px] sm:max-w-md">
                       {name}

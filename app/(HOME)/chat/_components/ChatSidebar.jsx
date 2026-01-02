@@ -32,42 +32,34 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
         setIsSearching(true);
         try {
-            // 1. STRICT BLACKLIST FETCH
-            // Fetch everyone I blocked OR who blocked me
+            // 1. Get restricted IDs (Blocks)
             const { data: blockedList } = await supabase
                 .from('blocked_users')
                 .select('blocker_id, blocked_id')
                 .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
 
-            // Create a clean set of IDs to hide (excluding myself)
             const restrictedIds = new Set();
             blockedList?.forEach(row => {
                 if (row.blocker_id !== user.id) restrictedIds.add(row.blocker_id);
                 if (row.blocked_id !== user.id) restrictedIds.add(row.blocked_id);
             });
 
-            // 2. SEARCH DIRECTORY
+            // 2. Search Users
             let userQuery = supabase
                 .from('profiles')
                 .select('id, username, full_name, avatar_url, settings')
-                // A. Match username or name
                 .or(`username.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%`)
-                // B. Exclude self
                 .neq('id', user.id)
-                // C. Respect privacy settings (Settings is a JSONB: { global_search: boolean })
                 .not('settings->>global_search', 'eq', 'false')
                 .limit(10);
             
-            // D. APPLY BLACKLIST (If restricted IDs exist)
             if (restrictedIds.size > 0) {
-                const idList = Array.from(restrictedIds);
-                // Correct PostgREST syntax for "not in a list"
-                userQuery = userQuery.filter('id', 'not.in', `(${idList.join(',')})`);
+                userQuery = userQuery.filter('id', 'not.in', `(${Array.from(restrictedIds).join(',')})`);
             }
 
             const { data: users, error: userError } = await userQuery;
 
-            // 3. SEARCH PUBLIC CHANNELS
+            // 3. Search Channels
             const { data: channels, error: channelError } = await supabase
                 .from('conversations')
                 .select('id, title, type')
@@ -94,31 +86,32 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
     return () => clearTimeout(timeoutId);
   }, [searchTerm, user.id]);
 
-  const handleStartChat = async (targetUserId) => {
+  const handleStartChat = async (targetUser) => {
     try {
-        const { data: existing } = await supabase.rpc('get_conversation_id_by_user', { target_user_id: targetUserId });
+        // 1. Check if a real conversation already exists
+        const { data: existingId } = await supabase.rpc('get_conversation_id_by_user', { 
+            target_user_id: targetUser.id 
+        });
         
-        if (existing) {
-            onSelectChat(existing);
+        if (existingId) {
+            // If it exists, select it normally
+            onSelectChat(existingId);
             setSearchTerm("");
         } else {
-            const { data: newConv, error } = await supabase
-                .from('conversations')
-                .insert({ type: 'direct', owner_id: user.id })
-                .select()
-                .single();
-            
-            if (error) throw error;
-
-            await supabase.from('conversation_participants').insert([
-                { conversation_id: newConv.id, user_id: user.id, status: 'active' },
-                { conversation_id: newConv.id, user_id: targetUserId, status: 'pending' }
-            ]);
-
-            onSelectChat(newConv.id);
+            // 2. VIRTUAL CHAT MODE
+            // We pass an object that ChatWindow will recognize as "not yet in DB"
+            onSelectChat({
+                id: 'virtual-' + targetUser.id,
+                isVirtual: true,
+                type: 'direct',
+                name: targetUser.full_name || targetUser.username,
+                avatar: targetUser.avatar_url,
+                targetId: targetUser.id
+            });
             setSearchTerm("");
         }
     } catch (error) {
+        console.error(error);
         toast.error("Failed to initiate link");
     }
   };
@@ -213,15 +206,15 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                         searchResults.users.map(u => (
                             <button 
                                 key={u.id}
-                                onClick={() => handleStartChat(u.id)}
+                                onClick={() => handleStartChat(u)}
                                 className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left"
                             >
-                                <div className="w-8 h-8 relative rounded-full overflow-hidden bg-secondary">
+                                <div className="w-8 h-8 relative rounded-full overflow-hidden bg-secondary border border-border">
                                     <img src={u.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} className="w-full h-full object-cover" />
                                 </div>
                                 <div>
                                     <div className="text-sm font-bold text-foreground">@{u.username}</div>
-                                    <div className="text-[10px] text-muted-foreground font-mono">Establish Handshake</div>
+                                    <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Initialize Handshake</div>
                                 </div>
                                 <UserPlus size={14} className="ml-auto text-muted-foreground" />
                             </button>
@@ -236,7 +229,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                     {searchResults.channels.length > 0 ? (
                         searchResults.channels.map(c => (
                             <button key={c.id} onClick={() => handleJoinChannel(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
-                                <div className="p-2 bg-secondary text-accent">
+                                <div className="p-2 bg-secondary text-accent border border-border">
                                     <Radio size={14} />
                                 </div>
                                 <div>
