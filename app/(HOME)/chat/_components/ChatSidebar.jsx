@@ -32,47 +32,54 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
         setIsSearching(true);
         try {
-            // 1. Get restricted IDs (Blocks)
+            // 1. STRICT BLACKLIST FETCH
+            // Fetch everyone I blocked OR who blocked me
             const { data: blockedList } = await supabase
                 .from('blocked_users')
                 .select('blocker_id, blocked_id')
                 .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
 
+            // Create a clean set of IDs to hide (excluding myself)
             const restrictedIds = new Set();
             blockedList?.forEach(row => {
                 if (row.blocker_id !== user.id) restrictedIds.add(row.blocker_id);
                 if (row.blocked_id !== user.id) restrictedIds.add(row.blocked_id);
             });
 
-            // 2. Search Users
+            // 2. SEARCH DIRECTORY
             let userQuery = supabase
                 .from('profiles')
                 .select('id, username, full_name, avatar_url, settings')
+                // Match username or name
                 .or(`username.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%`)
+                // Exclude self
                 .neq('id', user.id)
+                // Respect privacy settings
                 .not('settings->>global_search', 'eq', 'false')
                 .limit(10);
             
+            // APPLY BLACKLIST
             if (restrictedIds.size > 0) {
-                userQuery = userQuery.filter('id', 'not.in', `(${Array.from(restrictedIds).join(',')})`);
+                const idList = Array.from(restrictedIds);
+                userQuery = userQuery.filter('id', 'not.in', `(${idList.join(',')})`);
             }
 
             const { data: users, error: userError } = await userQuery;
 
-            // 3. Search Channels
-            const { data: channels, error: channelError } = await supabase
+            // 3. SEARCH PUBLIC COMMUNITIES (Channels and Public Groups)
+            const { data: communities, error: channelError } = await supabase
                 .from('conversations')
-                .select('id, title, type')
+                .select('id, title, type, avatar_url')
                 .eq('is_public', true)
-                .eq('type', 'channel')
+                .in('type', ['channel', 'group'])
                 .ilike('title', `%${searchTerm}%`)
-                .limit(5);
+                .limit(10);
 
             if (userError || channelError) throw new Error("Search Failure");
 
             setSearchResults({ 
                 users: users || [], 
-                channels: channels || [] 
+                channels: communities || [] 
             });
 
         } catch (error) {
@@ -99,7 +106,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
             setSearchTerm("");
         } else {
             // 2. VIRTUAL CHAT MODE
-            // We pass an object that ChatWindow will recognize as "not yet in DB"
+            // Handshake only triggers when the first message is sent in ChatWindow
             onSelectChat({
                 id: 'virtual-' + targetUser.id,
                 isVirtual: true,
@@ -126,15 +133,10 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
             .maybeSingle();
 
         if (existing) {
+            // If already a member, just open it
             onSelectChat(channelId);
         } else {
-            await supabase.from('conversation_participants').insert({
-                conversation_id: channelId,
-                user_id: user.id,
-                status: 'active',
-                role: 'member'
-            });
-            toast.success("Channel Frequency Acquired");
+            // Pass to ChatWindow. It will detect user is not a member and show "Join" button.
             onSelectChat(channelId);
         }
         setSearchTerm("");
@@ -225,21 +227,21 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 </div>
 
                 <div>
-                    <h3 className="text-[10px] font-mono uppercase text-muted-foreground mb-2 px-2">Public Channels</h3>
+                    <h3 className="text-[10px] font-mono uppercase text-muted-foreground mb-2 px-2">Public Communities</h3>
                     {searchResults.channels.length > 0 ? (
                         searchResults.channels.map(c => (
                             <button key={c.id} onClick={() => handleJoinChannel(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
-                                <div className="p-2 bg-secondary text-accent border border-border">
-                                    <Radio size={14} />
+                                <div className="p-2 bg-secondary text-accent border border-border rounded-none">
+                                    {c.type === 'channel' ? <Radio size={14} /> : <Users size={14} />}
                                 </div>
                                 <div>
                                     <div className="text-sm font-bold text-foreground">{c.title}</div>
-                                    <div className="text-[10px] text-muted-foreground font-mono uppercase">Join Channel</div>
+                                    <div className="text-[10px] text-muted-foreground font-mono uppercase">Browse Signal</div>
                                 </div>
                             </button>
                         ))
                     ) : (
-                         <div className="p-4 text-center text-xs text-muted-foreground font-mono uppercase tracking-widest">No matching channels</div>
+                         <div className="p-4 text-center text-xs text-muted-foreground font-mono uppercase tracking-widest">No matching nodes</div>
                     )}
                 </div>
             </div>
