@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe, Share2, ShieldBan, Info } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe, Share2, ShieldBan, Info,Search,X } from "lucide-react";
 import dynamic from 'next/dynamic';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
@@ -13,10 +13,14 @@ import { supabase } from "@/lib/supabaseClient";
 // Lazy load Agora wrapper to prevent SSR issues
 const LiveRoomWrapper = dynamic(() => import("./live/LiveRoomWrapper"), { ssr: false });
 
-export default function ChatHeader({ conversation, onBack, currentUser }) {
+export default function ChatHeader({ conversation, onBack, currentUser, onSearch }) {
   const [isLiveOpen, setIsLiveOpen] = useState(false);
   const [isAudioOnly, setIsAudioOnly] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+
+  // Search State
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Safety checks
   const isDirect = conversation?.type === 'direct';
@@ -27,6 +31,18 @@ export default function ChatHeader({ conversation, onBack, currentUser }) {
     ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" 
     : "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100"
   );
+
+   const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    onSearch(e.target.value);
+  };
+
+  const closeSearch = () => {
+    setShowSearch(false);
+    setSearchQuery("");
+    onSearch("");
+  };
+
 
   const handleCopyLink = () => {
     // Assuming deployed URL structure
@@ -48,6 +64,24 @@ export default function ChatHeader({ conversation, onBack, currentUser }) {
     <>
       <div className="h-16 border-b border-border bg-background/95 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm">
         
+        {showSearch ? (
+            /* --- SEARCH MODE HEADER --- */
+            <div className="flex-1 flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+                <Search size={18} className="text-muted-foreground" />
+                <input 
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    placeholder="Search in conversation..."
+                    className="flex-1 bg-transparent border-none outline-none text-sm font-mono h-full"
+                />
+                <button onClick={closeSearch} className="p-2 hover:bg-secondary rounded-full">
+                    <X size={18} />
+                </button>
+            </div>
+        ) : (
+          <>
         {/* Left: Info & Back Button */}
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isDirect && setIsInfoOpen(true)}>
           <button 
@@ -105,8 +139,18 @@ export default function ChatHeader({ conversation, onBack, currentUser }) {
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-1 text-muted-foreground">
+        <div className="flex items-center gap-1 text-muted-foreground shrink-0">
           
+           {/* Search Trigger */}
+                    <button 
+                        onClick={() => setShowSearch(true)} 
+                        className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors"
+                    >
+                        <Search size={18} />
+                    </button>
+
+          <div className="w-px h-4 bg-border mx-1 hidden sm:block" />
+
           {/* VIDEO CALL */}
           <button 
             onClick={() => startCall(false)} 
@@ -153,6 +197,8 @@ export default function ChatHeader({ conversation, onBack, currentUser }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+         </>
+        )}
       </div>
 
       {/* MODALS */}

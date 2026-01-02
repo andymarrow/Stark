@@ -12,6 +12,7 @@ import {
 import { useState, useEffect } from "react";
 import { Mic, MicOff, Video, VideoOff, X, MessageSquare, Heart, Users } from "lucide-react";
 import LiveChatOverlay from "./LiveChatOverlay";
+import LiveViewerList from "./LiveViewerList"; // Added Import
 
 export default function LiveStage({ channelName, appId, token, uid, isHost, onLeave }) {
   // Agora Hooks
@@ -24,6 +25,7 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [showChat, setShowChat] = useState(true);
+  const [showViewers, setShowViewers] = useState(false); // New Viewer State
 
   // 1. Join the Channel
   useJoin({ appid: appId, channel: channelName, token, uid: uid }, true);
@@ -53,9 +55,13 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
                 <h3 className="text-sm font-bold font-mono uppercase text-white shadow-black drop-shadow-md">
                     {channelName}
                 </h3>
-                <div className="flex items-center gap-1 text-[10px] text-zinc-300 font-mono">
+                {/* Clickable Viewer Count */}
+                <button 
+                    onClick={() => setShowViewers(!showViewers)}
+                    className="flex items-center gap-1 text-[10px] text-zinc-300 font-mono hover:text-white transition-colors mt-1 bg-black/20 px-2 py-1 rounded-full backdrop-blur-sm border border-white/5"
+                >
                     <Users size={10} /> {remoteUsers.length + 1} Connected
-                </div>
+                </button>
             </div>
         </div>
 
@@ -66,6 +72,13 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
             <X size={20} />
         </button>
       </div>
+
+      {/* --- VIEWER LIST SIDEBAR (CONDITIONAL) --- */}
+      {showViewers && (
+          <div className="pointer-events-auto">
+              <LiveViewerList users={remoteUsers} />
+          </div>
+      )}
 
       {/* --- VIDEO GRID --- */}
       <div className="flex-1 relative overflow-hidden">

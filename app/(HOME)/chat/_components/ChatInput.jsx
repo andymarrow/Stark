@@ -1,9 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Send, Paperclip, Smile, X, Edit3, Loader2, Reply } from "lucide-react";
+import { Send, Paperclip, Smile, X, Edit3, Loader2, Reply, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
+import Image from "next/image";
 
 const EMOJI_SET = ["💻", "🚀", "🔥", "✨", "🎨", "🛠️", "📦", "⚡", "💯", "✅", "❌", "❤️", "😂", "🤔", "🙌", "👋"];
 
@@ -11,14 +12,19 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
   const { user } = useAuth();
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  
+  // Multi-Image State
+  const [selectedFiles, setSelectedFiles] = useState([]); // Array of File objects
+  const [previews, setPreviews] = useState([]); // Array of string URLs
+  const [isSending, setIsSending] = useState(false);
+  
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   // Sync text if editing
   useEffect(() => {
     if (editMessage) setText(editMessage.text);
-    else setText("");
+    else if (!selectedFiles.length) setText(""); // Don't clear if we have files pending
   }, [editMessage]);
 
   const broadcastTyping = (isTyping) => {
@@ -41,11 +47,40 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
     }
   };
 
-  const handleSend = async () => {
-    if (!text.trim()) return;
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length + selectedFiles.length > 3) {
+        toast.error("Maximum 3 images allowed per message.");
+        return;
+    }
 
+    const newFiles = [];
+    const newPreviews = [];
+
+    files.forEach(file => {
+        if (file.type.startsWith("image/")) {
+            newFiles.push(file);
+            newPreviews.push(URL.createObjectURL(file));
+        }
+    });
+
+    setSelectedFiles(prev => [...prev, ...newFiles]);
+    setPreviews(prev => [...prev, ...newPreviews]);
+    
+    // Clear input so user can select more if they haven't hit limit
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSend = async () => {
+    if (!text.trim() && selectedFiles.length === 0) return;
+
+    // --- 1. EDIT MODE ---
     if (editMessage) {
-        // --- EDIT LOGIC ---
         try {
              if ((editMessage.edit_count || 0) >= 2) { 
                  toast.error("Edit limit reached (Max 2)"); 
@@ -63,67 +98,104 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
              if (error) throw error;
              toast.success("Message patched");
              onCancelEdit();
+             setText("");
         } catch(e) { 
             toast.error("Edit Failed"); 
         }
-    } else {
-        // --- NEW MESSAGE LOGIC ---
-        broadcastTyping(false);
-        // If replying, attach metadata
-        const metadata = replyMessage ? { reply_to: { id: replyMessage.id, text: replyMessage.text.substring(0, 50) + "..." } } : {};
-        onSend(text, 'text', metadata);
-        onCancelReply?.();
-    }
-    setText("");
-    setShowEmoji(false);
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-        toast.error("Only image transmissions supported.");
         return;
     }
 
-    setIsUploading(true);
+    // --- 2. NEW MESSAGE MODE ---
+    setIsSending(true);
+    broadcastTyping(false);
+
     try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${convId}/${Date.now()}.${fileExt}`;
+        let messageType = 'text';
+        let metadata = replyMessage ? { reply_to: { id: replyMessage.id, text: replyMessage.text.substring(0, 50) + "..." } } : {};
+        let finalCaption = text;
+
+        // A. Handle Image Uploads
+        if (selectedFiles.length > 0) {
+            messageType = 'image_group'; // New type we defined
+            const uploadedUrls = [];
+
+            // Parallel Uploads
+            const uploadPromises = selectedFiles.map(async (file) => {
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${convId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+                
+                const { error: uploadError } = await supabase.storage
+                    .from('chat-media')
+                    .upload(fileName, file);
+
+                if (uploadError) throw uploadError;
+
+                const { data } = supabase.storage.from('chat-media').getPublicUrl(fileName);
+                return data.publicUrl;
+            });
+
+            uploadedUrls.push(...(await Promise.all(uploadPromises)));
+            
+            // Add images to metadata
+            metadata.images = uploadedUrls;
+        }
+
+        // B. Send Message
+        await onSend(finalCaption, messageType, metadata);
         
-        // Ensure bucket 'chat-media' exists in Supabase
-        const { error: uploadError } = await supabase.storage
-            .from('chat-media')
-            .upload(fileName, file);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-            .from('chat-media')
-            .getPublicUrl(fileName);
-
-        // Send as type 'image'
-        onSend(publicUrl, 'image');
+        // C. Cleanup
+        setText("");
+        setSelectedFiles([]);
+        setPreviews([]);
+        if(onCancelReply) onCancelReply();
+        setShowEmoji(false);
 
     } catch (error) {
         console.error(error);
-        toast.error("Upload Failed");
+        toast.error("Transmission Failed");
     } finally {
-        setIsUploading(false);
+        setIsSending(false);
     }
   };
 
   return (
     <div className="p-4 bg-background border-t border-border relative">
       
+      {/* --- PREVIEWS TRAY --- */}
+      {previews.length > 0 && (
+        <div className="flex gap-4 mb-4 overflow-x-auto pb-2">
+            {previews.map((src, i) => (
+                <div key={i} className="relative w-20 h-20 bg-secondary border border-border rounded-md overflow-hidden shrink-0 group">
+                    <Image src={src} alt="Preview" fill className="object-cover" />
+                    <button 
+                        onClick={() => removeFile(i)}
+                        className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full hover:bg-red-500 transition-colors"
+                    >
+                        <X size={10} />
+                    </button>
+                </div>
+            ))}
+            {previews.length < 3 && (
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-20 h-20 border-2 border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-accent hover:border-accent transition-colors rounded-md shrink-0"
+                >
+                    <div className="flex flex-col items-center">
+                        <ImageIcon size={16} />
+                        <span className="text-[9px] font-mono mt-1">ADD</span>
+                    </div>
+                </button>
+            )}
+        </div>
+      )}
+
       {/* EDIT MODE BANNER */}
       {editMessage && (
         <div className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4 animate-in slide-in-from-bottom-2">
             <span className="text-[10px] font-mono text-accent uppercase flex items-center gap-2">
                 <Edit3 size={12} /> Editing Payload ({editMessage.edit_count || 0}/2)
             </span>
-            <button onClick={onCancelEdit} className="text-muted-foreground hover:text-foreground">
+            <button onClick={() => { onCancelEdit(); setText(""); }} className="text-muted-foreground hover:text-foreground">
                 <X size={14} />
             </button>
         </div>
@@ -162,13 +234,20 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
       <div className="relative flex items-end gap-2 bg-secondary/5 border border-border focus-within:border-accent transition-colors p-2">
         
         {/* File Upload */}
-        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+        <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept="image/*" 
+            multiple 
+            onChange={handleFileSelect} 
+        />
         <button 
             onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="p-2 text-zinc-500 hover:text-foreground transition-colors group"
+            disabled={isSending || previews.length >= 3}
+            className={`p-2 transition-colors group ${previews.length >= 3 ? 'text-zinc-700 cursor-not-allowed' : 'text-zinc-500 hover:text-foreground'}`}
         >
-            {isUploading ? <Loader2 size={20} className="animate-spin" /> : <Paperclip size={20} className="group-hover:rotate-12 transition-transform" />}
+            <Paperclip size={20} className="group-hover:rotate-12 transition-transform" />
         </button>
 
         <textarea
@@ -180,7 +259,7 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
                     handleSend();
                 }
             }}
-            placeholder={editMessage ? "Refine message..." : "TYPE_MESSAGE_INPUT..."}
+            placeholder={editMessage ? "Refine message..." : selectedFiles.length > 0 ? "Add a caption..." : "TYPE_MESSAGE_INPUT..."}
             className="flex-1 bg-transparent border-none outline-none text-sm font-mono placeholder:text-zinc-700 resize-none max-h-32 min-h-[40px] py-2 custom-scrollbar"
             rows={1}
         />
@@ -191,10 +270,10 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
             </button>
             <button 
                 onClick={handleSend}
-                disabled={!text.trim() && !editMessage}
-                className={`p-2 transition-all duration-300 ${text.trim() ? 'text-accent' : 'text-zinc-800 pointer-events-none opacity-50'}`}
+                disabled={(!text.trim() && selectedFiles.length === 0) || isSending}
+                className={`p-2 transition-all duration-300 ${(!text.trim() && selectedFiles.length === 0) ? 'text-zinc-800 pointer-events-none opacity-50' : 'text-accent'}`}
             >
-                <Send size={20} fill={text.trim() ? "currentColor" : "none"} />
+                {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} fill="currentColor" />}
             </button>
         </div>
       </div>

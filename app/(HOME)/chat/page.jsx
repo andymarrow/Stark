@@ -18,7 +18,6 @@ function ChatContent() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Tabs: PRIMARY, GROUPS, CHANNELS, REQUESTS
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
 
   useEffect(() => {
@@ -28,7 +27,6 @@ function ChatContent() {
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     try {
-      // Fetch conversations with the new Schema fields
       const { data, error } = await supabase
         .from('conversation_participants')
         .select(`
@@ -39,21 +37,27 @@ function ChatContent() {
             id, 
             type,
             title,
+            description,  
+            avatar_url,   
             is_public,
             last_message, 
             last_message_at,
             owner_id,
+            linked_group_id, 
             participants:conversation_participants (
               profile:profiles (id, username, avatar_url, full_name)
             )
           )
-        `)
+        `) // ^^^ ADDED description, avatar_url, linked_group_id HERE
         .eq('user_id', user.id);
 
       if (error) throw error;
 
       const formatted = (data || []).map(item => {
         const conv = item.conversation;
+        // Guard clause in case conversation is null (deleted/error)
+        if (!conv) return null; 
+
         const otherParticipant = conv.participants.find(p => p.profile.id !== user.id);
         
         // Determine Display Name & Avatar
@@ -65,23 +69,29 @@ function ChatContent() {
             displayAvatar = otherParticipant?.profile.avatar_url;
         } else {
             displayName = conv.title || "Untitled Group";
-            // In a real app, groups have their own avatar column, fallback to initials
-            displayAvatar = null; 
+            // FIX: Use the actual avatar_url from the conversation table
+            displayAvatar = conv.avatar_url; 
         }
 
         return {
           id: conv.id,
-          type: conv.type, // 'direct', 'group', 'channel'
-          myStatus: item.status, // 'active', 'pending', 'muted'
+          type: conv.type, 
+          title: conv.title, // Explicitly pass title for GroupInfoDialog
+          description: conv.description, // Explicitly pass description
+          myStatus: item.status, 
           unreadCount: item.unread_count || 0,
           lastMessage: conv.last_message,
           lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
           name: displayName,
           avatar: displayAvatar,
+          avatar_url: displayAvatar, // Redundant but safe for dialogs expecting this key
           isPublic: conv.is_public,
-          ownerId: conv.owner_id
+          ownerId: conv.owner_id,
+          linkedGroupId: conv.linked_group_id
         };
-      }).sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
+      })
+      .filter(Boolean) // Remove nulls
+      .sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
 
       setConversations(formatted);
     } catch (err) {
@@ -95,7 +105,6 @@ function ChatContent() {
   useEffect(() => {
     if (user) {
       fetchConversations();
-      // Subscribe to changes
       const channel = supabase
         .channel('sidebar-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, fetchConversations)
@@ -106,18 +115,13 @@ function ChatContent() {
     }
   }, [user, fetchConversations]);
 
-  // --- FILTER LOGIC (The Brain) ---
   const filteredConversations = conversations.filter(conv => {
     if (activeTab === "REQUESTS") {
-        // Incoming requests from strangers
         return conv.type === 'direct' && conv.myStatus === 'pending'; 
     }
     if (activeTab === "GROUPS") return conv.type === 'group';
     if (activeTab === "CHANNELS") return conv.type === 'channel';
     
-    // PRIMARY: Direct chats that are ACTIVE (Accepted or Mutual)
-    // Note: Outgoing pending chats (sent by me) usually stay in Primary or a separate "Sent" list. 
-    // For now, we show them in Primary so the user can see their sent message status.
     return conv.type === 'direct' && conv.myStatus !== 'pending'; 
   });
 
@@ -126,7 +130,6 @@ function ChatContent() {
 
   return (
     <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
-      {/* SIDEBAR */}
       <div className={`
         w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full border-r border-border bg-background transition-transform duration-300 ease-in-out absolute md:relative z-10
         ${selectedConvId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
@@ -140,7 +143,6 @@ function ChatContent() {
         />
       </div>
 
-      {/* CHAT WINDOW */}
       <div className={`
         flex-1 h-full bg-secondary/5 relative transition-transform duration-300 ease-in-out absolute md:relative inset-0 md:inset-auto z-20 md:z-0
         ${selectedConvId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
@@ -150,7 +152,6 @@ function ChatContent() {
            <ChatWindow 
               convId={selectedConvId} 
               onBack={() => setSelectedConvId(null)} 
-              // Pass the full conversation object to Window for context
               initialData={conversations.find(c => c.id === selectedConvId)}
            />
         ) : (

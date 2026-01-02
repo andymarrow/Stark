@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-// FIX: Use 'npm:' to trigger Deno's full Node.js compatibility layer
 import { RtcTokenBuilder, RtcRole } from 'npm:agora-access-token'
 
 const corsHeaders = {
@@ -8,18 +7,16 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // 1. Handle CORS Preflight Request
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const body = await req.json()
-    console.log("Received body:", body)
-
-    const { channelName, uid, role } = body
+    const { channelName, uid, role } = await req.json()
     
-    // 2. Check for missing ENV variables
+    // IMPORTANT: Ensure UID is an integer (0 is valid for auto-assign, but we are passing a specific one)
+    const uidInt = parseInt(uid);
+
     const APP_ID = Deno.env.get('AGORA_APP_ID')
     const APP_CERTIFICATE = Deno.env.get('AGORA_APP_CERTIFICATE')
 
@@ -27,28 +24,25 @@ serve(async (req) => {
       throw new Error("Server configuration error: Missing Agora Keys")
     }
 
-    if (!channelName || !uid || !role) {
-      throw new Error(`Missing parameters: channelName=${channelName}, uid=${uid}, role=${role}`)
-    }
-
-    // 3. Generate Token
+    // Role: 1 = Publisher (Host), 2 = Subscriber (Audience)
     const rtcRole = role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER
-    const expirationTimeInSeconds = 3600 * 24
+    
+    // Token validity time
+    const expirationTimeInSeconds = 3600
     const currentTimestamp = Math.floor(Date.now() / 1000)
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds
 
-    console.log("Generating token...")
+    console.log(`Generating token for Channel: ${channelName}, UID: ${uidInt}, Role: ${rtcRole}`)
 
+    // CRITICAL FIX: Ensure we use the correct builder method for numeric UIDs
     const token = RtcTokenBuilder.buildTokenWithUid(
       APP_ID,
       APP_CERTIFICATE,
       channelName,
-      uid, 
+      uidInt, 
       rtcRole,
       privilegeExpiredTs
     )
-
-    console.log("Token generated successfully")
 
     return new Response(
       JSON.stringify({ token }),
