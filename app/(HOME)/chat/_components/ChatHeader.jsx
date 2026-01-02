@@ -25,7 +25,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
   // Safety checks
   const isDirect = conversation?.type === 'direct';
   
-  // FIX: Handle both potential title locations (mapped vs raw DB)
+  // Handle both potential title locations (mapped vs raw DB)
   const name = isDirect 
     ? (conversation?.name || "User") 
     : (conversation?.title || "Channel");
@@ -36,8 +36,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
     : "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100"
   );
 
-  // FIX: Determine Ownership safely
-  // ChatContent sends 'ownerId', but raw DB fetch sends 'owner_id'
   const ownerId = conversation?.ownerId || conversation?.owner_id;
   const isOwner = ownerId === currentUser;
 
@@ -59,13 +57,46 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
   };
 
   const handleBlockUser = async () => {
-    toast.info("Block Protocol Initiated (Pending Backend Implementation)");
+    if (isDirect) {
+      let targetId = conversation.participants?.find(p => 
+        (p.profile?.id || p.user_id) !== currentUser
+      )?.profile?.id;
+
+      // FIX: If participants list is missing from props, fetch the ID manually
+      if (!targetId) {
+        const { data, error: fetchError } = await supabase
+          .from('conversation_participants')
+          .select('user_id')
+          .eq('conversation_id', conversation.id)
+          .neq('user_id', currentUser)
+          .maybeSingle();
+        
+        if (data) targetId = data.user_id;
+      }
+
+      if (!targetId) {
+        toast.error("Could not identify user to block.");
+        return;
+      }
+
+      const { error } = await supabase.rpc('block_user', {
+        p_blocker_id: currentUser,
+        p_blocked_id: targetId
+      });
+
+      if (error) {
+        toast.error("Block Protocol Failed", { description: error.message });
+      } else {
+        toast.success("User Blocked", { description: "Connection terminated and node hidden." });
+        onBack(); 
+      }
+    } else {
+      toast.info("Node Reported", { description: "Administration has been notified of this frequency." });
+    }
   };
 
   const startCall = (audioOnly) => {
-    // Debugging Log to verify ID match
     console.log(`🎥 Starting Call | Me: ${currentUser} | Owner: ${ownerId} | IsHost: ${isOwner}`);
-    
     setIsAudioOnly(audioOnly);
     setIsLiveOpen(true);
   };
@@ -75,7 +106,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
       <div className="h-16 border-b border-border bg-background/95 backdrop-blur-md flex items-center justify-between px-4 sticky top-0 z-30 shadow-sm">
         
         {showSearch ? (
-            /* --- SEARCH MODE HEADER --- */
             <div className="flex-1 flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
                 <Search size={18} className="text-muted-foreground" />
                 <input 
@@ -84,7 +114,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
                     value={searchQuery}
                     onChange={handleSearchChange}
                     placeholder="Search in conversation..."
-                    className="flex-1 bg-transparent border-none outline-none text-sm font-mono h-full"
+                    className="flex-1 bg-transparent border-none outline-none text-sm font-mono h-full text-foreground"
                 />
                 <button onClick={closeSearch} className="p-2 hover:bg-secondary rounded-full">
                     <X size={18} />
@@ -92,7 +122,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
             </div>
         ) : (
           <>
-        {/* Left: Info & Back Button */}
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => !isDirect && setIsInfoOpen(true)}>
           <button 
               onClick={onBack}
@@ -101,7 +130,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
               <ArrowLeft size={20} />
           </button>
 
-          {/* Avatar */}
           <div className="relative w-10 h-10 border border-border bg-secondary flex-shrink-0">
               {image ? (
                   <Image 
@@ -122,7 +150,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
               )}
           </div>
 
-          {/* Text Details */}
           <div className="leading-tight">
               <div className="flex items-center gap-2">
                   <h3 className="font-bold text-sm text-foreground truncate max-w-[150px] sm:max-w-md">
@@ -148,10 +175,8 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
           </div>
         </div>
 
-        {/* Right: Actions */}
         <div className="flex items-center gap-1 text-muted-foreground shrink-0">
           
-           {/* Search Trigger */}
             <button 
                 onClick={() => setShowSearch(true)} 
                 className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors"
@@ -161,10 +186,10 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
 
           <div className="w-px h-4 bg-border mx-1 hidden sm:block" />
 
-          {/* VIDEO CALL */}
+          {/* VIDEO CALL / LIVE */}
           <button 
             onClick={() => startCall(false)} 
-            className={`p-2 hover:bg-secondary/20 hover:text-accent transition-colors ${!isDirect ? "text-red-500 hover:text-red-600 animate-pulse" : ""}`}
+            className={`p-2 hover:bg-secondary/20 hover:text-accent transition-colors ${!isDirect && conversation?.is_live ? "text-red-500 hover:text-red-600 animate-pulse" : ""}`}
             title={isDirect ? "Video Call" : "Join Live Stream"}
           >
               <Video size={18} />
@@ -181,7 +206,6 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
             </button>
           )}
 
-          {/* MENU DROPDOWN */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <button className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors">
@@ -189,9 +213,11 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-black border-border rounded-none">
-                <DropdownMenuItem onClick={handleCopyLink} className="text-xs font-mono cursor-pointer">
-                    <Share2 size={14} className="mr-2"/> Share Link
-                </DropdownMenuItem>
+                {!isDirect && (
+                    <DropdownMenuItem onClick={handleCopyLink} className="text-xs font-mono cursor-pointer">
+                        <Share2 size={14} className="mr-2"/> Share Link
+                    </DropdownMenuItem>
+                )}
                 
                 {!isDirect && (
                     <DropdownMenuItem onClick={() => setIsInfoOpen(true)} className="text-xs font-mono cursor-pointer">
@@ -211,11 +237,10 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
         )}
       </div>
 
-      {/* MODALS */}
       {isLiveOpen && (
         <LiveRoomWrapper 
             channelId={conversation?.id} 
-            isHost={isOwner} // Passing the corrected check
+            isHost={isOwner} 
             audioOnly={isAudioOnly}
             onClose={() => setIsLiveOpen(false)} 
         />
