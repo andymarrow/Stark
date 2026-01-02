@@ -1,13 +1,13 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe, Share2, ShieldBan, Info,Search,X } from "lucide-react";
+import { ArrowLeft, MoreVertical, Phone, Video, User, Users, Radio, Lock, Globe, Share2, ShieldBan, Info, Search, X } from "lucide-react";
 import dynamic from 'next/dynamic';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import GroupInfoDialog from "./GroupInfoDialog"; // Make sure this file exists from previous steps
+import GroupInfoDialog from "./GroupInfoDialog"; 
 import { supabase } from "@/lib/supabaseClient";
 
 // Lazy load Agora wrapper to prevent SSR issues
@@ -24,15 +24,24 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
 
   // Safety checks
   const isDirect = conversation?.type === 'direct';
-  const name = isDirect ? conversation?.name : conversation?.title;
+  
+  // FIX: Handle both potential title locations (mapped vs raw DB)
+  const name = isDirect 
+    ? (conversation?.name || "User") 
+    : (conversation?.title || "Channel");
   
   // Robust Image Fallback
-  const image = conversation?.avatar || (isDirect 
+  const image = conversation?.avatar || conversation?.avatar_url || (isDirect 
     ? "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" 
     : "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=100"
   );
 
-   const handleSearchChange = (e) => {
+  // FIX: Determine Ownership safely
+  // ChatContent sends 'ownerId', but raw DB fetch sends 'owner_id'
+  const ownerId = conversation?.ownerId || conversation?.owner_id;
+  const isOwner = ownerId === currentUser;
+
+  const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
     onSearch(e.target.value);
   };
@@ -43,9 +52,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
     onSearch("");
   };
 
-
   const handleCopyLink = () => {
-    // Assuming deployed URL structure
     const link = `${window.location.origin}/chat?id=${conversation?.id}`;
     navigator.clipboard.writeText(link);
     toast.success("Link Copied", { description: "Invite link copied to clipboard." });
@@ -56,6 +63,9 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
   };
 
   const startCall = (audioOnly) => {
+    // Debugging Log to verify ID match
+    console.log(`🎥 Starting Call | Me: ${currentUser} | Owner: ${ownerId} | IsHost: ${isOwner}`);
+    
     setIsAudioOnly(audioOnly);
     setIsLiveOpen(true);
   };
@@ -96,7 +106,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
               {image ? (
                   <Image 
                     src={image} 
-                    alt={name || "Conversation Avatar"} 
+                    alt={name} 
                     fill 
                     className="object-cover" 
                     sizes="40px" 
@@ -116,7 +126,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
           <div className="leading-tight">
               <div className="flex items-center gap-2">
                   <h3 className="font-bold text-sm text-foreground truncate max-w-[150px] sm:max-w-md">
-                      {name || "Loading..."}
+                      {name}
                   </h3>
                   {!isDirect && (
                       conversation?.isPublic 
@@ -142,12 +152,12 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
         <div className="flex items-center gap-1 text-muted-foreground shrink-0">
           
            {/* Search Trigger */}
-                    <button 
-                        onClick={() => setShowSearch(true)} 
-                        className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors"
-                    >
-                        <Search size={18} />
-                    </button>
+            <button 
+                onClick={() => setShowSearch(true)} 
+                className="p-2 hover:bg-secondary/20 hover:text-foreground transition-colors"
+            >
+                <Search size={18} />
+            </button>
 
           <div className="w-px h-4 bg-border mx-1 hidden sm:block" />
 
@@ -205,7 +215,7 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
       {isLiveOpen && (
         <LiveRoomWrapper 
             channelId={conversation?.id} 
-            isHost={conversation?.owner_id === currentUser} 
+            isHost={isOwner} // Passing the corrected check
             audioOnly={isAudioOnly}
             onClose={() => setIsLiveOpen(false)} 
         />

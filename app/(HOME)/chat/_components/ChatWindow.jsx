@@ -35,6 +35,9 @@ export default function ChatWindow({ convId, onBack, initialData }) {
 
   const [searchFilter, setSearchFilter] = useState("");
 
+  // Live Status State
+  const [isChannelLive, setIsChannelLive] = useState(initialData?.is_live || false);
+
   const scrollRef = useRef(null);
 
   // --- 1. INITIAL SETUP & MODE SWITCHING ---
@@ -45,9 +48,12 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   // Sync initial data
   useEffect(() => {
     setConversation(initialData);
-    // Handle both cases just to be safe
     if(initialData?.linked_group_id || initialData?.linkedGroupId) {
         setLinkedGroupId(initialData.linked_group_id || initialData.linkedGroupId);
+    }
+    // Sync live status
+    if (initialData?.is_live !== undefined) {
+        setIsChannelLive(initialData.is_live);
     }
   }, [initialData]);
 
@@ -145,7 +151,25 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     return () => { 
         supabase.removeChannel(channel); 
     };
-  }, [currentViewId, user.id]); // Removing pinnedMsg from dependency array to prevent re-subscription loops
+  }, [currentViewId, user.id]); 
+
+  // --- LIVE STATUS LISTENER ---
+  useEffect(() => {
+    if (!convId || conversation?.type !== 'channel') return;
+
+    const channel = supabase.channel(`live-status-${convId}`)
+        .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'conversations', 
+            filter: `id=eq.${convId}` 
+        }, (payload) => {
+            setIsChannelLive(payload.new.is_live);
+        })
+        .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [convId, conversation?.type]);
 
   // Auto-Scroll
   useEffect(() => {
@@ -219,7 +243,28 @@ export default function ChatWindow({ convId, onBack, initialData }) {
       {/* 1. HEADER */}
       {conversation && <ChatHeader conversation={conversation} onBack={onBack} currentUser={user.id}  onSearch={setSearchFilter} />}
 
-      {/* 2. CHANNEL TOGGLE BAR */}
+      {/* 2. LIVE BANNER (New Addition) */}
+      {isChannelLive && !isOwner && (
+        <div className="bg-red-600/10 border-b border-red-500/30 p-2 px-4 flex items-center justify-between animate-in slide-in-from-top-2 backdrop-blur-sm sticky top-[64px] z-30">
+            <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Live Transmission in Progress</span>
+            </div>
+            <button 
+                // In a real implementation, you might want to call a method in ChatHeader to open the modal directly,
+                // but since ChatHeader controls the state, telling the user to click the header icon is a safe fallback without prop drilling.
+                className="text-[10px] bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-sm font-mono uppercase transition-colors"
+                onClick={() => document.querySelector('button[title="Join Live Stream"]')?.click()}
+            >
+                Join Stream ↗
+            </button>
+        </div>
+      )}
+
+      {/* 3. CHANNEL TOGGLE BAR */}
       {isChannel && linkedGroupId && (
         <div className="flex items-center border-b border-border bg-secondary/5">
             <button 
@@ -241,7 +286,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
         </div>
       )}
 
-      {/* 3. PINNED MESSAGE */}
+      {/* 4. PINNED MESSAGE */}
       {pinnedMsg && (
         <ChatPinnedMessage 
             message={pinnedMsg} 
@@ -253,7 +298,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
         />
       )}
 
-      {/* 4. MESSAGES AREA */}
+      {/* 5. MESSAGES AREA */}
       <div className="flex-1 relative overflow-hidden bg-background">
         <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -303,7 +348,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
         </AnimatePresence>
       </div>
 
-      {/* 5. FOOTER AREA */}
+      {/* 6. FOOTER AREA */}
       <div className="relative z-20 bg-background">
           {canType ? (
               <ChatInput 
