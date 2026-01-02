@@ -11,6 +11,7 @@ import {
 } from "agora-rtc-react";
 import { useState, useEffect } from "react";
 import { Mic, MicOff, Video, VideoOff, X, MessageSquare, Heart, Users } from "lucide-react";
+import LiveChatOverlay from "./LiveChatOverlay";
 
 export default function LiveStage({ channelName, appId, token, uid, isHost, onLeave }) {
   // Agora Hooks
@@ -43,8 +44,8 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
     <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col animate-in zoom-in-95 duration-300">
       
       {/* --- HEADER OVERLAY --- */}
-      <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent h-32">
-        <div className="flex items-center gap-3">
+      <div className="absolute top-0 left-0 right-0 p-6 z-20 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent h-32 pointer-events-none">
+        <div className="flex items-center gap-3 pointer-events-auto">
             <div className="bg-red-600 px-3 py-1 rounded-sm flex items-center gap-2 animate-pulse">
                 <span className="text-[10px] font-black uppercase tracking-widest">LIVE</span>
             </div>
@@ -60,7 +61,7 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
 
         <button 
             onClick={onLeave}
-            className="p-2 bg-white/10 hover:bg-red-600/80 backdrop-blur-md rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-red-600/80 backdrop-blur-md rounded-full transition-colors pointer-events-auto"
         >
             <X size={20} />
         </button>
@@ -95,25 +96,25 @@ export default function LiveStage({ channelName, appId, token, uid, isHost, onLe
         {/* Co-Host / Grid (Floating Bottom Right) */}
         {/* If there are multiple speakers, show them in small floating windows */}
         {remoteUsers.length > 0 && isHost && (
-            <div className="absolute bottom-24 right-4 w-32 h-48 border-2 border-white/20 shadow-2xl bg-black z-10">
+            <div className="absolute bottom-24 right-4 w-32 h-48 border-2 border-white/20 shadow-2xl bg-black z-10 pointer-events-auto">
                 <RemoteUser user={remoteUsers[0]} className="w-full h-full object-cover" />
             </div>
         )}
       </div>
 
-      {/* --- CONTROLS OVERLAY --- */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+      {/* --- CONTROLS & CHAT OVERLAY --- */}
+      {/* We use pointer-events-none on the container so clicks pass through to video, 
+          but re-enable it on specific children like chat and buttons */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none p-6">
         
-        {/* Simulated Chat Bubbles */}
+        {/* REAL CHAT COMPONENT */}
         {showChat && (
-            <div className="h-48 w-full md:w-1/3 mb-4 flex flex-col justify-end space-y-2 mask-image-gradient pointer-events-none">
-                <div className="text-sm font-mono text-white/80"><span className="font-bold text-accent">@alex:</span> Looking sharp! 🔥</div>
-                <div className="text-sm font-mono text-white/80"><span className="font-bold text-blue-400">@sarah:</span> Can you show the code?</div>
-                <div className="text-sm font-mono text-white/80"><span className="font-bold text-green-400">@mike:</span> Joined the stream.</div>
+            <div className="h-64 w-full md:w-1/3 mb-4 pointer-events-auto">
+                <LiveChatOverlay channelId={channelName} />
             </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pointer-events-auto">
             <div className="flex gap-4">
                 {isHost && (
                     <>

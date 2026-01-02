@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
 import { 
-  Users, Radio, Hash, Lock, Globe 
+  Users, Radio, Lock, Globe, Link as LinkIcon 
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch"; // Import Switch
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
@@ -15,8 +16,9 @@ import { useRouter } from "next/navigation";
 export default function CreateCommunityDialog({ isOpen, onClose }) {
   const { user } = useAuth();
   const router = useRouter();
-  const [mode, setMode] = useState("group"); // 'group' | 'channel'
+  const [mode, setMode] = useState("group"); 
   const [isPublic, setIsPublic] = useState(false);
+  const [linkGroup, setLinkGroup] = useState(false); // NEW STATE
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,15 +28,45 @@ export default function CreateCommunityDialog({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      // 1. Create Conversation
+      let linkedGroupId = null;
+
+      // 1. If Channel + Link Group: Create the Group first
+      if (mode === 'channel' && linkGroup) {
+        const { data: groupData, error: groupError } = await supabase
+            .from('conversations')
+            .insert({
+                type: 'group',
+                title: `${title} (Discussion)`,
+                description: `Official discussion group for ${title} channel.`,
+                owner_id: user.id,
+                is_public: isPublic, // Inherit visibility
+                last_message: "Group initialized.",
+            })
+            .select()
+            .single();
+        
+        if (groupError) throw groupError;
+        linkedGroupId = groupData.id;
+
+        // Add owner to group
+        await supabase.from('conversation_participants').insert({
+            conversation_id: linkedGroupId,
+            user_id: user.id,
+            role: 'owner',
+            status: 'active'
+        });
+      }
+
+      // 2. Create the Main Conversation (Channel or Group)
       const { data: conv, error } = await supabase
         .from('conversations')
         .insert({
-          type: mode, // 'group' or 'channel'
+          type: mode,
           title: title,
           description: desc,
           owner_id: user.id,
           is_public: isPublic,
+          linked_group_id: linkedGroupId, // Link the group if created
           last_message: "System initialized.",
         })
         .select()
@@ -42,7 +74,7 @@ export default function CreateCommunityDialog({ isOpen, onClose }) {
 
       if (error) throw error;
 
-      // 2. Add Self as Owner
+      // 3. Add Self as Owner to Main
       await supabase.from('conversation_participants').insert({
         conversation_id: conv.id,
         user_id: user.id,
@@ -52,7 +84,7 @@ export default function CreateCommunityDialog({ isOpen, onClose }) {
 
       toast.success(`${mode === 'group' ? 'Group' : 'Channel'} Initialized`);
       onClose();
-      router.push(`/chat?id=${conv.id}`); // Navigate to new chat
+      router.push(`/chat?id=${conv.id}`); 
 
     } catch (error) {
       toast.error("Creation Failed", { description: error.message });
@@ -134,6 +166,23 @@ export default function CreateCommunityDialog({ isOpen, onClose }) {
                 </div>
                 <div className={`w-3 h-3 rounded-full ${isPublic ? "bg-green-500" : "bg-yellow-500"}`} />
             </div>
+
+            {/* NEW: Link Group Toggle (Only for Channels) */}
+            {mode === 'channel' && (
+                <div className="flex items-center justify-between p-3 border border-border bg-secondary/5">
+                    <div className="flex items-center gap-3">
+                        <LinkIcon size={18} className="text-accent" />
+                        <div>
+                            <p className="text-sm font-bold text-foreground">Link Discussion Group</p>
+                            <p className="text-[10px] text-muted-foreground">
+                                Automatically forward posts to a chat group.
+                            </p>
+                        </div>
+                    </div>
+                    <Switch checked={linkGroup} onCheckedChange={setLinkGroup} className="data-[state=checked]:bg-accent" />
+                </div>
+            )}
+
           </div>
 
         </div>
