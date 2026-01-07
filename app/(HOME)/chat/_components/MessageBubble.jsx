@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Check, CheckCheck, MoreHorizontal, Pin, Trash2, Ban, Reply, Smile, Copy, Edit3, Phone, PhoneMissed, PhoneIncoming, Video } from "lucide-react";
+import { Check, CheckCheck, MoreHorizontal, Pin, Trash2, Ban, Reply, Smile, Copy, Edit3, Phone, PhoneMissed, PhoneIncoming, Video, Clock } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +41,18 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
   // Call Metadata
   const callStatus = message.metadata?.status; // 'ongoing', 'ended', 'missed'
   const isAudioCall = message.metadata?.audioOnly;
-  
+  const startedAt = message.metadata?.startedAt ? new Date(message.metadata.startedAt) : null;
+  const endedAt = message.metadata?.endedAt ? new Date(message.metadata.endedAt) : null;
+
+  // Duration Calculation
+  let durationText = "";
+  if (startedAt && endedAt) {
+      const diffMs = endedAt - startedAt;
+      const minutes = Math.floor(diffMs / 60000);
+      const seconds = Math.floor((diffMs % 60000) / 1000);
+      durationText = `${minutes}m ${seconds}s`;
+  }
+
   // Find my active reaction
   const myReaction = Object.entries(reactions).find(([emoji, users]) => users.includes(currentUserId))?.[0];
 
@@ -58,11 +69,9 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
         .eq('id', message.id);
 
       if (error) {
-        console.error("Delete Error:", error);
         toast.error("Access Denied", { description: "You don't have permission to delete this signal." });
         return;
       }
-
       toast.info("Signal Purged", { description: "Message removed from index." });
     } catch (err) {
       toast.error("Command Failed");
@@ -95,6 +104,7 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
     let bgColor = "bg-secondary/20";
     let textColor = "text-muted-foreground";
     let label = "Call Ended";
+    let subLabel = durationText || "Connection Terminated";
     let showJoin = false;
 
     if (callStatus === 'ongoing') {
@@ -102,19 +112,20 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
         textColor = "text-green-500";
         CallIcon = PhoneIncoming;
         label = isMe ? "Outgoing Call..." : "Incoming Call...";
-        // Show join button for receiver, OR sender (if they closed the window but want back in)
-        showJoin = true; 
+        subLabel = "Tap to Join Frequency";
+        showJoin = true; // Show join button for everyone while active
     } else if (callStatus === 'missed') {
         bgColor = "bg-red-500/10 border-red-500/30";
         textColor = "text-red-500";
         CallIcon = PhoneMissed;
         label = "Missed Call";
+        subLabel = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
     return (
         <div id={`msg-${message.id}`} className={cn("flex w-full mb-4 mt-4 px-4", isMe ? "justify-end" : "justify-start")}>
             <div className={cn(
-                "p-4 rounded-lg border w-64 flex flex-col gap-3 backdrop-blur-sm",
+                "p-4 rounded-lg border w-64 flex flex-col gap-3 backdrop-blur-sm shadow-sm",
                 bgColor,
                 isMe ? "rounded-tr-none" : "rounded-tl-none"
             )}>
@@ -124,8 +135,9 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                     </div>
                     <div>
                         <h4 className={cn("font-bold text-sm uppercase tracking-tight", textColor)}>{label}</h4>
-                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5 flex items-center gap-1">
+                            {callStatus === 'ended' && <Clock size={10} />}
+                            {subLabel}
                         </p>
                     </div>
                 </div>
@@ -144,8 +156,7 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                      <button 
                         className="w-full border border-red-500/30 text-red-500 hover:bg-red-500/10 py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-colors"
                         onClick={() => {
-                            // Helper toast, actual callback logic usually triggered from header
-                            toast.info("Initialize frequency via the header console.", { duration: 3000 });
+                            toast.info("Use the header controls to call back.");
                         }}
                      >
                         Call Back
@@ -157,11 +168,9 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
             {isJoiningCall && (
                 <LiveRoomWrapper 
                     channelId={chatId} 
-                    isHost={isMe} // If I am sender, I am host. If I am receiver, I am guest.
+                    isHost={isMe} // If I created it, I'm host. If I'm joining, I'm host too (peer-to-peer logic).
                     audioOnly={isAudioCall}
-                    // Note: Guests typically don't update call status when leaving, 
-                    // unless you want the last person leaving to end it. 
-                    // Usually we pass null here for guests so only the host ends the specific message status.
+                    // Only pass message ID if I am the original sender (to update status on close)
                     callMessageId={isMe ? message.id : null} 
                     onClose={() => setIsJoiningCall(false)} 
                 />
@@ -180,7 +189,7 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
             isMe ? "items-end" : "items-start"
         )}>
 
-            {/* --- ACTIONS TOOLBAR (FLOATING ON TOP) --- */}
+            {/* --- ACTIONS TOOLBAR --- */}
             <div className={cn(
                 "absolute -top-11 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center gap-1 bg-background/95 border border-border p-1 rounded-full shadow-xl z-30 backdrop-blur-sm",
                 isMe ? "right-0" : "left-0"
@@ -220,7 +229,6 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                     <DropdownMenuContent align={isMe ? "end" : "start"} className="bg-background border-border rounded-none w-40">
                         <DropdownMenuItem onClick={copyText} className="text-xs font-mono cursor-pointer"><Copy size={12} className="mr-2"/> Copy Text</DropdownMenuItem>
                         
-                        {/* --- EDIT OPTION (Only for Sender) --- */}
                         {isMe && (
                             <DropdownMenuItem onClick={() => onEdit(message)} className="text-xs font-mono cursor-pointer">
                                 <Edit3 size={12} className="mr-2"/> Edit Message
@@ -288,7 +296,6 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                         )}
 
                         <div className="absolute bottom-0 right-0 left-0 p-2 bg-gradient-to-t from-black/80 to-transparent flex justify-end items-end gap-1 pointer-events-none">
-                            {/* Edited Indicator */}
                             {message.edit_count > 0 && <span className="text-[8px] font-mono text-accent/80 mr-1 uppercase">Edited</span>}
                             
                             <span className="text-[9px] font-mono text-white/90">
@@ -314,7 +321,6 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                         <LinkPreviewCard text={message.text} />
 
                         <div className={cn("flex items-center gap-1 mt-1 text-[10px] font-mono select-none", isMe ? "justify-end text-muted-foreground/70" : "justify-start text-muted-foreground")}>
-                            {/* Edited Indicator */}
                             {message.edit_count > 0 && <span className="text-[8px] text-accent/80 mr-1 uppercase font-bold tracking-tighter">Edited</span>}
                             
                             <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
