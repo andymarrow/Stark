@@ -11,55 +11,54 @@ const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMessageId, onClose }) {
   const { user } = useAuth();
   
-  const [client] = useState(() => AgoraRTC.createClient({ mode: "live", codec: "vp8" }));
+  // Initialize Agora Client
+  // 'mode: rtc' is better for 1:1 calls than 'live'
+  const [client] = useState(() => AgoraRTC.createClient({ mode: "rtc", codec: "vp8" }));
   const [token, setToken] = useState(null);
-  const [uid] = useState(Math.floor(Math.random() * 1000000));
+  const [uid] = useState(Math.floor(Math.random() * 1000000)); // Random INT ID for Agora
   
+  // Supabase State
   const [viewers, setViewers] = useState([]);
   const [liveMessages, setLiveMessages] = useState([]);
   const [incomingHearts, setIncomingHearts] = useState([]);
   
-  // Track attendance to decide if call was missed or connected
-  const maxViewersRef = useRef(0);
-  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
+  // Refs for Cleanup
   const channelRef = useRef(null);
+  const isHostRef = useRef(isHost); // Keep track if I am the original caller
 
-  // 1. Fetch Token (FORCE PUBLISHER)
+  // 1. Fetch Token
   useEffect(() => {
     const fetchToken = async () => {
       try {
-        // In 1:1 call, everyone is a publisher. In Broadcast, host is publisher.
-        // We can safely default to publisher for 1:1.
+        // CRITICAL: For 1:1 calls (callMessageId exists), EVERYONE must be a 'publisher'
+        // For Broadcasts, only isHost is 'publisher'
         const role = callMessageId ? 'publisher' : (isHost ? 'publisher' : 'subscriber');
         
         const { data, error } = await supabase.functions.invoke('agora-token', {
-            body: { channelName: channelId, uid: uid, role } 
+            body: { channelName: channelId, uid: uid, role }
         });
-        if (error || !data?.token) throw new Error("Token generation failed");
+        if (error || !data?.token) throw new Error("Token failed");
         setToken(data.token); 
       } catch (err) {
-        setError(err.message);
+        console.error("Token Error:", err);
+        setError("Connection Failed");
       } finally {
         setLoading(false);
       }
     };
+
     if (AGORA_APP_ID) fetchToken();
-    else { setError("Missing AGORA_APP_ID"); setLoading(false); }
+    else { setError("Missing App ID"); setLoading(false); }
   }, [channelId, uid, isHost, callMessageId]);
 
-  // 2. Setup Realtime
+  // 2. Realtime Logic & Cleanup
   useEffect(() => {
     if (!user) return;
 
-    // --- Channel Streaming Logic (Non-Call) ---
-    if (isHost && !callMessageId) {
-        supabase.from('conversations').update({ is_live: true }).eq('id', channelId).then();
-    }
-
-    // --- Agora Presence Channel ---
+    // A. Presence Channel (Who is here?)
     const channel = supabase.channel(`live-room-${channelId}`, {
         config: { presence: { key: user.id } }
     });
@@ -69,13 +68,9 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
         const newState = channel.presenceState();
         const users = [];
         for (let id in newState) { users.push(newState[id][0]); }
-        
         setViewers(users);
-        if (users.length > maxViewersRef.current) maxViewersRef.current = users.length;
     })
-    .on('broadcast', { event: 'chat' }, ({ payload }) => {
-        setLiveMessages(prev => [...prev.slice(-49), payload]);
-    })
+    .on('broadcast', { event: 'chat' }, ({ payload }) => setLiveMessages(prev => [...prev.slice(-49), payload]))
     .on('broadcast', { event: 'heart' }, () => {
         const heartId = Date.now() + Math.random();
         setIncomingHearts(prev => [...prev, heartId]);
@@ -96,60 +91,49 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     channelRef.current = channel;
 
-    // --- Call Status Watcher (For Receiver) ---
-    let statusSubscription = null;
+    // B. Call Status Watcher (The "Kick" Mechanism)
+    let statusSub = null;
     if (callMessageId) {
-        statusSubscription = supabase.channel(`call-status-${callMessageId}`)
+        statusSub = supabase.channel(`watch-call-${callMessageId}`)
             .on('postgres_changes', { 
                 event: 'UPDATE', 
                 schema: 'public', 
                 table: 'messages', 
                 filter: `id=eq.${callMessageId}` 
             }, (payload) => {
-                // If status changes to ended/missed, close window
-                const newStatus = payload.new.metadata?.status;
-                if (newStatus === 'ended' || newStatus === 'missed') {
-                    onClose();
+                const status = payload.new.metadata?.status;
+                // If call ended/missed, EVERYONE leaves immediately
+                if (status === 'ended' || status === 'missed') {
+                    onClose(); 
                 }
             })
             .subscribe();
     }
 
-    // --- CLEANUP ---
+    // C. CLEANUP FUNCTION (Runs when I close the window)
     return () => {
+        // If I am the CALLER (Host), I must end the call for everyone
+        if (callMessageId && isHostRef.current) {
+            supabase.from('messages').update({
+                metadata: {
+                    status: 'ended', // Just mark as ended, duration calc handles the rest
+                    endedAt: new Date().toISOString(),
+                    audioOnly: audioOnly
+                }
+            }).eq('id', callMessageId).then();
+        }
+
         // Legacy Channel Cleanup
         if (isHost && !callMessageId) {
             supabase.from('conversations').update({ is_live: false }).eq('id', channelId).then();
         }
 
-        // Call Cleanup: Update Status in DB
-        // We only update if WE are closing it and the status is still 'ongoing'
-        if (callMessageId) {
-            supabase
-                .from('messages')
-                .select('metadata')
-                .eq('id', callMessageId)
-                .single()
-                .then(({ data }) => {
-                    if (data?.metadata?.status === 'ongoing') {
-                        const finalStatus = maxViewersRef.current > 1 ? 'ended' : 'missed';
-                        supabase.from('messages').update({
-                            metadata: {
-                                ...data.metadata,
-                                status: finalStatus,
-                                endedAt: new Date().toISOString()
-                            }
-                        }).eq('id', callMessageId).then();
-                    }
-                });
-        }
-
         channel.unsubscribe();
-        if (statusSubscription) supabase.removeChannel(statusSubscription);
+        if (statusSub) supabase.removeChannel(statusSub);
     };
-  }, [channelId, user, isHost, uid, callMessageId, onClose]);
+  }, [channelId, user, isHost, uid, callMessageId, audioOnly, onClose]);
 
-  // Actions
+  // Pass-through functions
   const sendLiveMessage = (text) => {
     if (!channelRef.current) return;
     const msgPayload = { id: Date.now(), text, sender_id: user.id, username: viewers.find(v => v.user_id === user.id)?.username || "Me" };
@@ -165,16 +149,21 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
     setTimeout(() => setIncomingHearts(prev => prev.filter(h => h !== heartId)), 3000);
   };
 
-  if (loading) return <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
-  if (error) return <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center text-red-500">{error}</div>;
+  if (loading) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
+  if (error) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-500">{error}</div>;
 
   return (
     <AgoraRTCProvider client={client}>
       <LiveStage 
-        channelName={channelId} appId={AGORA_APP_ID} token={token} uid={uid} 
-        isHost={isHost}
-        // In 1:1 calls, isHost really just means "I am a participant", passing true ensures track creation
-        isCallParticipant={!!callMessageId}
+        channelName={channelId} 
+        appId={AGORA_APP_ID} 
+        token={token} 
+        uid={uid} 
+        
+        // LOGIC: If it's a Call, EVERYONE is a Host (Publisher).
+        // If it's a Stream, only the isHost prop matters.
+        isPublisher={!!callMessageId || isHost}
+        
         viewers={viewers}
         messages={liveMessages}
         hearts={incomingHearts}
