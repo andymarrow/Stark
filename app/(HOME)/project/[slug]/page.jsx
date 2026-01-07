@@ -1,21 +1,19 @@
 import Link from "next/link";
-import { ChevronRight, Home, Share2, Loader2 } from "lucide-react";
+import { ChevronRight, Home } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@/utils/supabase/server"; // Server client for Auth check
 import { notFound } from "next/navigation";
-import { getAvatar } from "@/constants/assets";
 
-// Import your existing Client Components
+// Import existing components
 import ProjectGallery from "./_components/ProjectGallery";
 import ProjectSidebar from "./_components/ProjectSidebar";
-import ProjectReadme from "./_components/ProjectReadme";
-import ProjectComments from "./_components/ProjectComments";
-
-// Import a small client wrapper for the share functionality
 import ShareAction from "./_components/ShareAction"; 
 
+// NEW: The interactive content wrapper (Handles Overview/Changelog tabs)
+import ProjectContent from "./_components/ProjectContent"; 
+
 /**
- * 1. DYNAMIC METADATA GENERATION (The Intelligence Preview)
- * This is what Telegram, WhatsApp, and Twitter see.
+ * 1. DYNAMIC METADATA GENERATION
  */
 export async function generateMetadata({ params }) {
   const { slug } = await params;
@@ -23,14 +21,13 @@ export async function generateMetadata({ params }) {
   // Fetch data for the meta tags
   const { data: p } = await supabase
     .from("projects")
-    .select("title, description, thumbnail_url, likes_count, views")
+    .select("title, description, thumbnail_url")
     .eq("slug", slug)
     .single();
 
   if (!p) return { title: "Project Not Found | Stark" };
 
   // URL for the Dynamic OG Image API
-  // Adding a timestamp (v) helps bypass Telegram's cache for updated stats
   const ogUrl = `https://stark-01.vercel.app/api/og/project?slug=${slug}&v=${Date.now()}`;
 
   return {
@@ -62,10 +59,13 @@ export async function generateMetadata({ params }) {
 
 /**
  * 2. SERVER-SIDE PAGE COMPONENT
- * Fetches all project and collaborator data on the server.
  */
 export default async function ProjectDetailPage({ params }) {
   const { slug } = await params;
+  
+  // Create server client to check session securely
+  const supabaseServer = await createClient();
+  const { data: { user } } = await supabaseServer.auth.getUser();
 
   // --- A. FETCH PROJECT & OWNER ---
   const { data: projectData, error: projectError } = await supabase
@@ -122,6 +122,9 @@ export default async function ProjectDetailPage({ params }) {
       }
   };
 
+  // Determine Ownership
+  const isOwner = user?.id === projectData.owner_id;
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-10">
       
@@ -154,26 +157,9 @@ export default async function ProjectDetailPage({ params }) {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
             
-            {/* Left Content: Title, Readme, and Comments */}
-            <div className="lg:col-span-8 space-y-10">
-                <div>
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">
-                        {project.title}
-                    </h1>
-                    <div className="flex flex-wrap gap-2 mb-6">
-                        {project.techStack.map((tag, i) => (
-                            <span key={i} className="px-2 py-1 bg-secondary/30 border border-border text-[10px] font-mono text-muted-foreground uppercase">
-                                {tag.name}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-                
-                {/* Readme Content */}
-                <ProjectReadme content={project.description} />
-
-                {/* Comments Section */}
-                <ProjectComments projectId={project.id} />
+            {/* Left Content: Swapped for Interactive Content Wrapper */}
+            <div className="lg:col-span-8">
+                <ProjectContent project={project} isOwner={isOwner} />
             </div>
 
             {/* Right Content: Sticky Sidebar */}
@@ -186,7 +172,6 @@ export default async function ProjectDetailPage({ params }) {
         </div>
       </main>
 
-      
     </div>
   );
 }

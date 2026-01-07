@@ -10,30 +10,52 @@ import { useRouter } from "next/navigation";
 import CommentItem from "./CommentItem";
 import { getAvatar } from "@/constants/assets";
 
-export default function ProjectComments({ projectId }) {
+export default function ProjectComments({ projectId, changelogId = null }) {
   const { user } = useAuth();
   const router = useRouter();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
   const [userProfile, setUserProfile] = useState(null);
 
+  // Determine dynamic labels based on context
+  const contextLabel = changelogId ? "Update Discussion" : "Discussion Log";
+  
   useEffect(() => {
-    if (projectId) fetchComments();
-  }, [projectId]);
+    if (!projectId) return;
+    
+    // Initial Fetch
+    fetchComments();
+
+    // Set up Realtime Listener for this specific scope
+    const channelName = changelogId ? `comments-log-${changelogId}` : `comments-project-${projectId}`;
+    const channel = supabase
+      .channel(channelName)
+      .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'comments',
+          // Strict filter
+          filter: changelogId ? `changelog_id=eq.${changelogId}` : `project_id=eq.${projectId}`
+      }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+              // Fetch the full comment with author details to append
+              fetchNewComment(payload.new.id);
+          }
+          if (payload.eventType === 'DELETE') {
+              setComments(prev => prev.filter(c => c.id !== payload.old.id));
+          }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel) };
+  }, [projectId, changelogId]);
 
   useEffect(() => {
     const fetchProfile = async () => {
         if (!user) return;
-        // Fetch only the avatar field from the public profile
-        const { data } = await supabase
-            .from('profiles')
-            .select('avatar_url')
-            .eq('id', user.id)
-            .single();
-        
+        const { data } = await supabase.from('profiles').select('avatar_url').eq('id', user.id).single();
         if (data) setUserProfile(data);
     };
     fetchProfile();
@@ -41,21 +63,25 @@ export default function ProjectComments({ projectId }) {
 
   const fetchComments = async () => {
     try {
-        // FIXED: Added !user_id to specify which relationship to use
-        const { data, error } = await supabase
-        .from('comments')
-        .select(`
-            id, 
-            content, 
-            created_at, 
-            user_id, 
-            likes_count, 
-            dislikes_count, 
-            author:profiles!user_id (username, avatar_url)
-        `)
-        .eq('project_id', projectId)
-        .is('parent_id', null)
-        .order('created_at', { ascending: false });
+        let query = supabase
+            .from('comments')
+            .select(`
+                id, content, created_at, user_id, 
+                likes_count, dislikes_count, 
+                author:profiles!user_id (username, avatar_url)
+            `)
+            .eq('project_id', projectId) // Always must belong to project
+            .is('parent_id', null)
+            .order('created_at', { ascending: false });
+
+        // STRICT FILTERING
+        if (changelogId) {
+            query = query.eq('changelog_id', changelogId);
+        } else {
+            query = query.is('changelog_id', null);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         setComments(data || []);
@@ -63,6 +89,27 @@ export default function ProjectComments({ projectId }) {
         console.error("Comments Fetch Error:", error);
     } finally {
         setLoading(false);
+    }
+  };
+
+  // Helper to fetch a single new comment (for realtime)
+  const fetchNewComment = async (id) => {
+    const { data } = await supabase
+        .from('comments')
+        .select(`
+            id, content, created_at, user_id, 
+            likes_count, dislikes_count, 
+            author:profiles!user_id (username, avatar_url)
+        `)
+        .eq('id', id)
+        .single();
+    
+    if (data) {
+        setComments(prev => {
+            // Prevent duplicates if optimistic update already added it
+            if (prev.some(c => c.id === data.id)) return prev;
+            return [data, ...prev];
+        });
     }
   };
 
@@ -76,19 +123,30 @@ export default function ProjectComments({ projectId }) {
 
     setSubmitting(true);
     try {
+        const payload = {
+            project_id: projectId,
+            user_id: user.id,
+            content: newComment,
+            changelog_id: changelogId // Can be null
+        };
+
         const { data, error } = await supabase
             .from('comments')
-            .insert({
-                project_id: projectId,
-                user_id: user.id,
-                content: newComment
-            })
-            .select(`*, author:profiles!user_id (username, avatar_url)`)
+            .insert(payload)
+            .select(`
+                id, content, created_at, user_id, 
+                likes_count, dislikes_count, 
+                author:profiles!user_id (username, avatar_url)
+            `)
             .single();
 
         if (error) throw error;
+        
         setNewComment("");
+        
+        // Optimistic Update: Add to state immediately
         setComments(prev => [data, ...prev]);
+        
         toast.success("Log Added");
     } catch (error) {
         toast.error("Failed", { description: error.message });
@@ -98,22 +156,26 @@ export default function ProjectComments({ projectId }) {
   };
 
   const handleDelete = async (commentId) => {
+    // Optimistic Delete
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    
     const { error } = await supabase.from('comments').delete().eq('id', commentId);
-    if (!error) {
-        setComments(prev => prev.filter(c => c.id !== commentId));
+    if (error) {
+        toast.error("Delete Failed");
+        fetchComments(); // Revert on fail
+    } else {
         toast.success("Log Deleted");
     }
   };
 
   return (
-    <div className="border-t border-border mt-12 pt-8">
+    <div className={`border-t border-border mt-12 pt-8 ${changelogId ? 'mt-6 pt-6 border-dashed' : ''}`}>
       
       <div className="flex items-center gap-2 mb-8">
         <MessageSquare size={16} className="text-accent" />
-        <h3 className="font-bold text-lg font-mono uppercase tracking-widest">Discussion Log ({comments.length})</h3>
+        <h3 className="font-bold text-lg font-mono uppercase tracking-widest">{contextLabel} ({comments.length})</h3>
       </div>
 
-      {/* --- UI FIX: BUTTON MOVED TO BOTTOM TOOLBAR --- */}
       <div className="flex gap-4 mb-12">
         <div className="w-10 h-10 bg-secondary border border-border flex-shrink-0 relative overflow-hidden hidden sm:block">
             {user ? (
