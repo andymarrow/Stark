@@ -14,8 +14,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Mic, MicOff, Video, VideoOff, X, MessageSquare, Heart, Users, Monitor, MonitorOff, AlertCircle
 } from "lucide-react";
-import LiveChatOverlay from "../LiveChatOverlay";
-import LiveViewerList from "../LiveViewerList";
+import LiveChatOverlay from "./LiveChatOverlay";
+import LiveViewerList from "./LiveViewerList";
 
 export default function LiveStage({
   channelName, appId, token, uid, isPublisher, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly
