@@ -31,24 +31,28 @@ export default function LiveStage({
   appId,
   token,
   uid,
-  isHost, // true if Streamer OR 1:1 Caller/Participant
+  isHost,             // True if Streamer OR Caller
+  isCallParticipant,  // True if this is a 1:1 Call (not a broadcast)
   onLeave,
   viewers,
   messages,
   hearts,
   onSendMessage,
   onSendHeart,
-  audioOnly = false
+  audioOnly
 }) {
   const client = useRTCClient();
 
   // --- 1. TRACK MANAGEMENT ---
-  // Only create tracks if isHost is true (Streamer or Call Participant)
-  const { localMicrophoneTrack } = useLocalMicrophoneTrack(isHost);
-  const { localCameraTrack } = useLocalCameraTrack(isHost && !audioOnly);
+  // In Broadcast: Only Host publishes.
+  // In 1:1 Call: EVERYONE publishes (Caller & Receiver).
+  const shouldPublish = isHost || isCallParticipant;
+
+  const { localMicrophoneTrack } = useLocalMicrophoneTrack(shouldPublish);
+  const { localCameraTrack } = useLocalCameraTrack(shouldPublish && !audioOnly);
   
   const [screenOn, setScreenOn] = useState(false);
-  const { localScreenTrack, error: screenError } = useLocalScreenTrack(screenOn && isHost, {}, "auto");
+  const { localScreenTrack, error: screenError } = useLocalScreenTrack(screenOn && shouldPublish, {}, "auto");
 
   const remoteUsers = useRemoteUsers();
 
@@ -57,16 +61,16 @@ export default function LiveStage({
 
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(!audioOnly);
-  const [showChat, setShowChat] = useState(true); // Default chat open
+  const [showChat, setShowChat] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
 
   // --- 2. AGORA LIFECYCLE ---
   useJoin({ appid: appId, channel: channelName, token, uid: uid }, true);
   
-  // Publish tracks if you are a Host/Participant
+  // Publish tracks if you are a Host or Call Participant
   usePublish([localMicrophoneTrack, camOn ? localCameraTrack : null, screenOn ? localScreenTrack : null]);
 
-  // Cleanup Hardware
+  // Cleanup Hardware on Unmount
   useEffect(() => {
     return () => {
       localCameraTrack?.close();
@@ -89,33 +93,33 @@ export default function LiveStage({
     if (localCameraTrack) localCameraTrack.setEnabled(camOn);
   }, [camOn, localCameraTrack]);
 
-  // --- 4. LAYOUT LOGIC ---
+  // --- 4. LAYOUT LOGIC (The "Black Screen" Fix) ---
   
-  // Scenario A: 1:1 Call Connected (I see Remote User Big, Me Small)
-  const isOneToOneConnected = remoteUsers.length > 0 && isHost;
+  const isOneToOne = isCallParticipant;
+  const isConnected = remoteUsers.length > 0;
   
-  // Scenario B: Channel/Group Viewer (I see Host Big, No Me)
-  const isViewer = !isHost && remoteUsers.length > 0;
-  
-  // Scenario C: I am the Host/Caller but nobody else is here yet (I see Me Big)
-  const isSoloHost = isHost && remoteUsers.length === 0;
-
-  // Render Local Video into Ref (Used for PIP or Main depending on scenario)
+  // RENDER LOCAL VIDEO
+  // We need to play the local video into the ref whenever the track exists and is enabled
   useEffect(() => {
     if (localCameraTrack && camOn && localVideoRef.current) {
-      localCameraTrack.play(localVideoRef.current);
+      try {
+        if (localCameraTrack.isPlaying) localCameraTrack.stop();
+        localCameraTrack.play(localVideoRef.current);
+      } catch (e) {
+        console.error("Local Video Play Error:", e);
+      }
     }
-  }, [localCameraTrack, camOn, isOneToOneConnected, isSoloHost]);
+  }, [localCameraTrack, camOn, isConnected, isOneToOne]);
 
-  // Screen Share Playback
+  // RENDER SCREEN SHARE
   useEffect(() => {
     if (localScreenTrack && screenOn && localScreenRef.current) {
-      localScreenTrack.play(localScreenRef.current);
+        localScreenTrack.play(localScreenRef.current);
     }
   }, [localScreenTrack, screenOn]);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black text-white flex flex-col animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-[9999] bg-black text-white flex flex-col animate-in zoom-in-95 duration-300">
       
       {/* FLOATING HEARTS LAYER */}
       <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
@@ -140,7 +144,7 @@ export default function LiveStage({
         <div className="flex items-center gap-3 pointer-events-auto">
           <div className="bg-red-600 px-3 py-1 rounded-sm flex items-center gap-2 animate-pulse">
             <span className="text-[10px] font-black uppercase tracking-widest">
-                {remoteUsers.length > 0 ? "LIVE_LINK" : "WAITING..."}
+                {isConnected ? "LIVE_LINK" : "WAITING..."}
             </span>
           </div>
           <div>
@@ -171,62 +175,81 @@ export default function LiveStage({
       )}
 
       {/* --- VIDEO STAGE --- */}
-      <div className="flex-1 relative overflow-hidden bg-zinc-900">
-        <div className="absolute inset-0 flex items-center justify-center">
-          
-          {/* 1. MAIN SCREEN CONTENT */}
-          {/* If Solo Host -> Show Local. If Connected -> Show Remote. */}
-          {isSoloHost ? (
-             <div className="relative w-full h-full">
-                {screenOn ? (
-                    <div ref={localScreenRef} className="w-full h-full object-contain bg-zinc-900" />
-                ) : (
-                    <div ref={localVideoRef} className="w-full h-full object-cover" style={{ transform: "rotateY(180deg)" }}>
-                        {!camOn && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10 gap-2">
-                                <div className="w-24 h-24 rounded-full border-2 border-dashed border-zinc-700 flex items-center justify-center">
-                                    <VideoOff size={32} className="text-zinc-600" />
+      <div className="flex-1 relative overflow-hidden bg-zinc-900 flex items-center justify-center">
+        
+        {/* SCENARIO 1: WAITING (Solo) */}
+        {!isConnected && (
+            <div className="relative w-full h-full">
+                {/* If I'm the host/caller, show ME full screen while waiting */}
+                {shouldPublish ? (
+                    screenOn ? (
+                        <div ref={localScreenRef} className="w-full h-full object-contain bg-zinc-900" />
+                    ) : (
+                        <div ref={localVideoRef} className="w-full h-full object-cover" style={{ transform: "rotateY(180deg)" }}>
+                            {!camOn && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 z-10 gap-2">
+                                    <div className="w-24 h-24 rounded-full border-2 border-dashed border-zinc-700 flex items-center justify-center">
+                                        <VideoOff size={32} className="text-zinc-600" />
+                                    </div>
+                                    <span className="font-mono text-xs uppercase tracking-widest text-zinc-500">Camera Off</span>
                                 </div>
-                                <span className="font-mono text-xs uppercase tracking-widest text-zinc-500">Camera Off</span>
-                            </div>
-                        )}
+                            )}
+                        </div>
+                    )
+                ) : (
+                    // I am a viewer waiting for host
+                    <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-sm gap-2">
+                        <div className="w-12 h-12 border-2 border-zinc-700 border-t-accent rounded-full animate-spin" />
+                        <span>WAITING_FOR_HOST...</span>
                     </div>
                 )}
-             </div>
-          ) : remoteUsers.length > 0 ? (
-             <div className="relative w-full h-full">
-                <RemoteUser user={remoteUsers[0]} style={{ width: "100%", height: "100%", objectFit: "cover" }}>
-                    {!remoteUsers[0].hasVideo && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-                            <div className="w-24 h-24 rounded-full bg-zinc-700 flex items-center justify-center animate-pulse">
-                                <Users size={40} className="text-zinc-500" />
-                            </div>
+
+                {/* Overlay Waiting Message */}
+                {shouldPublish && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
+                        <div className="bg-black/60 backdrop-blur-md px-6 py-4 rounded-xl flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-2 border-white/20 border-t-accent rounded-full animate-spin" />
+                            <span className="text-xs font-mono uppercase tracking-widest">
+                                {isOneToOne ? "Calling..." : "Starting Stream..."}
+                            </span>
                         </div>
-                    )}
-                </RemoteUser>
-             </div>
-          ) : (
-             <div className="flex flex-col items-center justify-center h-full text-zinc-500 font-mono text-sm gap-2">
-                <div className="w-12 h-12 border-2 border-zinc-700 border-t-accent rounded-full animate-spin" />
-                <span>WAITING_FOR_SIGNAL...</span>
-             </div>
-          )}
-
-          {/* 2. PIP (PICTURE IN PICTURE) - Only for 1:1 Calls when connected */}
-          {isOneToOneConnected && (
-            <div className="absolute bottom-24 right-4 w-32 h-48 border-2 border-white/20 shadow-2xl bg-black z-20 overflow-hidden rounded-md transition-all hover:scale-105 hover:border-accent">
-               {camOn ? (
-                   <div ref={localVideoRef} className="w-full h-full object-cover" style={{ transform: "rotateY(180deg)" }} />
-               ) : (
-                   <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-500">
-                       <VideoOff size={20} />
-                   </div>
-               )}
-               <div className="absolute bottom-1 left-1 text-[8px] bg-black/60 px-1 rounded text-white backdrop-blur-sm">YOU</div>
+                    </div>
+                )}
             </div>
-          )}
+        )}
 
-        </div>
+        {/* SCENARIO 2: CONNECTED (Remote Exists) */}
+        {isConnected && (
+            <>
+                {/* A. REMOTE USER (FULL SCREEN) */}
+                <div className="relative w-full h-full">
+                    <RemoteUser user={remoteUsers[0]} style={{ width: "100%", height: "100%", objectFit: "cover" }}>
+                        {!remoteUsers[0].hasVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+                                <div className="w-24 h-24 rounded-full bg-zinc-700 flex items-center justify-center animate-pulse">
+                                    <Users size={40} className="text-zinc-500" />
+                                </div>
+                            </div>
+                        )}
+                    </RemoteUser>
+                </div>
+
+                {/* B. LOCAL USER (PIP) - Only if 1:1 Call or Host */}
+                {shouldPublish && (
+                    <div className="absolute bottom-24 right-4 w-32 h-48 bg-black border border-white/20 shadow-2xl rounded-lg overflow-hidden z-20 transition-all hover:scale-105 hover:border-accent">
+                        {camOn ? (
+                            <div ref={localVideoRef} className="w-full h-full object-cover" style={{ transform: "rotateY(180deg)" }} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-600">
+                                <VideoOff size={24} />
+                            </div>
+                        )}
+                        <div className="absolute bottom-1 left-1 text-[8px] bg-black/60 px-1 rounded text-white backdrop-blur-sm">YOU</div>
+                    </div>
+                )}
+            </>
+        )}
+
       </div>
 
       {/* CONTROLS */}
@@ -239,18 +262,18 @@ export default function LiveStage({
 
         <div className="flex items-center justify-between pointer-events-auto">
           <div className="flex gap-4">
-            {isHost && (
+            {shouldPublish && (
               <>
                 <button
                   onClick={() => setMicOn(!micOn)}
-                  className={`p-3 rounded-full backdrop-blur-md border transition-all ${micOn ? "bg-white/10 border-white/20 hover:bg-white/20" : "bg-red-500 border-red-500 text-white"}`}
+                  className={`p-3 rounded-full backdrop-blur-md border ${micOn ? "bg-white/10 border-white/20" : "bg-red-500 border-red-500"}`}
                   title="Toggle Mic"
                 >
                   {micOn ? <Mic size={20} /> : <MicOff size={20} />}
                 </button>
                 <button
                   onClick={() => setCamOn(!camOn)}
-                  className={`p-3 rounded-full backdrop-blur-md border transition-all ${camOn ? "bg-white/10 border-white/20 hover:bg-white/20" : "bg-red-500 border-red-500 text-white"}`}
+                  className={`p-3 rounded-full backdrop-blur-md border ${camOn ? "bg-white/10 border-white/20" : "bg-red-500 border-red-500"}`}
                   title="Toggle Video"
                 >
                   {camOn ? <Video size={20} /> : <VideoOff size={20} />}
@@ -266,7 +289,7 @@ export default function LiveStage({
             )}
             <button
               onClick={() => setShowChat(!showChat)}
-              className={`p-3 rounded-full backdrop-blur-md border transition-all ${showChat ? "bg-white/20 border-white/40" : "bg-white/10 border-white/20 hover:bg-white/20"}`}
+              className="p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md border border-white/20"
               title="Toggle Chat"
             >
               <MessageSquare size={20} />

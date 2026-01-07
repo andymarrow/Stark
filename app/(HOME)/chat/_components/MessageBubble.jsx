@@ -168,10 +168,10 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
             {isJoiningCall && (
                 <LiveRoomWrapper 
                     channelId={chatId} 
-                    isHost={isMe} // If I created it, I'm host. If I'm joining, I'm host too (peer-to-peer logic).
+                    isHost={isMe} // In P2P calls, everyone acts as a host/publisher
                     audioOnly={isAudioCall}
-                    // Only pass message ID if I am the original sender (to update status on close)
-                    callMessageId={isMe ? message.id : null} 
+                    // IMPORTANT: Pass message.id to everyone so they listen for status updates (e.g. ended)
+                    callMessageId={message.id} 
                     onClose={() => setIsJoiningCall(false)} 
                 />
             )}
@@ -296,6 +296,7 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                         )}
 
                         <div className="absolute bottom-0 right-0 left-0 p-2 bg-gradient-to-t from-black/80 to-transparent flex justify-end items-end gap-1 pointer-events-none">
+                            {/* Edited Indicator */}
                             {message.edit_count > 0 && <span className="text-[8px] font-mono text-accent/80 mr-1 uppercase">Edited</span>}
                             
                             <span className="text-[9px] font-mono text-white/90">
@@ -321,6 +322,7 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
                         <LinkPreviewCard text={message.text} />
 
                         <div className={cn("flex items-center gap-1 mt-1 text-[10px] font-mono select-none", isMe ? "justify-end text-muted-foreground/70" : "justify-start text-muted-foreground")}>
+                            {/* Edited Indicator */}
                             {message.edit_count > 0 && <span className="text-[8px] text-accent/80 mr-1 uppercase font-bold tracking-tighter">Edited</span>}
                             
                             <span>{new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
