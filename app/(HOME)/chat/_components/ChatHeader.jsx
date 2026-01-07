@@ -17,6 +17,9 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
   const [isLiveOpen, setIsLiveOpen] = useState(false);
   const [isAudioOnly, setIsAudioOnly] = useState(false);
   const [isInfoOpen, setIsInfoOpen] = useState(false);
+  
+  // Track the message ID associated with the current call
+  const [activeCallMessageId, setActiveCallMessageId] = useState(null);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -95,10 +98,45 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
     }
   };
 
-  const startCall = (audioOnly) => {
+  const startCall = async (audioOnly) => {
     console.log(`🎥 Starting Call | Me: ${currentUser} | Owner: ${ownerId} | IsHost: ${isOwner}`);
-    setIsAudioOnly(audioOnly);
-    setIsLiveOpen(true);
+    
+    // Prevent calls in Virtual (un-handshaked) chats
+    if (conversation?.isVirtual) {
+        toast.error("Handshake Required", { description: "Send a text message first to establish connection." });
+        return;
+    }
+
+    try {
+        // 1. Create a "Call Invite" message in the chat
+        // This notifies the other user via the standard message stream
+        const { data, error } = await supabase
+            .from('messages')
+            .insert({
+                conversation_id: conversation.id,
+                sender_id: currentUser,
+                text: audioOnly ? "Started a voice call" : "Started a video call",
+                type: 'call',
+                metadata: {
+                    status: 'ongoing', // 'ongoing', 'ended', 'missed'
+                    audioOnly: audioOnly,
+                    startedAt: new Date().toISOString()
+                }
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // 2. Set state to open the window
+        setActiveCallMessageId(data.id);
+        setIsAudioOnly(audioOnly);
+        setIsLiveOpen(true);
+        
+    } catch (err) {
+        console.error(err);
+        toast.error("Failed to initialize frequency");
+    }
   };
 
   return (
@@ -240,9 +278,13 @@ export default function ChatHeader({ conversation, onBack, currentUser, onSearch
       {isLiveOpen && (
         <LiveRoomWrapper 
             channelId={conversation?.id} 
-            isHost={isOwner} 
+            isHost={true} // Initiator is Host
             audioOnly={isAudioOnly}
-            onClose={() => setIsLiveOpen(false)} 
+            callMessageId={activeCallMessageId} // Pass Message ID for status updates
+            onClose={() => {
+                setIsLiveOpen(false);
+                setActiveCallMessageId(null);
+            }} 
         />
       )}
       

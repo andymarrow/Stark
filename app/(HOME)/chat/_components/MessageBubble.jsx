@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Check, CheckCheck, MoreHorizontal, Pin, Trash2, Ban, Reply, Smile, Copy, Edit3 } from "lucide-react";
+import { Check, CheckCheck, MoreHorizontal, Pin, Trash2, Ban, Reply, Smile, Copy, Edit3, Phone, PhoneMissed, PhoneIncoming, Video } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,10 @@ import { toast } from "sonner";
 import Image from "next/image";
 import ImageLightbox from "../../project/[slug]/_components/ImageLightbox";
 import LinkPreviewCard from "./LinkPreviewCard";
+import dynamic from 'next/dynamic';
+
+// Lazy load to prevent hydration issues
+const LiveRoomWrapper = dynamic(() => import("./live/LiveRoomWrapper"), { ssr: false });
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🔥", "😮", "😢"];
 
@@ -21,15 +25,23 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
   const [showLightbox, setShowLightbox] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   
+  // Call State
+  const [isJoiningCall, setIsJoiningCall] = useState(false);
+  
   const isAdmin = role === 'owner' || role === 'admin';
   const isPinned = message.metadata?.is_pinned;
   const reactions = message.metadata?.reactions || {};
   
   // --- TYPE CHECKING ---
   const isImageGroup = message.type === 'image_group' || message.type === 'image';
+  const isCall = message.type === 'call';
   const images = message.metadata?.images || (message.type === 'image' ? [message.text] : []);
   const hasCaption = isImageGroup && message.text && message.type !== 'image';
 
+  // Call Metadata
+  const callStatus = message.metadata?.status; // 'ongoing', 'ended', 'missed'
+  const isAudioCall = message.metadata?.audioOnly;
+  
   // Find my active reaction
   const myReaction = Object.entries(reactions).find(([emoji, users]) => users.includes(currentUserId))?.[0];
 
@@ -77,6 +89,88 @@ export default function MessageBubble({ message, isMe, role, chatId, onReply, on
     setShowLightbox(true);
   };
 
+  // --- RENDER CALL BUBBLE ---
+  if (isCall) {
+    let CallIcon = isAudioCall ? Phone : Video;
+    let bgColor = "bg-secondary/20";
+    let textColor = "text-muted-foreground";
+    let label = "Call Ended";
+    let showJoin = false;
+
+    if (callStatus === 'ongoing') {
+        bgColor = "bg-green-500/10 border-green-500/30";
+        textColor = "text-green-500";
+        CallIcon = PhoneIncoming;
+        label = isMe ? "Outgoing Call..." : "Incoming Call...";
+        // Show join button for receiver, OR sender (if they closed the window but want back in)
+        showJoin = true; 
+    } else if (callStatus === 'missed') {
+        bgColor = "bg-red-500/10 border-red-500/30";
+        textColor = "text-red-500";
+        CallIcon = PhoneMissed;
+        label = "Missed Call";
+    }
+
+    return (
+        <div id={`msg-${message.id}`} className={cn("flex w-full mb-4 mt-4 px-4", isMe ? "justify-end" : "justify-start")}>
+            <div className={cn(
+                "p-4 rounded-lg border w-64 flex flex-col gap-3 backdrop-blur-sm",
+                bgColor,
+                isMe ? "rounded-tr-none" : "rounded-tl-none"
+            )}>
+                <div className="flex items-center gap-3">
+                    <div className={cn("p-2 rounded-full bg-background border border-border shadow-sm", textColor)}>
+                        <CallIcon size={20} />
+                    </div>
+                    <div>
+                        <h4 className={cn("font-bold text-sm uppercase tracking-tight", textColor)}>{label}</h4>
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                            {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                    </div>
+                </div>
+
+                {showJoin && (
+                    <button 
+                        onClick={() => setIsJoiningCall(true)}
+                        className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-all shadow-lg hover:shadow-green-500/20 animate-pulse flex items-center justify-center gap-2"
+                    >
+                        {isMe ? "Return to Call" : "Join Call"}
+                    </button>
+                )}
+                
+                {/* Call Back Button for Missed Calls (Receiver Only) */}
+                {callStatus === 'missed' && !isMe && (
+                     <button 
+                        className="w-full border border-red-500/30 text-red-500 hover:bg-red-500/10 py-2 rounded-md font-bold text-xs uppercase tracking-wider transition-colors"
+                        onClick={() => {
+                            // Helper toast, actual callback logic usually triggered from header
+                            toast.info("Initialize frequency via the header console.", { duration: 3000 });
+                        }}
+                     >
+                        Call Back
+                    </button>
+                )}
+            </div>
+
+            {/* Render Live Room if Join is clicked from the bubble */}
+            {isJoiningCall && (
+                <LiveRoomWrapper 
+                    channelId={chatId} 
+                    isHost={isMe} // If I am sender, I am host. If I am receiver, I am guest.
+                    audioOnly={isAudioCall}
+                    // Note: Guests typically don't update call status when leaving, 
+                    // unless you want the last person leaving to end it. 
+                    // Usually we pass null here for guests so only the host ends the specific message status.
+                    callMessageId={isMe ? message.id : null} 
+                    onClose={() => setIsJoiningCall(false)} 
+                />
+            )}
+        </div>
+    );
+  }
+
+  // --- STANDARD MESSAGE RENDER ---
   return (
     <>
       <div id={`msg-${message.id}`} className={cn("flex w-full mb-4 mt-10 px-4 group", isMe ? "justify-end" : "justify-start")}>
