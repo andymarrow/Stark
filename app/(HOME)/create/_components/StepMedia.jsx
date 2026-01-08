@@ -9,8 +9,7 @@ import {
   Youtube, 
   AlertTriangle, 
   GripVertical, 
-  Plus,
-  ImageIcon
+  Plus
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/_context/AuthContext";
@@ -18,7 +17,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Helper: Check if string is a video link
-const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
+const isVideoUrl = (url) => typeof url === 'string' && (url.includes("youtube.com") || url.includes("youtu.be"));
 
 // Helper: Extract YouTube Thumbnail
 const getYoutubeThumbnail = (url) => {
@@ -28,6 +27,7 @@ const getYoutubeThumbnail = (url) => {
     else if (url.includes("embed/")) videoId = url.split("embed/")[1];
     
     if (videoId) {
+        // Strip query params
         const cleanId = videoId.split("?")[0].split("/")[0];
         return `https://img.youtube.com/vi/${cleanId}/mqdefault.jpg`;
     }
@@ -71,11 +71,15 @@ export default function StepMedia({ data, updateData, errors }) {
     });
 
     // Update Parent State
+    // data.files holds the LIST of items (Strings/URLs)
     updateData("files", [...(data.files || []), ...newPreviewUrls]);
     
-    // Merge rawFiles for deferred upload
-    const currentRaw = data.rawFiles || [];
-    updateData("rawFiles", [...currentRaw, ...newRawFiles]);
+    // Merge rawFiles for deferred upload (if parent supports it, otherwise it's just state here)
+    // We assume the parent handles `rawFiles` key if it needs actual File objects
+    // If not, parent only gets URLs which is fine for display
+    if (data.rawFiles) {
+        updateData("rawFiles", [...data.rawFiles, ...newRawFiles]);
+    }
 
     toast.success(`${files.length} Assets Added`);
   };
@@ -83,14 +87,20 @@ export default function StepMedia({ data, updateData, errors }) {
   // --- 2. GLOBAL PASTE LISTENER ---
   useEffect(() => {
     const handlePaste = (e) => {
+        // Only trigger if we are focused on this component roughly, or just global?
+        // To be safe, maybe we don't want global paste on the Contest page if they are pasting text in the Editor.
+        // Let's keep it scoped to drag/drop for safety or simple button click.
+        // If you strictly want paste, uncomment below, but be careful with text inputs.
+        /*
         if (e.clipboardData && e.clipboardData.files.length > 0) {
             e.preventDefault();
             processFiles(e.clipboardData.files);
         }
+        */
     };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
-  }, [data.files]); // Re-bind if needed
+    // window.addEventListener("paste", handlePaste);
+    // return () => window.removeEventListener("paste", handlePaste);
+  }, [data.files]); 
 
   // --- 3. DRAG & DROP UPLOAD HANDLERS ---
   const handleDragOverUpload = (e) => {
@@ -125,7 +135,7 @@ export default function StepMedia({ data, updateData, errors }) {
     newFiles.splice(index, 0, draggedItem);
 
     updateData("files", newFiles);
-    setDraggedItemIndex(index); // Update index to track the item in its new slot
+    setDraggedItemIndex(index); 
   };
 
   const handleDragEnd = () => {
@@ -134,10 +144,8 @@ export default function StepMedia({ data, updateData, errors }) {
 
   // --- 5. UTILITIES ---
   const handleAutoCapture = async () => {
-    if (!data.demo_link) {
-        toast.error("Missing Link", { description: "Please add a Live Demo URL in Step 2 first." });
-        return;
-    }
+    if (!data.demo_link) return; // Should not be reachable if button hidden
+    
     setIsAutoCapturing(true);
     toast.info("Deploying Scout Bot...", { description: "Capturing screens..." });
 
@@ -176,7 +184,10 @@ export default function StepMedia({ data, updateData, errors }) {
 
   const removeFile = (indexToRemove) => {
     const fileToRemove = data.files[indexToRemove];
-    if (fileToRemove.startsWith('blob:')) URL.revokeObjectURL(fileToRemove);
+    // If it was a local blob, revoke it to free memory
+    if (typeof fileToRemove === 'string' && fileToRemove.startsWith('blob:')) {
+        URL.revokeObjectURL(fileToRemove);
+    }
 
     const newFiles = data.files.filter((_, index) => index !== indexToRemove);
     updateData("files", newFiles);
@@ -186,6 +197,9 @@ export default function StepMedia({ data, updateData, errors }) {
         updateData("rawFiles", newRaw);
     }
   };
+
+  // Determine layout: If 'demo_link' exists (Project), show 2 cols. If null (Contest), show 1 col (Just upload).
+  const isProjectMode = data.demo_link !== undefined && data.demo_link !== null;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
@@ -201,41 +215,43 @@ export default function StepMedia({ data, updateData, errors }) {
             </div>
         ) : (
             <p className="text-xs text-muted-foreground font-mono">
-                Drag & Drop to Reorder • Ctrl+V to Paste
+                Drag & Drop to Reorder
             </p>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={`grid ${isProjectMode ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4`}>
           
-          {/* A. MAGIC CAPTURE BAR */}
-          {data.demo_link ? (
-             <div className={`bg-secondary/10 border p-4 flex flex-col justify-between group h-36 transition-colors ${errors?.files ? 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.05)]' : 'border-accent/20'}`}>
-                <div className="flex items-center gap-3">
-                    <div className={`p-2 bg-accent/10 text-accent rounded-full ${isAutoCapturing ? 'animate-spin' : 'animate-pulse'}`}>
-                        {isAutoCapturing ? <Loader2 size={18} /> : <Wand2 size={18} />}
+          {/* A. MAGIC CAPTURE BAR (Only if Project Mode) */}
+          {isProjectMode && (
+             data.demo_link ? (
+                <div className={`bg-secondary/10 border p-4 flex flex-col justify-between group h-36 transition-colors ${errors?.files ? 'border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.05)]' : 'border-accent/20'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 bg-accent/10 text-accent rounded-full ${isAutoCapturing ? 'animate-spin' : 'animate-pulse'}`}>
+                            {isAutoCapturing ? <Loader2 size={18} /> : <Wand2 size={18} />}
+                        </div>
+                        <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-foreground">Auto-Capture</h4>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[150px]">
+                                {data.demo_link}
+                            </p>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-foreground">Auto-Capture</h4>
-                        <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[150px]">
-                            {data.demo_link}
-                        </p>
-                    </div>
+                    <button 
+                        onClick={handleAutoCapture}
+                        disabled={isAutoCapturing}
+                        className="flex items-center justify-center gap-2 w-full py-2 bg-accent text-white text-xs font-mono font-bold uppercase tracking-wide hover:bg-accent/90 disabled:opacity-50 transition-all mt-auto"
+                    >
+                        <Camera size={14} /> {isAutoCapturing ? "Scanning..." : "Run Bot"}
+                    </button>
                 </div>
-                <button 
-                    onClick={handleAutoCapture}
-                    disabled={isAutoCapturing}
-                    className="flex items-center justify-center gap-2 w-full py-2 bg-accent text-white text-xs font-mono font-bold uppercase tracking-wide hover:bg-accent/90 disabled:opacity-50 transition-all mt-auto"
-                >
-                    <Camera size={14} /> {isAutoCapturing ? "Scanning..." : "Run Bot"}
-                </button>
-             </div>
-          ) : (
-             <div className="bg-secondary/5 border border-border border-dashed p-4 flex items-center justify-center text-muted-foreground h-36 text-center">
-                <span className="text-[10px] font-mono uppercase tracking-tighter leading-tight">
-                    Add Demo Link in Step 2<br/>to enable Auto-Capture
-                </span>
-             </div>
+             ) : (
+                <div className="bg-secondary/5 border border-border border-dashed p-4 flex items-center justify-center text-muted-foreground h-36 text-center">
+                    <span className="text-[10px] font-mono uppercase tracking-tighter leading-tight">
+                        Add Demo Link in Step 2<br/>to enable Auto-Capture
+                    </span>
+                </div>
+             )
           )}
 
           {/* B. DROPZONE (Upload) */}
@@ -319,7 +335,7 @@ export default function StepMedia({ data, updateData, errors }) {
                     return (
                         <motion.div
                             layout
-                            key={url} // URL must be unique
+                            key={url} 
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.8 }}
@@ -330,13 +346,13 @@ export default function StepMedia({ data, updateData, errors }) {
                             onDragStart={() => handleDragStart(idx)}
                             onDragEnter={() => handleDragEnter(idx)}
                             onDragEnd={handleDragEnd}
-                            onDragOver={(e) => e.preventDefault()} // Necessary for drop
+                            onDragOver={(e) => e.preventDefault()} 
 
                             className={`relative aspect-video group bg-secondary border overflow-hidden cursor-grab active:cursor-grabbing transition-all
                                 ${isBeingDragged ? 'border-accent opacity-50 scale-95 z-50' : 'border-border hover:border-accent/50'}
                             `}
                         >
-                            {/* Grip Handle (Visual Cue) */}
+                            {/* Grip Handle */}
                             <div className="absolute top-2 left-2 z-20 bg-black/50 text-white p-1 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                 <GripVertical size={12} />
                             </div>
@@ -360,7 +376,7 @@ export default function StepMedia({ data, updateData, errors }) {
                             <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button 
                                     onClick={(e) => {
-                                        e.stopPropagation(); // Prevent drag start on click
+                                        e.stopPropagation(); 
                                         removeFile(idx);
                                     }}
                                     className="p-1.5 bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg"
@@ -379,7 +395,7 @@ export default function StepMedia({ data, updateData, errors }) {
                 })}
                 </AnimatePresence>
                 
-                {/* Add More Placeholder (Visual Balance) */}
+                {/* Add More Placeholder */}
                 <div 
                     onClick={() => fileInputRef.current?.click()}
                     className="aspect-video border border-dashed border-border flex items-center justify-center text-muted-foreground hover:text-accent hover:border-accent/50 hover:bg-accent/5 cursor-pointer transition-colors"
