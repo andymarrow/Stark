@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { createPortal } from "react-dom"; // Import Portal
-import AgoraRTC, { AgoraRTCProvider } from "agora-rtc-react";
+import { createPortal } from "react-dom";
+// FIX 1: Import core SDK separately for client creation
+import AgoraRTC from "agora-rtc-sdk-ng"; 
+import { AgoraRTCProvider } from "agora-rtc-react";
 import { Loader2 } from "lucide-react";
 import LiveStage from "./LiveStage";
 import { supabase } from "@/lib/supabaseClient";
@@ -12,10 +14,14 @@ const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMessageId, onClose }) {
   const { user } = useAuth();
   
-  // Initialize Agora Client with "rtc" mode (best for 1:1 calls)
-  const [client] = useState(() => AgoraRTC.createClient({ mode: "rtc", codec: "vp8" }));
+  // FIX 2: Ensure client is created only on client-side
+  const [client] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    return AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+  });
+
   const [token, setToken] = useState(null);
-  const [uid] = useState(Math.floor(Math.random() * 1000000)); // Random INT ID for Agora
+  const [uid] = useState(Math.floor(Math.random() * 1000000));
   
   // Supabase State
   const [viewers, setViewers] = useState([]);
@@ -24,25 +30,24 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Portal State
   const [mounted, setMounted] = useState(false);
   
   const channelRef = useRef(null);
   const isHostRef = useRef(isHost);
 
+  // Portal Logic
   useEffect(() => {
-    setMounted(true); // Needed for Portal to know window exists
+    setMounted(true);
     return () => setMounted(false);
   }, []);
 
   // 1. Fetch Token
   useEffect(() => {
+    if (!client) return; // Wait for client
+    
     const fetchToken = async () => {
       try {
-        // For 1:1 calls, EVERYONE is a publisher
         const role = callMessageId ? 'publisher' : (isHost ? 'publisher' : 'subscriber');
-        
         const { data, error } = await supabase.functions.invoke('agora-token', {
             body: { channelName: channelId, uid: uid, role }
         });
@@ -58,12 +63,11 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     if (AGORA_APP_ID) fetchToken();
     else { setError("Missing App ID"); setLoading(false); }
-  }, [channelId, uid, isHost, callMessageId]);
+  }, [channelId, uid, isHost, callMessageId, client]);
 
-  // 2. Realtime Logic & Cleanup
+  // 2. Realtime Logic
   useEffect(() => {
     if (!user) return;
-
     const channel = supabase.channel(`live-room-${channelId}`, {
         config: { presence: { key: user.id } }
     });
@@ -96,33 +100,21 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     channelRef.current = channel;
 
-    // Watch call status to kick everyone when ended
+    // Call Kicker Logic
     let statusSub = null;
     if (callMessageId) {
         statusSub = supabase.channel(`watch-call-${callMessageId}`)
-            .on('postgres_changes', { 
-                event: 'UPDATE', 
-                schema: 'public', 
-                table: 'messages', 
-                filter: `id=eq.${callMessageId}` 
-            }, (payload) => {
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `id=eq.${callMessageId}` }, (payload) => {
                 const status = payload.new.metadata?.status;
-                if (status === 'ended' || status === 'missed') {
-                    onClose(); 
-                }
+                if (status === 'ended' || status === 'missed') onClose(); 
             })
             .subscribe();
     }
 
     return () => {
-        // If I am the CALLER (Host), end the call in DB
         if (callMessageId && isHostRef.current) {
             supabase.from('messages').update({
-                metadata: {
-                    status: 'ended', 
-                    endedAt: new Date().toISOString(),
-                    audioOnly: audioOnly
-                }
+                metadata: { status: 'ended', endedAt: new Date().toISOString(), audioOnly }
             }).eq('id', callMessageId).then();
         }
         if (isHost && !callMessageId) {
@@ -148,9 +140,9 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
     setTimeout(() => setIncomingHearts(prev => prev.filter(h => h !== heartId)), 3000);
   };
 
-  if (!mounted) return null;
+  // Safe Render Logic
+  if (!mounted || !client) return null;
 
-  // Render content using Portal to document.body
   const content = (
     <div className="fixed inset-0 z-[100000] bg-black">
       {loading ? (
@@ -158,9 +150,7 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
           <Loader2 className="animate-spin mr-2" /> Initializing Frequency...
         </div>
       ) : error ? (
-        <div className="w-full h-full flex items-center justify-center text-red-500">
-          {error}
-        </div>
+        <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
       ) : (
         <AgoraRTCProvider client={client}>
           <LiveStage 
@@ -168,6 +158,10 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
             appId={AGORA_APP_ID} 
             token={token} 
             uid={uid} 
+            
+            // FIX 3: Add explicit ready flag
+            callReady={!!token}
+            
             isPublisher={!!callMessageId || isHost}
             viewers={viewers}
             messages={liveMessages}
