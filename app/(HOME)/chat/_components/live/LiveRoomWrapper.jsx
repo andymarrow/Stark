@@ -1,6 +1,7 @@
 "use client";
+import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom"; // Import Portal
 import AgoraRTC, { AgoraRTCProvider } from "agora-rtc-react";
-import { useState, useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import LiveStage from "./LiveStage";
 import { supabase } from "@/lib/supabaseClient";
@@ -11,8 +12,7 @@ const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMessageId, onClose }) {
   const { user } = useAuth();
   
-  // Initialize Agora Client
-  // 'mode: rtc' is better for 1:1 calls than 'live'
+  // Initialize Agora Client with "rtc" mode (best for 1:1 calls)
   const [client] = useState(() => AgoraRTC.createClient({ mode: "rtc", codec: "vp8" }));
   const [token, setToken] = useState(null);
   const [uid] = useState(Math.floor(Math.random() * 1000000)); // Random INT ID for Agora
@@ -25,16 +25,22 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Refs for Cleanup
+  // Portal State
+  const [mounted, setMounted] = useState(false);
+  
   const channelRef = useRef(null);
-  const isHostRef = useRef(isHost); // Keep track if I am the original caller
+  const isHostRef = useRef(isHost);
+
+  useEffect(() => {
+    setMounted(true); // Needed for Portal to know window exists
+    return () => setMounted(false);
+  }, []);
 
   // 1. Fetch Token
   useEffect(() => {
     const fetchToken = async () => {
       try {
-        // CRITICAL: For 1:1 calls (callMessageId exists), EVERYONE must be a 'publisher'
-        // For Broadcasts, only isHost is 'publisher'
+        // For 1:1 calls, EVERYONE is a publisher
         const role = callMessageId ? 'publisher' : (isHost ? 'publisher' : 'subscriber');
         
         const { data, error } = await supabase.functions.invoke('agora-token', {
@@ -58,7 +64,6 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
   useEffect(() => {
     if (!user) return;
 
-    // A. Presence Channel (Who is here?)
     const channel = supabase.channel(`live-room-${channelId}`, {
         config: { presence: { key: user.id } }
     });
@@ -91,7 +96,7 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     channelRef.current = channel;
 
-    // B. Call Status Watcher (The "Kick" Mechanism)
+    // Watch call status to kick everyone when ended
     let statusSub = null;
     if (callMessageId) {
         statusSub = supabase.channel(`watch-call-${callMessageId}`)
@@ -102,7 +107,6 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
                 filter: `id=eq.${callMessageId}` 
             }, (payload) => {
                 const status = payload.new.metadata?.status;
-                // If call ended/missed, EVERYONE leaves immediately
                 if (status === 'ended' || status === 'missed') {
                     onClose(); 
                 }
@@ -110,30 +114,25 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
             .subscribe();
     }
 
-    // C. CLEANUP FUNCTION (Runs when I close the window)
     return () => {
-        // If I am the CALLER (Host), I must end the call for everyone
+        // If I am the CALLER (Host), end the call in DB
         if (callMessageId && isHostRef.current) {
             supabase.from('messages').update({
                 metadata: {
-                    status: 'ended', // Just mark as ended, duration calc handles the rest
+                    status: 'ended', 
                     endedAt: new Date().toISOString(),
                     audioOnly: audioOnly
                 }
             }).eq('id', callMessageId).then();
         }
-
-        // Legacy Channel Cleanup
         if (isHost && !callMessageId) {
             supabase.from('conversations').update({ is_live: false }).eq('id', channelId).then();
         }
-
         channel.unsubscribe();
         if (statusSub) supabase.removeChannel(statusSub);
     };
   }, [channelId, user, isHost, uid, callMessageId, audioOnly, onClose]);
 
-  // Pass-through functions
   const sendLiveMessage = (text) => {
     if (!channelRef.current) return;
     const msgPayload = { id: Date.now(), text, sender_id: user.id, username: viewers.find(v => v.user_id === user.id)?.username || "Me" };
@@ -149,29 +148,39 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
     setTimeout(() => setIncomingHearts(prev => prev.filter(h => h !== heartId)), 3000);
   };
 
-  if (loading) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-white"><Loader2 className="animate-spin" /></div>;
-  if (error) return <div className="fixed inset-0 z-[9999] bg-black flex items-center justify-center text-red-500">{error}</div>;
+  if (!mounted) return null;
 
-  return (
-    <AgoraRTCProvider client={client}>
-      <LiveStage 
-        channelName={channelId} 
-        appId={AGORA_APP_ID} 
-        token={token} 
-        uid={uid} 
-        
-        // LOGIC: If it's a Call, EVERYONE is a Host (Publisher).
-        // If it's a Stream, only the isHost prop matters.
-        isPublisher={!!callMessageId || isHost}
-        
-        viewers={viewers}
-        messages={liveMessages}
-        hearts={incomingHearts}
-        onSendMessage={sendLiveMessage}
-        onSendHeart={sendHeart}
-        onLeave={onClose}
-        audioOnly={audioOnly}
-      />
-    </AgoraRTCProvider>
+  // Render content using Portal to document.body
+  const content = (
+    <div className="fixed inset-0 z-[100000] bg-black">
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center text-white">
+          <Loader2 className="animate-spin mr-2" /> Initializing Frequency...
+        </div>
+      ) : error ? (
+        <div className="w-full h-full flex items-center justify-center text-red-500">
+          {error}
+        </div>
+      ) : (
+        <AgoraRTCProvider client={client}>
+          <LiveStage 
+            channelName={channelId} 
+            appId={AGORA_APP_ID} 
+            token={token} 
+            uid={uid} 
+            isPublisher={!!callMessageId || isHost}
+            viewers={viewers}
+            messages={liveMessages}
+            hearts={incomingHearts}
+            onSendMessage={sendLiveMessage}
+            onSendHeart={sendHeart}
+            onLeave={onClose}
+            audioOnly={audioOnly}
+          />
+        </AgoraRTCProvider>
+      )}
+    </div>
   );
+
+  return createPortal(content, document.body);
 }
