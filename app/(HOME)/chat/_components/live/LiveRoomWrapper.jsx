@@ -1,7 +1,6 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-// FIX 1: Import core SDK separately for client creation
 import AgoraRTC from "agora-rtc-sdk-ng"; 
 import { AgoraRTCProvider } from "agora-rtc-react";
 import { Loader2 } from "lucide-react";
@@ -14,11 +13,13 @@ const AGORA_APP_ID = process.env.NEXT_PUBLIC_AGORA_APP_ID;
 export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMessageId, onClose }) {
   const { user } = useAuth();
   
-  // FIX 2: Ensure client is created only on client-side
-  const [client] = useState(() => {
+  // FIX 1: Stable Client Creation. 
+  // We use useMemo to ensure this object is a singleton for the lifespan of this component.
+  // We check for 'window' to avoid SSR crashes.
+  const client = useMemo(() => {
     if (typeof window === 'undefined') return null;
     return AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-  });
+  }, []);
 
   const [token, setToken] = useState(null);
   const [uid] = useState(Math.floor(Math.random() * 1000000));
@@ -43,11 +44,11 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
   // 1. Fetch Token
   useEffect(() => {
-    if (!client) return; // Wait for client
+    if (!client) return;
     
     const fetchToken = async () => {
       try {
-        const role = callMessageId ? 'publisher' : (isHost ? 'publisher' : 'subscriber');
+        const role = 'publisher'; // In "rtc" mode, everyone who speaks is a publisher
         const { data, error } = await supabase.functions.invoke('agora-token', {
             body: { channelName: channelId, uid: uid, role }
         });
@@ -63,7 +64,7 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     if (AGORA_APP_ID) fetchToken();
     else { setError("Missing App ID"); setLoading(false); }
-  }, [channelId, uid, isHost, callMessageId, client]);
+  }, [channelId, uid, client]); // Removed isHost/callMessageId dependencies to prevent token refetch
 
   // 2. Realtime Logic
   useEffect(() => {
@@ -100,7 +101,6 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
 
     channelRef.current = channel;
 
-    // Call Kicker Logic
     let statusSub = null;
     if (callMessageId) {
         statusSub = supabase.channel(`watch-call-${callMessageId}`)
@@ -140,7 +140,6 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
     setTimeout(() => setIncomingHearts(prev => prev.filter(h => h !== heartId)), 3000);
   };
 
-  // Safe Render Logic
   if (!mounted || !client) return null;
 
   const content = (
@@ -152,26 +151,25 @@ export default function LiveRoomWrapper({ channelId, isHost, audioOnly, callMess
       ) : error ? (
         <div className="w-full h-full flex items-center justify-center text-red-500">{error}</div>
       ) : (
-        <AgoraRTCProvider client={client}>
-          <LiveStage 
-            channelName={channelId} 
-            appId={AGORA_APP_ID} 
-            token={token} 
-            uid={uid} 
-            
-            // FIX 3: Add explicit ready flag
-            callReady={!!token}
-            
-            isPublisher={!!callMessageId || isHost}
-            viewers={viewers}
-            messages={liveMessages}
-            hearts={incomingHearts}
-            onSendMessage={sendLiveMessage}
-            onSendHeart={sendHeart}
-            onLeave={onClose}
-            audioOnly={audioOnly}
-          />
-        </AgoraRTCProvider>
+        /* FIX 2: Only render Provider when we have a token */
+        token && (
+          <AgoraRTCProvider client={client}>
+            <LiveStage 
+              channelName={channelId} 
+              appId={AGORA_APP_ID} 
+              token={token} 
+              uid={uid} 
+              isPublisher={!!callMessageId || isHost}
+              viewers={viewers}
+              messages={liveMessages}
+              hearts={incomingHearts}
+              onSendMessage={sendLiveMessage}
+              onSendHeart={sendHeart}
+              onLeave={onClose}
+              audioOnly={audioOnly}
+            />
+          </AgoraRTCProvider>
+        )
       )}
     </div>
   );

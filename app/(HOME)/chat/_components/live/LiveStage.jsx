@@ -15,44 +15,42 @@ import LiveChatOverlay from "./LiveChatOverlay";
 import LiveViewerList from "./LiveViewerList";
 
 export default function LiveStage({
-  channelName, appId, token, uid, isPublisher, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly, callReady
+  channelName, appId, token, uid, isPublisher, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly
 }) {
-  // --- TRACKS ---
-  // 1. Initialize Microphone
-  const { localMicrophoneTrack } = useLocalMicrophoneTrack(isPublisher && callReady);
-  
-  // 2. Initialize Camera (Only if not audio-only)
-  const { localCameraTrack } = useLocalCameraTrack(isPublisher && !audioOnly && callReady);
-  
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(!audioOnly);
   const [showChat, setShowChat] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
-
-  const remoteUsers = useRemoteUsers();
   const localVideoRef = useRef(null);
 
-  // --- JOIN LOGIC ---
-  // Ready when AppID, Channel, Token and UID exist
-  const isJoinReady = callReady && !!appId && !!channelName && !!token;
-  useJoin({ appid: appId, channel: channelName, token, uid: uid }, isJoinReady);
-
-  // --- PUBLISH LOGIC (CRITICAL FIX) ---
-  // Filter tracks to remove nulls/undefined immediately
-  const tracksToPublish = useMemo(() => {
-    const tracks = [];
-    if (localMicrophoneTrack) tracks.push(localMicrophoneTrack);
-    if (localCameraTrack && !audioOnly) tracks.push(localCameraTrack);
-    return tracks;
-  }, [localMicrophoneTrack, localCameraTrack, audioOnly]);
-
-  // Only publish if we have permission (isPublisher), the call is ready, AND we actually have tracks to publish.
-  // This prevents the "t is not a function" error caused by publishing empty or null tracks.
-  const isPublishReady = isPublisher && callReady && tracksToPublish.length > 0;
+  // --- 1. TRACK INITIALIZATION ---
   
-  usePublish(tracksToPublish, isPublishReady);
+  // Always get Mic
+  const { localMicrophoneTrack, isLoading: isMicLoading } = useLocalMicrophoneTrack(isPublisher);
+  
+  // Get Cam only if not audio-only mode
+  const { localCameraTrack, isLoading: isCamLoading } = useLocalCameraTrack(isPublisher && !audioOnly);
 
-  // --- HARDWARE TOGGLES ---
+  // --- 2. JOIN LOGIC ---
+  useJoin({ appid: appId, channel: channelName, token, uid: uid }, true);
+
+  // --- 3. PUBLISH LOGIC (THE FIX) ---
+  
+  // We construct the track array dynamically using useMemo.
+  // We ONLY include tracks that are fully loaded and exist.
+  const tracks = useMemo(() => {
+    const t = [];
+    if (localMicrophoneTrack && !isMicLoading) t.push(localMicrophoneTrack);
+    if (localCameraTrack && !isCamLoading && !audioOnly) t.push(localCameraTrack);
+    return t;
+  }, [localMicrophoneTrack, isMicLoading, localCameraTrack, isCamLoading, audioOnly]);
+
+  // We are ready to publish ONLY when we have at least the microphone track ready
+  const isReadyToPublish = isPublisher && tracks.length > 0 && !!localMicrophoneTrack;
+
+  usePublish(tracks, isReadyToPublish);
+
+  // --- 4. HARDWARE TOGGLES ---
   useEffect(() => { 
     if (localMicrophoneTrack) {
         localMicrophoneTrack.setMuted(!micOn); 
@@ -65,21 +63,21 @@ export default function LiveStage({
     }
   }, [camOn, localCameraTrack]);
 
-  // --- LOCAL VIDEO PREVIEW ---
+  // --- 5. LOCAL PREVIEW ---
   useEffect(() => {
     if (localCameraTrack && camOn && localVideoRef.current) {
         localCameraTrack.play(localVideoRef.current);
     }
   }, [localCameraTrack, camOn]);
 
+  const remoteUsers = useRemoteUsers();
   const isConnected = remoteUsers.length > 0;
-  // Get the other person (Remote User)
   const mainRemoteUser = remoteUsers[0]; 
 
   return (
     <div className="w-full h-full relative bg-black text-white flex flex-col overflow-hidden">
       
-      {/* HEADER OVERLAY */}
+      {/* HEADER */}
       <div className="absolute top-0 left-0 right-0 p-6 z-50 flex justify-between items-start bg-gradient-to-b from-black/90 to-transparent pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           <div className={`px-3 py-1 rounded-sm flex items-center gap-2 animate-pulse ${isConnected ? 'bg-green-600' : 'bg-yellow-600'}`}>
@@ -98,10 +96,10 @@ export default function LiveStage({
 
       {showViewers && <div className="pointer-events-auto z-[60]"><LiveViewerList users={viewers} /></div>}
 
-      {/* --- MAIN VIDEO AREA --- */}
+      {/* --- STAGE --- */}
       <div className="flex-1 relative bg-zinc-950 flex items-center justify-center overflow-hidden">
         
-        {/* LOCAL USER (Waiting State / Not Connected) */}
+        {/* WAITING STATE */}
         {!isConnected && (
             <div className="w-full h-full relative">
                 {camOn && localCameraTrack ? (
@@ -127,7 +125,6 @@ export default function LiveStage({
         {/* CONNECTED STATE */}
         {isConnected && mainRemoteUser && (
             <div className="w-full h-full relative bg-black">
-                {/* REMOTE USER VIDEO (Full Screen) */}
                 <RemoteUser 
                     user={mainRemoteUser} 
                     style={{ width: "100%", height: "100%" }} 
@@ -148,7 +145,7 @@ export default function LiveStage({
                     )}
                 </RemoteUser>
 
-                {/* MY LOCAL PIP */}
+                {/* PIP */}
                 <div className="absolute bottom-32 right-6 w-32 h-48 md:w-48 md:h-72 bg-zinc-900 border border-white/20 shadow-2xl rounded-xl overflow-hidden z-30 transition-all hover:scale-105 group">
                     {camOn && localCameraTrack ? (
                          <div ref={localVideoRef} className="w-full h-full object-cover" style={{ transform: "rotateY(180deg)" }} />
@@ -163,7 +160,7 @@ export default function LiveStage({
         )}
       </div>
 
-      {/* CONTROLS */}
+      {/* FOOTER */}
       <div className="absolute bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 pb-8 px-10 flex flex-col gap-6 pointer-events-none">
         {showChat && (
             <div className="h-48 w-full md:w-80 self-start pointer-events-auto mb-2 backdrop-blur-sm rounded-lg overflow-hidden border border-white/10 bg-black/50">
