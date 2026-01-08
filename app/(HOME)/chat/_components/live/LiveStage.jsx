@@ -7,7 +7,7 @@ import {
   usePublish,
   useRemoteUsers,
 } from "agora-rtc-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Mic, MicOff, Video, VideoOff, X, MessageSquare, Heart, Users, Phone
 } from "lucide-react";
@@ -18,9 +18,10 @@ export default function LiveStage({
   channelName, appId, token, uid, isPublisher, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly, callReady
 }) {
   // --- TRACKS ---
+  // 1. Initialize Microphone
   const { localMicrophoneTrack } = useLocalMicrophoneTrack(isPublisher && callReady);
   
-  // FIX 1: Pass callReady to track hooks so they don't fire until token exists
+  // 2. Initialize Camera (Only if not audio-only)
   const { localCameraTrack } = useLocalCameraTrack(isPublisher && !audioOnly && callReady);
   
   const [micOn, setMicOn] = useState(true);
@@ -31,21 +32,37 @@ export default function LiveStage({
   const remoteUsers = useRemoteUsers();
   const localVideoRef = useRef(null);
 
-  // --- JOIN & PUBLISH ---
-  // FIX 2: Pass callReady (boolean) as the second argument (ready flag)
-  useJoin({ appid: appId, channel: channelName, token, uid: uid }, callReady);
+  // --- JOIN LOGIC ---
+  // Ready when AppID, Channel, Token and UID exist
+  const isJoinReady = callReady && !!appId && !!channelName && !!token;
+  useJoin({ appid: appId, channel: channelName, token, uid: uid }, isJoinReady);
 
-  // FIX 3: Filter out nulls explicitly. This stops "t is not a function" crashes.
-  const tracksToPublish = [localMicrophoneTrack, localCameraTrack].filter(Boolean);
-  usePublish(tracksToPublish, callReady);
+  // --- PUBLISH LOGIC (CRITICAL FIX) ---
+  // Filter tracks to remove nulls/undefined immediately
+  const tracksToPublish = useMemo(() => {
+    const tracks = [];
+    if (localMicrophoneTrack) tracks.push(localMicrophoneTrack);
+    if (localCameraTrack && !audioOnly) tracks.push(localCameraTrack);
+    return tracks;
+  }, [localMicrophoneTrack, localCameraTrack, audioOnly]);
+
+  // Only publish if we have permission (isPublisher), the call is ready, AND we actually have tracks to publish.
+  // This prevents the "t is not a function" error caused by publishing empty or null tracks.
+  const isPublishReady = isPublisher && callReady && tracksToPublish.length > 0;
+  
+  usePublish(tracksToPublish, isPublishReady);
 
   // --- HARDWARE TOGGLES ---
   useEffect(() => { 
-    if (localMicrophoneTrack) localMicrophoneTrack.setMuted(!micOn); 
+    if (localMicrophoneTrack) {
+        localMicrophoneTrack.setMuted(!micOn); 
+    }
   }, [micOn, localMicrophoneTrack]);
 
   useEffect(() => { 
-    if (localCameraTrack) localCameraTrack.setEnabled(camOn); 
+    if (localCameraTrack) {
+        localCameraTrack.setEnabled(camOn); 
+    }
   }, [camOn, localCameraTrack]);
 
   // --- LOCAL VIDEO PREVIEW ---
@@ -56,6 +73,7 @@ export default function LiveStage({
   }, [localCameraTrack, camOn]);
 
   const isConnected = remoteUsers.length > 0;
+  // Get the other person (Remote User)
   const mainRemoteUser = remoteUsers[0]; 
 
   return (
@@ -83,7 +101,7 @@ export default function LiveStage({
       {/* --- MAIN VIDEO AREA --- */}
       <div className="flex-1 relative bg-zinc-950 flex items-center justify-center overflow-hidden">
         
-        {/* LOCAL USER (Waiting State) */}
+        {/* LOCAL USER (Waiting State / Not Connected) */}
         {!isConnected && (
             <div className="w-full h-full relative">
                 {camOn && localCameraTrack ? (
@@ -109,7 +127,7 @@ export default function LiveStage({
         {/* CONNECTED STATE */}
         {isConnected && mainRemoteUser && (
             <div className="w-full h-full relative bg-black">
-                {/* REMOTE USER VIDEO */}
+                {/* REMOTE USER VIDEO (Full Screen) */}
                 <RemoteUser 
                     user={mainRemoteUser} 
                     style={{ width: "100%", height: "100%" }} 
