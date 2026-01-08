@@ -7,7 +7,7 @@ import {
   usePublish,
   useRemoteUsers,
 } from "agora-rtc-react";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Mic, MicOff, Video, VideoOff, X, MessageSquare, Heart, Users, Phone
 } from "lucide-react";
@@ -15,46 +15,33 @@ import LiveChatOverlay from "./LiveChatOverlay";
 import LiveViewerList from "./LiveViewerList";
 
 export default function LiveStage({
-  channelName, appId, token, uid, isPublisher, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly
+  channelName, appId, token, uid, onLeave, viewers, messages, hearts, onSendMessage, onSendHeart, audioOnly
 }) {
+  // --- 1. LOCAL TRACKS ---
+  const { localMicrophoneTrack, isLoading: micLoading } = useLocalMicrophoneTrack(true);
+  const { localCameraTrack, isLoading: camLoading } = useLocalCameraTrack(!audioOnly);
+
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(!audioOnly);
   const [showChat, setShowChat] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
   const localVideoRef = useRef(null);
 
-  // --- 1. TRACK INITIALIZATION ---
-  
-  // Always get Mic
-  const { localMicrophoneTrack, isLoading: isMicLoading } = useLocalMicrophoneTrack(isPublisher);
-  
-  // Get Cam only if not audio-only mode
-  const { localCameraTrack, isLoading: isCamLoading } = useLocalCameraTrack(isPublisher && !audioOnly);
-
-  // --- 2. JOIN LOGIC ---
+  // --- 2. JOIN ---
   useJoin({ appid: appId, channel: channelName, token, uid: uid }, true);
 
-  // --- 3. PUBLISH LOGIC (THE FIX) ---
-  
-  // We construct the track array dynamically using useMemo.
-  // We ONLY include tracks that are fully loaded and exist.
-  const tracks = useMemo(() => {
-    const t = [];
-    if (localMicrophoneTrack && !isMicLoading) t.push(localMicrophoneTrack);
-    if (localCameraTrack && !isCamLoading && !audioOnly) t.push(localCameraTrack);
-    return t;
-  }, [localMicrophoneTrack, isMicLoading, localCameraTrack, isCamLoading, audioOnly]);
+  // --- 3. PUBLISH (CRITICAL FIX) ---
+  // Create a safe array. If track is null (loading), do NOT include it.
+  const tracksToPublish = [];
+  if (localMicrophoneTrack && !micLoading) tracksToPublish.push(localMicrophoneTrack);
+  if (localCameraTrack && !camLoading && !audioOnly) tracksToPublish.push(localCameraTrack);
 
-  // We are ready to publish ONLY when we have at least the microphone track ready
-  const isReadyToPublish = isPublisher && tracks.length > 0 && !!localMicrophoneTrack;
-
-  usePublish(tracks, isReadyToPublish);
+  // Pass the filtered array. Agora handles empty arrays gracefully, but crashes on [null].
+  usePublish(tracksToPublish);
 
   // --- 4. HARDWARE TOGGLES ---
   useEffect(() => { 
-    if (localMicrophoneTrack) {
-        localMicrophoneTrack.setMuted(!micOn); 
-    }
+    if (localMicrophoneTrack) localMicrophoneTrack.setMuted(!micOn); 
   }, [micOn, localMicrophoneTrack]);
 
   useEffect(() => { 
@@ -82,7 +69,7 @@ export default function LiveStage({
         <div className="flex items-center gap-3 pointer-events-auto">
           <div className={`px-3 py-1 rounded-sm flex items-center gap-2 animate-pulse ${isConnected ? 'bg-green-600' : 'bg-yellow-600'}`}>
             <span className="text-[10px] font-black uppercase tracking-widest">
-                {isConnected ? "ENCRYPTED_LINK" : "AWAITING_SIGNAL..."}
+                {isConnected ? "ENCRYPTED_LINK" : "WAITING FOR PEER..."}
             </span>
           </div>
           <button onClick={() => setShowViewers(!showViewers)} className="bg-black/40 px-3 py-1 rounded-full backdrop-blur-md border border-white/10 text-[10px] text-zinc-300">
@@ -109,7 +96,7 @@ export default function LiveStage({
                         <div className="p-8 rounded-full bg-zinc-800 border border-white/10 animate-pulse">
                              <Phone size={48} className="text-zinc-500" />
                         </div>
-                        <p className="text-zinc-500 font-mono text-xs uppercase">Audio Only</p>
+                        <p className="text-zinc-500 font-mono text-xs uppercase">Local Feed: Audio Only</p>
                     </div>
                 )}
                 
