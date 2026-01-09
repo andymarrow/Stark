@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowRight, ArrowLeft, Rocket, Loader2 } from "lucide-react";
+import { useState, useEffect, Suspense } from "react"; // Added Suspense
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowRight, ArrowLeft, Rocket, Loader2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -15,15 +15,19 @@ import StepDetails from "./_components/StepDetails";
 import StepMedia from "./_components/StepMedia";
 import StepReview from "./_components/StepReview";
 
-export default function CreatePage() {
+// Inner component to use searchParams
+function CreateForm() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const contestSlug = searchParams.get('contest');
 
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState({}); 
+  const [errors, setErrors] = useState({});
+  const [contestData, setContestData] = useState(null);
 
-  // Initialize form data with rawFiles for deferred upload
+  // Initialize form data
   const [formData, setFormData] = useState({
     type: 'code',
     link: '',
@@ -31,24 +35,43 @@ export default function CreatePage() {
     title: '',
     description: '',
     tags: '',
-    files: [], // Stores Strings (URLs) for preview
-    rawFiles: [], // NEW: Stores { preview: 'blob:..', file: File } for deferred upload
+    files: [], 
+    rawFiles: [], 
     collaborators: [], 
     readme: '', 
     stats: { stars: 0, forks: 0 } 
   });
 
-  // Protect Route
+  // Protect Route & Fetch Contest if param exists
   useEffect(() => {
     if (!loading && !user) {
         router.push('/login');
         toast.error("Access Denied", { description: "You must be logged in to deploy." });
+        return;
     }
-  }, [user, loading, router]);
+
+    // Fetch contest details if submitting to one
+    if (contestSlug) {
+        const fetchContest = async () => {
+            const { data, error } = await supabase
+                .from('contests')
+                .select('id, title')
+                .eq('slug', contestSlug)
+                .single();
+            
+            if (data) {
+                setContestData(data);
+                toast.info(`Joined: ${data.title}`, { description: "Your project will be submitted to this contest." });
+            } else {
+                toast.error("Contest Not Found", { description: "Proceeding as normal project." });
+            }
+        };
+        fetchContest();
+    }
+  }, [user, loading, router, contestSlug]);
 
   const updateData = (key, value) => {
     setFormData(prev => ({ ...prev, [key]: value }));
-    // Clear error for a field when user starts typing again
     if (errors[key]) {
         setErrors(prev => {
             const newErrs = { ...prev };
@@ -59,59 +82,34 @@ export default function CreatePage() {
   };
 
   const handleNext = () => {
-    setErrors({}); // Reset errors before validating
-
+    setErrors({});
     try {
         if (step === 1) {
-            // Validate Source Link and Type
-            projectSchema.pick({ type: true, link: true }).parse({
-                type: formData.type,
-                link: formData.link,
-            });
+            projectSchema.pick({ type: true, link: true }).parse({ type: formData.type, link: formData.link });
         }
-        
         if (step === 2) {
-            // Validate Title, Description, and Demo Link
             projectSchema.pick({ title: true, description: true, demo_link: true }).parse({
-                title: formData.title,
-                description: formData.description,
-                demo_link: formData.demo_link,
+                title: formData.title, description: formData.description, demo_link: formData.demo_link
             });
         }
-
         if (step === 3) {
-            // Validate that at least one image/video is uploaded
-            projectSchema.pick({ files: true }).parse({
-                files: formData.files,
-            });
+            projectSchema.pick({ files: true }).parse({ files: formData.files });
         }
-
-        // If validation passes, move to next step
         if (step < 4) setStep(step + 1);
-
     } catch (err) {
         if (err.errors) {
             const newErrors = {};
-            err.errors.forEach((e) => {
-                newErrors[e.path[0]] = e.message;
-            });
+            err.errors.forEach((e) => { newErrors[e.path[0]] = e.message; });
             setErrors(newErrors);
-            
-            // Show toast for the first error encountered
-            toast.error("Validation Failed", { 
-                description: err.errors[0].message 
-            });
+            toast.error("Validation Failed", { description: err.errors[0].message });
         }
     }
   };
 
-  const handleBack = () => {
-    if (step > 1) setStep(step - 1);
-  };
+  const handleBack = () => { if (step > 1) setStep(step - 1); };
 
   const calculateQualityScore = () => {
-    let score = 10; // Base score
-    
+    let score = 10;
     if (formData.description.length > 100) score += 10;
     if (formData.description.length > 500) score += 20;
     if (formData.files.length > 0) score += 15;
@@ -119,7 +117,6 @@ export default function CreatePage() {
     if (formData.demo_link) score += 25;
     if (formData.stats.stars > 10) score += 5;
     if (formData.stats.stars > 100) score += 5;
-
     return Math.min(100, score);
   };
 
@@ -128,41 +125,27 @@ export default function CreatePage() {
     setIsSubmitting(true);
 
     try {
-        // --- 1. PROCESS UPLOADS (DEFERRED) ---
-        // Iterate through 'files'. If it's a blob (local), upload now.
-        // If it's a URL (video or auto-capture), keep as is.
+        // 1. Process Uploads
         const processedImages = await Promise.all(formData.files.map(async (url) => {
             if (url.startsWith('blob:')) {
-                // Find the actual file object matched by preview URL
                 const rawEntry = formData.rawFiles.find(r => r.preview === url);
-                
                 if (rawEntry && rawEntry.file) {
                     const fileExt = rawEntry.file.name.split('.').pop();
-                    // Unique filename to prevent collisions
                     const fileName = `projects/${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-                    
-                    const { error: uploadError } = await supabase.storage
-                        .from('project-assets')
-                        .upload(fileName, rawEntry.file);
-                    
+                    const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, rawEntry.file);
                     if (uploadError) throw uploadError;
-
-                    const { data: { publicUrl } } = supabase.storage
-                        .from('project-assets')
-                        .getPublicUrl(fileName);
-                    
-                    return publicUrl; // Replace blob with real Supabase URL
+                    const { data: { publicUrl } } = supabase.storage.from('project-assets').getPublicUrl(fileName);
+                    return publicUrl;
                 }
             }
-            return url; // Keep existing URL (YouTube, Auto-capture)
+            return url;
         }));
 
         const tagArray = formData.tags.split(',').map(t => t.trim()).filter(t => t);
         const slug = formData.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000);
-        
         const qualityScore = calculateQualityScore();
 
-        // --- 2. INSERT PROJECT ---
+        // 2. Insert Project
         const { data: projectData, error: projectError } = await supabase
             .from('projects')
             .insert({
@@ -174,17 +157,34 @@ export default function CreatePage() {
                 source_link: formData.link,
                 demo_link: formData.demo_link || null,
                 tags: tagArray,
-                images: processedImages, // Use the new array with real URLs
+                images: processedImages,
                 thumbnail_url: processedImages[0] || null,
                 status: 'published',
                 quality_score: qualityScore,
+                // FLAG AS CONTEST ENTRY IF APPLICABLE
+                is_contest_entry: !!contestData
             })
             .select()
             .single(); 
 
         if (projectError) throw projectError;
 
-        // --- 3. HANDLE COLLABORATORS ---
+        // 3. Link Contest Submission
+        if (contestData) {
+            const { error: contestError } = await supabase
+                .from('contest_submissions')
+                .insert({
+                    contest_id: contestData.id,
+                    project_id: projectData.id,
+                });
+            
+            if (contestError) {
+                console.error("Contest Link Error:", contestError);
+                toast.error("Project saved, but failed to join contest.");
+            }
+        }
+
+        // 4. Handle Collaborators
         if (formData.collaborators && formData.collaborators.length > 0) {
             const collabRows = formData.collaborators.map(c => ({
                 project_id: projectData.id,
@@ -193,15 +193,11 @@ export default function CreatePage() {
                 status: 'pending' 
             }));
 
-            const { error: collabError } = await supabase
-                .from('collaborations')
-                .insert(collabRows);
+            const { error: collabError } = await supabase.from('collaborations').insert(collabRows);
 
             if (collabError) {
                 console.error("Collaborator DB Error:", collabError);
-                toast.warning("Project Saved, but collaborators failed to link.");
             } else {
-                // SEND EMAILS (Only for Ghosts)
                 const ghostInvites = formData.collaborators.filter(c => c.type === 'ghost');
                 ghostInvites.forEach(async (ghost) => {
                     const inviterName = user.user_metadata?.full_name || user.email;
@@ -210,8 +206,16 @@ export default function CreatePage() {
             }
         }
 
-        toast.success("Project Deployed", { description: `Quality Score: ${qualityScore}/100` });
-        router.push(`/project/${slug}`);
+        toast.success(contestData ? "Entry Submitted!" : "Project Deployed", { 
+            description: contestData ? `Joined ${contestData.title}` : `Quality Score: ${qualityScore}/100` 
+        });
+        
+        // Redirect logic
+        if (contestData) {
+            router.push(`/contests/${contestSlug}`);
+        } else {
+            router.push(`/project/${slug}`);
+        }
 
     } catch (error) {
         console.error(error);
@@ -229,12 +233,18 @@ export default function CreatePage() {
         
         {/* Header */}
         <div className="mb-12 text-center">
-            <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tighter mb-2">
+            {contestData ? (
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-accent/10 text-accent border border-accent/20 rounded-full mb-4 animate-in fade-in slide-in-from-top-2">
+                    <Trophy size={14} />
+                    <span className="text-xs font-bold uppercase tracking-wide">Submitting to {contestData.title}</span>
+                </div>
+            ) : (
+                <p className="text-sm font-mono text-muted-foreground mb-2">// SYSTEM: READY_FOR_INPUT</p>
+            )}
+            
+            <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tighter">
                 Deploy <span className="text-accent">Project</span>
             </h1>
-            <p className="text-sm font-mono text-muted-foreground">
-                // SYSTEM: READY_FOR_INPUT
-            </p>
         </div>
 
         {/* Stepper */}
@@ -247,7 +257,6 @@ export default function CreatePage() {
 
             <div className="mb-8">
                 {step === 1 && <StepSource data={formData} updateData={updateData} errors={errors} />}
-                {/* Note: StepDetails now includes CollaboratorManager internally via props */}
                 {step === 2 && <StepDetails data={formData} updateData={updateData} errors={errors} />}
                 {step === 3 && <StepMedia data={formData} updateData={updateData} errors={errors} />}
                 {step === 4 && <StepReview data={formData} />}
@@ -279,7 +288,7 @@ export default function CreatePage() {
                         {isSubmitting ? (
                             <Loader2 className="animate-spin" size={16} />
                         ) : (
-                            <>Deploy Project <Rocket size={14} className="ml-2" /></>
+                            <>{contestData ? "Submit Entry" : "Deploy Project"} <Rocket size={14} className="ml-2" /></>
                         )}
                     </Button>
                 )}
@@ -289,4 +298,13 @@ export default function CreatePage() {
       </div>
     </div>
   );
+}
+
+// Main Page Wrapper with Suspense
+export default function CreatePage() {
+    return (
+        <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+            <CreateForm />
+        </Suspense>
+    )
 }

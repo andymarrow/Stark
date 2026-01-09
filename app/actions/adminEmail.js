@@ -1,19 +1,13 @@
 'use server'
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendAdminEmail(toEmail, subject, message) {
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
-
-    await transporter.sendMail({
-      from: `"Stark Admin Command" <${process.env.SMTP_EMAIL}>`,
-      to: toEmail,
+    const { error } = await resend.emails.send({
+      from: 'Stark Admin <admin@stark.wip.et>',
+      to: [toEmail],
       subject: `[SYSTEM NOTICE] ${subject}`,
       html: `
         <div style="font-family: monospace; background: #000; color: #fff; padding: 20px;">
@@ -25,9 +19,9 @@ export async function sendAdminEmail(toEmail, subject, message) {
       `,
     });
 
+    if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (error) {
-    console.error("Admin Email Error:", error);
     return { success: false, error: error.message };
   }
 }
