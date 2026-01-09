@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import ExploreFilters from "./_components/ExploreFilters";
 import TechMap from "./_components/TechMap";
 import ActiveFilters from "./_components/ActiveFilters";
-import ExploreSortBar from "./_components/ExploreSortBar"; // IMPORTED
+import ExploreSortBar from "./_components/ExploreSortBar"; 
 import ProjectCard from "../_components/ProjectCard";
 import FilterSheet from "./_components/FilterSheet";
 import Pagination from "@/components/ui/Pagination";
@@ -14,7 +14,7 @@ import ExploreTrendingBanner from "./_components/ExploreTrendingBanner";
 
 const ITEMS_PER_PAGE = 6;
 
-// --- SMART REGION MAPPER (Kept same as before) ---
+// --- SMART REGION MAPPER ---
 const getRegionFromLocation = (location) => {
     if (!location) return "global";
     const input = location.toLowerCase().trim();
@@ -39,7 +39,7 @@ export default function ExplorePage() {
     region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false
   });
 
-  // --- 2. Sorting State (NEW) ---
+  // --- 2. Sorting State ---
   const [sortOrder, setSortOrder] = useState("latest"); // 'latest', 'oldest', 'popular'
   const [popularMetric, setPopularMetric] = useState("hype"); // 'views', 'likes', 'hype'
 
@@ -59,15 +59,25 @@ export default function ExplorePage() {
             *,
             author:profiles!projects_owner_id_fkey(
                 full_name, username, avatar_url, location, is_for_hire
+            ),
+            contest_history:contest_submissions!project_id(
+                contest:contests(title, slug)
             )
           `)
-          .eq('status', 'published');
-          // Note: We remove .order() here because we do complex sorting client-side
+          .eq('status', 'published')
+          // CRITICAL: Only show projects that are NOT isolated contest entries
+          .eq('is_contest_entry', false);
 
         if (error) throw error;
 
         const formatted = (data || []).map(p => {
             const rawLocation = p.author?.location;
+            
+            // Check if this project was ever in a contest (even if now public)
+            const contestData = p.contest_history?.[0]?.contest;
+            const contestTitle = contestData?.title;
+            const contestSlug = contestData?.slug; // <--- Extracted Slug
+
             return {
                 id: p.id,
                 slug: p.slug,
@@ -79,9 +89,11 @@ export default function ExplorePage() {
                 qualityScore: p.quality_score,
                 views: p.views || 0,
                 likes_count: p.likes_count || 0,
-                created_at: p.created_at, // Needed for sorting
+                created_at: p.created_at, 
                 region: getRegionFromLocation(rawLocation), 
                 forHire: p.author?.is_for_hire,
+                contestName: contestTitle,
+                contestSlug: contestSlug, // <--- Passed to Card
                 author: {
                     name: p.author?.full_name || "Anonymous",
                     username: p.author?.username,
@@ -128,7 +140,7 @@ export default function ExplorePage() {
         return true;
     });
 
-    // B. Sorting Step (NEW)
+    // B. Sorting Step
     return result.sort((a, b) => {
         if (sortOrder === 'latest') {
             return new Date(b.created_at) - new Date(a.created_at);
@@ -140,7 +152,6 @@ export default function ExplorePage() {
             if (popularMetric === 'views') return b.views - a.views;
             if (popularMetric === 'likes') return b.likes_count - a.likes_count;
             if (popularMetric === 'hype') {
-                // Weighted Score: Views + (Likes * 5)
                 const scoreA = a.views + (a.likes_count * 5);
                 const scoreB = b.views + (b.likes_count * 5);
                 return scoreB - scoreA;
@@ -203,10 +214,8 @@ export default function ExplorePage() {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col">
                 
-               
                 <ActiveFilters filters={filters} setFilters={setFilters} />
 
-                {/* NEW: Sorting Controls */}
                 <ExploreSortBar 
                     sortOrder={sortOrder} 
                     setSortOrder={setSortOrder}

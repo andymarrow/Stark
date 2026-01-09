@@ -35,7 +35,7 @@ export default function TrendingPage() {
   const [loading, setLoading] = useState(true);
   
   // Metric State
-  const [popularMetric, setPopularMetric] = useState("hype"); // 'views' | 'likes' | 'hype'
+  const [popularMetric, setPopularMetric] = useState("hype"); 
 
   const [projects, setProjects] = useState([]);
   const [creators, setCreators] = useState([]);
@@ -45,16 +45,16 @@ export default function TrendingPage() {
       setLoading(true);
       try {
         // ====================================================
-        // 1. PROJECTS FETCH LOGIC
+        // 1. PROJECTS FETCH LOGIC (ISOLATED)
         // ====================================================
         let projSortColumn = 'views'; 
         if (popularMetric === 'likes') projSortColumn = 'likes_count';
-        // 'hype' handled client side
 
         const { data: projectsData, error: projError } = await supabase
           .from('projects')
           .select(`*, author:profiles!projects_owner_id_fkey(*)`)
           .eq('status', 'published')
+          .eq('is_contest_entry', false) // <--- CRITICAL FIX: Hide contest entries
           .order(projSortColumn, { ascending: false })
           .limit(50); 
 
@@ -85,16 +85,12 @@ export default function TrendingPage() {
             });
         }
         
-        // LIMIT PROJECTS TO TOP 11
         setProjects(formattedProjects.slice(0, 11));
 
 
         // ====================================================
-        // 2. CREATORS FETCH LOGIC (ADVANCED AGGREGATION)
+        // 2. CREATORS FETCH LOGIC 
         // ====================================================
-        
-        // A. Initial Pool: Fetch top 100 profiles to ensure we catch rising stars
-        // We sort by views initially just to get active users, but we re-sort later
         let profileQuery = supabase.from('profiles').select('*').limit(100);
         
         if (popularMetric === 'likes') {
@@ -110,11 +106,12 @@ export default function TrendingPage() {
         
         // B. Bulk Fetch Data for these 100 users
         const [projectsRes, followersRes] = await Promise.all([
-            // Get ALL published projects for these users to calculate total likes accurately
+            // Get ALL published projects (Excluding contest entries to be fair)
             supabase.from('projects')
                 .select('owner_id, thumbnail_url, likes_count') 
                 .in('owner_id', userIds)
-                .eq('status', 'published'),
+                .eq('status', 'published')
+                .eq('is_contest_entry', false), // <--- CRITICAL FIX: Only public work counts for trending stats
             
             // Get follower records
             supabase.from('follows')
@@ -127,17 +124,12 @@ export default function TrendingPage() {
 
         // C. Map & Aggregate Data
         let activeCreators = (profilesData || []).map(p => {
-            // Get this user's projects
             const myUserProjects = userProjects.filter(up => up.owner_id === p.id);
-            
-            // Filter inactive users (must have at least 1 project)
             if (myUserProjects.length === 0) return null; 
             
-            // Calculate Cumulative Stats
             const totalProjectLikes = myUserProjects.reduce((sum, proj) => sum + (proj.likes_count || 0), 0);
             const myFollowers = allFollows.filter(f => f.following_id === p.id).length;
 
-            // Get thumbnails for display (first 3)
             const myWork = myUserProjects
                 .slice(0,3)
                 .map(up => getThumbnail(up.thumbnail_url));
@@ -152,29 +144,20 @@ export default function TrendingPage() {
                 coverImage: p.avatar_url, 
                 isForHire: p.is_for_hire,
                 
-                // DATA FOR SORTING
                 stats: { 
-                    followers: myFollowers, // Real Follower Count
-                    likes: totalProjectLikes, // Sum of Project Stars
-                    views: p.views          // Node Reach (Profile Views)
+                    followers: myFollowers, 
+                    likes: totalProjectLikes, 
+                    views: p.views          
                 },
                 topProjects: myWork
             };
-        }).filter(Boolean); // Remove nulls
+        }).filter(Boolean); 
 
         // D. APPLY SORTING ALGORITHM
         activeCreators.sort((a, b) => {
-            if (popularMetric === 'views') {
-                return b.stats.views - a.stats.views; // Sort by Node Reach
-            }
-            if (popularMetric === 'likes') {
-                return b.stats.likes - a.stats.likes; // Sort by Total Stars
-            }
+            if (popularMetric === 'views') return b.stats.views - a.stats.views;
+            if (popularMetric === 'likes') return b.stats.likes - a.stats.likes;
             if (popularMetric === 'hype') {
-                // THE ALGORITHM:
-                // Followers = 20 pts (Network Influence)
-                // Stars = 10 pts (Technical Quality)
-                // Views = 1 pt (Raw Visibility)
                 const scoreA = (a.stats.followers * 20) + (a.stats.likes * 10) + (a.stats.views);
                 const scoreB = (b.stats.followers * 20) + (b.stats.likes * 10) + (b.stats.views);
                 return scoreB - scoreA;
@@ -182,7 +165,6 @@ export default function TrendingPage() {
             return 0;
         });
 
-        // LIMIT CREATORS TO TOP 11
         setCreators(activeCreators.slice(0, 11));
 
       } catch (err) {
@@ -215,7 +197,6 @@ export default function TrendingPage() {
     <div className="min-h-screen bg-background pt-8 pb-20">
       <div className="container mx-auto px-4">
         
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-8">
             <div>
                 <h1 className="text-4xl md:text-6xl font-black tracking-tighter uppercase mb-2">
@@ -227,13 +208,11 @@ export default function TrendingPage() {
             </div>
         </div>
 
-        {/* Controls */}
         <div className="flex flex-col items-center gap-6 mb-12">
             <TrendingToggle view={view} setView={setView} />
             <TrendingSortBar popularMetric={popularMetric} setPopularMetric={setPopularMetric} />
         </div>
 
-        {/* Content */}
         <AnimatePresence mode="wait">
             <motion.div
                 key={`${view}-${popularMetric}`}

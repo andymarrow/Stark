@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { notFound, redirect } from "next/navigation";
-import DashboardClient from "./_components/DashboardClient";
+import DashboardGuard from "./_components/DashboardGuard";
 
 export default async function ContestDashboardPage({ params }) {
   const { slug } = await params;
@@ -19,17 +19,6 @@ export default async function ContestDashboardPage({ params }) {
 
   if (error || !contest) notFound();
 
-  // 3. Security Check: Only Creator can access dashboard
-  // (Judges have a different view/portal usually, or restricted access here)
-  if (contest.creator_id !== user.id) {
-    // If user is a judge, maybe redirect to judging interface?
-    // For now, simple block.
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground font-mono">
-            ACCESS_DENIED // CREATOR_ONLY
-        </div>
-    );
-  }
-
-  return <DashboardClient contest={contest} currentUser={user} />;
+  // 3. Delegate Security Check to Client Guard for UI/UX
+  return <DashboardGuard contest={contest} currentUser={user} />;
 }

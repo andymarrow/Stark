@@ -28,8 +28,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // Helper for consistent avatar fetching logic
-// (Assuming you might not have the constants file in every environment, 
-// I've included a safe inline fallback logic here just in case)
 const DEFAULT_AVATAR = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
 const getAvatar = (profile) => {
     return profile?.avatar_url || profile?.user_metadata?.avatar_url || DEFAULT_AVATAR;
@@ -129,6 +127,7 @@ export default function DesktopNavbar() {
           
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium mr-4 uppercase font-mono tracking-tighter">
             <Link href="/explore" className={`transition-colors ${pathname === '/explore' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Explore</Link>
+            <Link href="/contests" className={`transition-colors ${pathname.startsWith('/contests') ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Contests</Link>
             <Link href="/trending" className={`transition-colors ${pathname === '/trending' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Trending</Link>
           </nav>
 
