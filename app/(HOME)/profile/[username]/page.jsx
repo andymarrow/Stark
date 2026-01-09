@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
-import { supabase } from "@/lib/supabaseClient"; // Fallback for metadata
-import ProfileClient from "./_components/ProfileClient";
 import { notFound } from "next/navigation";
+import ProfileClient from "./_components/ProfileClient";
+import { supabase } from "@/lib/supabaseClient"; // Fallback for metadata
 
 /**
  * 1. DYNAMIC METADATA (The Intelligence Preview)
@@ -66,36 +66,58 @@ export default async function ProfilePage({ params }) {
 
   if (profileError || !profileData) return notFound();
 
-  // C. Fetch Projects and Follower Stats in Parallel
-  const [projectsRes, likedRes, followersCount, followingCount] = await Promise.all([
-    // Work Projects
+  // C. Fetch Projects, Follower Stats AND Contest Data in Parallel
+  const [projectsRes, likedRes, followersCount, followingCount, contestEntriesRes, judgingRes] = await Promise.all([
+    // 1. Work Projects (Exclude Contest Entries from Main Feed)
     supabaseServer
       .from('projects')
       .select('*, author:profiles!owner_id(*)')
       .eq('owner_id', profileData.id)
-      .eq('status', 'published'),
+      .eq('status', 'published')
+      .eq('is_contest_entry', false),
     
-    // Saved/Liked Projects
+    // 2. Saved/Liked Projects
     supabaseServer
       .from('project_likes')
       .select('projects(*, author:profiles!owner_id(*))')
       .eq('user_id', profileData.id),
 
-    // Followers
+    // 3. Followers
     supabaseServer
       .from('follows')
       .select('*', { count: 'exact', head: true })
       .eq('following_id', profileData.id),
 
-    // Following
+    // 4. Following
     supabaseServer
       .from('follows')
       .select('*', { count: 'exact', head: true })
-      .eq('follower_id', profileData.id)
+      .eq('follower_id', profileData.id),
+
+    // 5. Contest Entries (Where this user submitted)
+    supabaseServer
+      .from('contest_submissions')
+      .select(`
+          id, final_score, rank, submitted_at,
+          contest:contests(id, title, slug, cover_image),
+          project:projects!inner(id, title, slug, thumbnail_url, owner_id)
+      `)
+      .eq('project.owner_id', profileData.id),
+
+    // 6. Judging History (Where this user was a judge)
+    supabaseServer
+      .from('contest_judges')
+      .select(`
+          id, status, created_at,
+          contest:contests(id, title, slug, cover_image)
+      `)
+      .eq('user_id', profileData.id)
   ]);
 
   const workProjects = projectsRes.data || [];
   const likedProjects = likedRes.data?.map(item => item.projects).filter(Boolean) || [];
+  const contestEntries = contestEntriesRes.data || [];
+  const judgingHistory = judgingRes.data || [];
 
   return (
     <div className="min-h-screen bg-background pt-8 pb-20">
@@ -105,13 +127,14 @@ export default async function ProfilePage({ params }) {
             initialProfile={profileData}
             initialWork={workProjects}
             initialSaved={likedProjects}
+            // New Props passed to Client
+            contestEntries={contestEntries}
+            judgingHistory={judgingHistory}
             initialFollowerStats={{
                 followers: followersCount.count || 0,
                 following: followingCount.count || 0
             }}
         />
-        
-        
     </div>
   );
 }
