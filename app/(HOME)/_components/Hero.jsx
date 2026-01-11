@@ -2,15 +2,14 @@
 import { useState, useEffect } from "react";
 import { Search, ChevronDown, ChevronUp, Command, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation"; // For routing
-import { supabase } from "@/lib/supabaseClient"; // For stats
-import { TECH_STACKS } from "@/constants/options";
+import { useRouter } from "next/navigation"; 
+import { supabase } from "@/lib/supabaseClient"; 
+import { COUNTRIES } from "@/constants/options";
 
-// Curated list for the Hero "Quick Select"
 const FILTERS = {
   TECH: ["React", "Next.js", "TypeScript", "Python", "Rust", "Go", "Figma"],
   CATEGORY: ["SaaS", "E-commerce", "Portfolio", "Mobile", "Crypto"],
-  REGION: ["United States", "Germany", "Brazil", "India", "Nigeria"]
+  REGION: ["Ethiopia","United States", "Germany", "Brazil", "India", "Nigeria"]
 };
 
 export default function Hero() {
@@ -19,38 +18,57 @@ export default function Hero() {
   const [activeFilter, setActiveFilter] = useState("TECH"); 
   
   // Stats State
-  const [stats, setStats] = useState({ projects: 0, creators: 0, countries: 0 });
+  const [stats, setStats] = useState({ 
+    projects: 0, 
+    contests: 0, 
+    entries: 0,
+    creators: 0, 
+    countries: 0 
+  });
   const [loadingStats, setLoadingStats] = useState(true);
 
   // --- 1. FETCH REAL SYSTEM STATS ---
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Count Projects
+        // 1. Projects (Public Only)
         const { count: projectCount } = await supabase
             .from('projects')
             .select('*', { count: 'exact', head: true })
-            .eq('status', 'published');
+            .eq('status', 'published')
+            .eq('is_contest_entry', false); // Explicit filter
 
-        // Count Creators
+        // 2. Contests (Total)
+        const { count: contestCount } = await supabase
+            .from('contests')
+            .select('*', { count: 'exact', head: true })
+            .neq('status', 'draft');
+
+        // 3. Entries (Contest Submissions)
+        // We can count 'contest_submissions' table directly for speed
+        const { count: entryCount } = await supabase
+            .from('contest_submissions')
+            .select('*', { count: 'exact', head: true });
+
+        // 4. Creators
         const { count: creatorCount } = await supabase
             .from('profiles')
             .select('*', { count: 'exact', head: true });
 
-        // Count Unique Locations (Approximation for performance)
-        // We fetch locations and dedupe in JS. 
-        // Note: For massive scale, use a Postgres RPC or materialized view.
+        // 5. Unique Countries
         const { data: locations } = await supabase
             .from('profiles')
             .select('location')
             .not('location', 'is', null);
         
         const uniqueCountries = new Set(
-            locations?.map(l => l.location.split(',').pop().trim()) // Simple parse
+            locations?.map(l => l.location.split(',').pop().trim()) 
         ).size;
 
         setStats({
             projects: projectCount || 0,
+            contests: contestCount || 0,
+            entries: entryCount || 0,
             creators: creatorCount || 0,
             countries: uniqueCountries || 0
         });
@@ -73,17 +91,13 @@ export default function Hero() {
 
   // --- 3. TAG CLICK HANDLER ---
   const handleTagClick = (category, value) => {
-    // Map the Hero categories to URL params expected by ExplorePage
     let param = "";
     if (category === "TECH") param = "stack";
     else if (category === "CATEGORY") param = "category";
     else if (category === "REGION") {
-        // Simple mapping for demo regions to codes, or just pass search
-        // For simplicity, we'll pass it as a search term or ignore strict mapping here
         router.push(`/explore?search=${encodeURIComponent(value)}`);
         return;
     }
-
     router.push(`/explore?${param}=${encodeURIComponent(value)}`);
   };
 
@@ -226,8 +240,16 @@ export default function Hero() {
                 <>
                     <StatItem value={stats.projects.toLocaleString()} label="projects" />
                     <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    
+                    <StatItem value={stats.contests.toLocaleString()} label="contests" />
+                    <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    
+                    <StatItem value={stats.entries.toLocaleString()} label="entries" />
+                    <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    
                     <StatItem value={stats.creators.toLocaleString()} label="creators" />
                     <span className="hidden md:inline text-accent/50 text-[8px]">■</span>
+                    
                     <StatItem value={stats.countries.toString()} label="countries" />
                 </>
             )}
