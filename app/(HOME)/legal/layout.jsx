@@ -1,11 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Shield, Scale, FolderOpen } from "lucide-react";
+import { FileText, Shield, Scale, FolderOpen, BookOpen } from "lucide-react";
 
+// Updated File List
 const FILES = [
   { name: "TERMS_OF_SERVICE.md", href: "/legal/terms", icon: Scale },
   { name: "PRIVACY_POLICY.json", href: "/legal/privacy", icon: Shield },
+  { name: "CONTRIBUTING.md", href: "/legal/guidelines", icon: BookOpen }, // Added
 ];
 
 export default function LegalLayout({ children }) {

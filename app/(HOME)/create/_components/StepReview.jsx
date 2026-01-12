@@ -1,5 +1,6 @@
 "use client";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, AlertTriangle, ExternalLink } from "lucide-react";
 
 export default function StepReview({ data }) {
   return (
@@ -37,8 +38,18 @@ export default function StepReview({ data }) {
         </div>
       </div>
 
-      <div className="text-center text-xs text-muted-foreground font-mono">
-        <p>By clicking Submit, you agree to the Open Source Contribution Guidelines.</p>
+      <div className="text-center text-xs text-muted-foreground font-mono space-y-1">
+        <p className="flex items-center justify-center gap-1">
+            By clicking Submit, you agree to the 
+            <Link 
+                href="/legal/terms" 
+                target="_blank" 
+                className="text-foreground hover:text-accent underline underline-offset-4 flex items-center gap-0.5 group"
+            >
+                Open Source Contribution Guidelines
+                <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+            </Link>
+        </p>
         <p>Your project will be indexed immediately.</p>
       </div>
 
