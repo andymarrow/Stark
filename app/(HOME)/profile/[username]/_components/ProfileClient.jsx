@@ -5,6 +5,7 @@ import ProfileStats from "./ProfileStats";
 import ActivityGraph from "./ActivityGraph";
 import ProfileTabs from "./ProfileTabs";
 import ProjectCard from "@/app/(HOME)/_components/ProjectCard";
+import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
@@ -15,8 +16,8 @@ export default function ProfileClient({
   initialWork, 
   initialSaved, 
   initialFollowerStats, 
-  contestEntries = [], // Default to empty array
-  judgingHistory = [], // Default to empty array
+  contestEntries = [], 
+  judgingHistory = [], 
   currentUser,
   username 
 }) {
@@ -115,23 +116,42 @@ export default function ProfileClient({
           setSortOrder={setSortOrder}
           popularMetric={popularMetric}
           setPopularMetric={setPopularMetric}
-          // New Data
           contestEntries={contestEntries}
           judgingHistory={judgingHistory}
       />
 
-      {/* Conditional Rendering: Work/Saved Grid OR Competition View is handled inside ProfileTabs */}
+      {/* Conditional Rendering: Work/Saved Grid OR Competition View is handled inside ProfileTabs (actually here based on your request) */}
       {(activeTab === 'work' || activeTab === 'saved') && (
           currentProjects.length > 0 ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className={viewMode === 'grid' 
-                      ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
-                      : "flex flex-col gap-4 max-w-4xl mx-auto"
-                  }>
-                      {currentProjects.map((project) => (
-                          <ProjectCard key={project.id} project={project} />
-                      ))}
-                  </div>
+                  
+                  {/* GRID VIEW */}
+                  {viewMode === 'grid' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {currentProjects.map((project) => (
+                            <ProjectCard key={project.id} project={project} />
+                        ))}
+                    </div>
+                  )}
+
+                  {/* LIST VIEW (The New Compact Layout) */}
+                  {viewMode === 'list' && (
+                    <div className="flex flex-col border-t border-border">
+                       {/* Optional Header Row for Data Clarity */}
+                       <div className="hidden md:flex items-center justify-between px-3 py-2 bg-secondary/10 border-b border-border text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
+                           <span className="pl-24">Identity</span>
+                           <div className="flex gap-16 pr-12">
+                               <span className="w-16">Metrics</span>
+                               <span className="w-24 text-right">Deployed</span>
+                           </div>
+                       </div>
+
+                       {/* Rows */}
+                       {currentProjects.map((project) => (
+                         <ProjectListItem key={project.id} project={project} />
+                       ))}
+                    </div>
+                  )}
                   
                   {totalPages > 1 && (
                       <div className="mt-12">
