@@ -37,32 +37,8 @@ export default function ExploreFilters({ filters, setFilters }) {
       </div>
 
       <Accordion type="multiple" defaultValue={["stack", "category", "quality"]} className="w-full">
-        
-        {/* TECH STACK */}
-        <AccordionItem value="stack" className="border-border">
-          <AccordionTrigger className="text-sm font-bold uppercase tracking-wider hover:no-underline hover:text-accent">
-            // Tech Stack
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-3 pt-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-              {SORTED_STACKS.map((tech) => (
-                <div key={tech} className="flex items-center space-x-3 group">
-                  <Checkbox 
-                    id={tech} 
-                    checked={filters.stack.includes(tech)}
-                    onCheckedChange={() => handleCheckbox("stack", tech)}
-                    className="rounded-none border-muted-foreground data-[state=checked]:bg-accent data-[state=checked]:border-accent" 
-                  />
-                  <label htmlFor={tech} className="text-sm font-light text-muted-foreground group-hover:text-foreground cursor-pointer select-none">
-                    {tech}
-                  </label>
-                </div>
-              ))}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
 
-        {/* CATEGORY */}
+         {/* CATEGORY */}
         <AccordionItem value="category" className="border-border">
           <AccordionTrigger className="text-sm font-bold uppercase tracking-wider hover:no-underline hover:text-accent">
             // Category
@@ -88,6 +64,32 @@ export default function ExploreFilters({ filters, setFilters }) {
              </div>
           </AccordionContent>
         </AccordionItem>
+        
+        {/* TECH STACK */}
+        <AccordionItem value="stack" className="border-border">
+          <AccordionTrigger className="text-sm font-bold uppercase tracking-wider hover:no-underline hover:text-accent">
+            // Tech Stack
+          </AccordionTrigger>
+          <AccordionContent>
+            <div className="space-y-3 pt-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {SORTED_STACKS.map((tech) => (
+                <div key={tech} className="flex items-center space-x-3 group">
+                  <Checkbox 
+                    id={tech} 
+                    checked={filters.stack.includes(tech)}
+                    onCheckedChange={() => handleCheckbox("stack", tech)}
+                    className="rounded-none border-muted-foreground data-[state=checked]:bg-accent data-[state=checked]:border-accent" 
+                  />
+                  <label htmlFor={tech} className="text-sm font-light text-muted-foreground group-hover:text-foreground cursor-pointer select-none">
+                    {tech}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+       
 
         {/* QUALITY SCORE */}
         <AccordionItem value="quality" className="border-border">
