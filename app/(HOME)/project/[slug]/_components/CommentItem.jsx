@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { getAvatar } from "@/constants/assets";
+import ReactMarkdown from "react-markdown"; 
+import remarkGfm from "remark-gfm"; // REQUIRED for auto-linking
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,10 +19,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
+// Custom Link Renderer to ensure security and styling
+const LinkRenderer = (props) => {
+  return (
+    <a 
+      href={props.href} 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="text-accent underline decoration-accent/50 underline-offset-2 break-all hover:text-accent/80 hover:decoration-accent transition-colors cursor-pointer"
+      onClick={(e) => e.stopPropagation()} // Prevent bubbling events
+    >
+      {props.children}
+    </a>
+  );
+};
 
 export default function CommentItem({ comment, user, onDelete, projectId, depth = 0 }) {
   // --- STATE ---
@@ -36,7 +53,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Admin State (Fetched separately to ensure accuracy)
+  // Admin State
   const [isAdminUser, setIsAdminUser] = useState(false);
 
   // Voting State
@@ -52,10 +69,9 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
 
   const hasFetchedVote = useRef(false);
 
-  // --- 1. FORCE UNLOCK BODY (Aggressive Fix) ---
+  // --- 1. FORCE UNLOCK BODY ---
   useEffect(() => {
     if (!isReportOpen) {
-        // Delay to allow Radix UI to finish its own cleanup
         const timer = setTimeout(() => {
             document.body.style.pointerEvents = "auto";
             document.body.style.overflow = "auto";
@@ -64,27 +80,16 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     }
   }, [isReportOpen]);
 
-  // --- 2. CHECK ADMIN ROLE (Database Source of Truth) ---
+  // --- 2. CHECK ADMIN ROLE ---
   useEffect(() => {
     const checkAdmin = async () => {
         if (!user) return;
-        
-        // 1. Check Metadata (Fastest)
         if (user.user_metadata?.role === 'admin' || user.app_metadata?.role === 'admin') {
             setIsAdminUser(true);
             return;
         }
-
-        // 2. Check Database Profile (Safest)
-        const { data } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-            
-        if (data?.role === 'admin') {
-            setIsAdminUser(true);
-        }
+        const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (data?.role === 'admin') setIsAdminUser(true);
     };
     checkAdmin();
   }, [user]);
@@ -262,7 +267,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
             status: 'pending'
         });
         toast.success("Report Filed", { description: "Moderators alerted." });
-        setIsReportOpen(false); // Clean up happens in useEffect
+        setIsReportOpen(false); 
     } catch (err) {
         toast.error("Report Failed");
     } finally {
@@ -273,7 +278,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
   return (
     <div className={`group animate-in fade-in slide-in-from-bottom-2 ${depth > 0 ? 'ml-6 md:ml-10 border-l border-border/50 pl-4 mt-4' : 'mb-6'}`}>
       <div className="flex gap-3">
-        {/* AVATAR FIX: Use centralized helper with Navigation Link */}
+        {/* Avatar */}
         <Link 
             href={`/profile/${comment.author?.username}`}
             className="w-8 h-8 relative border border-border bg-secondary flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
@@ -330,7 +335,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
             )}
           </div>
 
-          {/* Content Area */}
+          {/* Content Area - NOW WITH AUTO-LINKING */}
           {isEditing ? (
             <div className="mb-2">
                 <textarea 
@@ -348,10 +353,21 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
                 </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground/90 leading-relaxed font-mono whitespace-pre-wrap">
-                {depth > 0 && <CornerDownRight size={12} className="inline mr-1 text-accent" />}
-                {localContent}
-            </p>
+            <div className="text-sm text-muted-foreground/90 leading-relaxed font-mono relative">
+                {depth > 0 && <CornerDownRight size={12} className="absolute -left-3 top-1 text-accent opacity-50" />}
+                
+                {/* Markdown Renderer - Auto-Links Enabled via remarkGfm */}
+                <div className="prose prose-zinc dark:prose-invert max-w-none prose-p:my-0 prose-code:bg-secondary/50 prose-code:px-1 prose-code:text-xs prose-pre:bg-black prose-pre:p-2 prose-pre:text-xs">
+                    <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]} // This enables auto-linking
+                        components={{
+                            a: LinkRenderer // Use our custom renderer
+                        }}
+                    >
+                        {localContent}
+                    </ReactMarkdown>
+                </div>
+            </div>
           )}
           
           {/* Interaction Bar */}
@@ -396,7 +412,6 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
                         key={r.id} 
                         comment={r} 
                         user={user} 
-                        // CRITICAL: We pass our own local handler to children
                         onDelete={handleChildDelete} 
                         projectId={projectId} 
                         depth={depth + 1} 
