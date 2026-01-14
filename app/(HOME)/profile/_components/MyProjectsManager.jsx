@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   MoreHorizontal, Eye, Star, Edit3, Trash2,
   ExternalLink, Search, ChevronLeft, ChevronRight,
-  Loader2, AlertTriangle, BarChart3, Plus, Trophy, Globe, Lock, ShieldCheck
+  Loader2, AlertTriangle, BarChart3, Plus, Trophy, Globe, Lock, ShieldCheck, AlertOctagon
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -40,9 +40,9 @@ export default function MyProjectsManager({ user, onRefresh }) {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState("standard"); // 'standard' | 'contest' | 'hosting'
+  const [activeTab, setActiveTab] = useState("standard"); 
 
-  const [itemToDelete, setItemToDelete] = useState(null); // Can be project or contest
+  const [itemToDelete, setItemToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -63,31 +63,27 @@ export default function MyProjectsManager({ user, onRefresh }) {
 
       let query;
 
-      // 1. PROJECT FETCH LOGIC
       if (activeTab === 'standard' || activeTab === 'contest') {
+          // IMPORTANT: Left Join contest_submissions to check for orphans
           query = supabase
             .from('projects')
-            .select(`*, contest_submissions!project_id(contest:contests(title, slug, status))`, { count: 'exact' })
+            .select(`*, contest_submissions(contest:contests(title, slug, status))`, { count: 'exact' })
             .eq('owner_id', user.id)
             .order('created_at', { ascending: false })
             .range(from, to);
 
           if (activeTab === 'standard') {
+            // Standard Tab: Only Public Projects
             query = query.eq('is_contest_entry', false);
           } else {
-            // Contest Entries Logic: Use !inner for robust filtering
-            query = supabase
-                .from('projects')
-                .select(`*, contest_submissions!inner(contest:contests(title, slug, status))`, { count: 'exact' })
-                .eq('owner_id', user.id)
-                .order('created_at', { ascending: false })
-                .range(from, to);
+            // Contest Tab: Only Contest Entries (Hidden ones)
+            // This includes ACTIVE entries AND ORPHANED entries (where contest was deleted)
+            query = query.eq('is_contest_entry', true);
           }
           
           if (searchQuery) query = query.ilike('title', `%${searchQuery}%`);
       } 
       
-      // 2. HOSTING (MY CONTESTS) FETCH LOGIC
       else if (activeTab === 'hosting') {
           query = supabase
             .from('contests')
@@ -102,7 +98,6 @@ export default function MyProjectsManager({ user, onRefresh }) {
       const { data: resultData, error, count } = await query;
       if (error) throw error;
 
-      // Traffic stats (Only relevant for projects currently)
       if (activeTab !== 'hosting') {
           const { data: trafficData } = await supabase
             .from('projects')
@@ -111,7 +106,7 @@ export default function MyProjectsManager({ user, onRefresh }) {
           const totalViews = trafficData?.reduce((sum, item) => sum + (item.views || 0), 0) || 0;
           setTotalTraffic(totalViews);
       } else {
-          setTotalTraffic(0); // Or count contest views if we tracked them
+          setTotalTraffic(0);
       }
 
       setData(resultData || []);
@@ -232,9 +227,9 @@ export default function MyProjectsManager({ user, onRefresh }) {
       <div className="border border-border bg-background min-h-[400px] flex flex-col relative shadow-sm">
         <div className="grid grid-cols-12 gap-2 p-3 border-b border-border bg-secondary/10 text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
             <div className="col-span-8 md:col-span-5">Identity</div>
-            {activeTab !== 'hosting' && <div className="col-span-3 hidden md:block">Stats</div>}
+            <div className="col-span-3 hidden md:block">Stats</div>
             <div className="col-span-3 hidden md:block">Status</div>
-            <div className={`${activeTab === 'hosting' ? 'col-span-4' : 'col-span-4 md:col-span-1'} text-right`}>Action</div>
+            <div className="col-span-4 md:col-span-1 text-right">Action</div>
         </div>
 
         <div className="divide-y divide-border flex-1">
@@ -301,9 +296,18 @@ export default function MyProjectsManager({ user, onRefresh }) {
 
 function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) {
     const router = useRouter();
-    const contestData = project.contest_submissions?.[0]?.contest;
+    
+    // Safely check if submissions array exists and has length
+    const submission = project.contest_submissions?.[0];
+    const contestData = submission?.contest;
     const contestTitle = contestData?.title;
     const contestSlug = contestData?.slug;
+    
+    // Detect Orphan State: ContesTab active + No Submission Record found (because it was deleted via cascade)
+    // Actually, due to the Left Join, if the contest is deleted, 'contest_submissions' will be empty array []
+    // So if isContestTab is true, but contestData is undefined, it's an orphan.
+    const isOrphan = isContestTab && !contestData;
+
     const thumb = getThumbnail(project.thumbnail_url);
     const isHidden = project.is_contest_entry;
 
@@ -324,7 +328,9 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) 
                     <Link href={`/project/${project.slug}`} onClick={(e) => e.stopPropagation()} className="text-sm font-bold truncate text-foreground group-hover:text-accent transition-colors hover:underline">
                         {project.title}
                     </Link>
-                    {isContestTab && contestTitle && (
+                    
+                    {/* Badge Logic: Show if it has contest data, regardless of current tab */}
+                    {contestTitle && (
                         <div className="flex items-center gap-2 mt-0.5">
                              <Link 
                                 href={`/contests/${contestSlug}`}
@@ -333,6 +339,7 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) 
                             >
                                 <Trophy size={10} /> {contestTitle}
                             </Link>
+
                             <span className={`text-[8px] px-1.5 py-0.5 rounded-sm font-mono uppercase border ${!isHidden ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
                                 {!isHidden ? "PUBLIC" : "HIDDEN"}
                             </span>
@@ -355,7 +362,12 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) 
             <div className="col-span-4 md:col-span-1 flex justify-end">
                 <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none hover:bg-background z-10 text-muted-foreground hover:text-foreground" onClick={(e) => e.stopPropagation()}>
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 rounded-none hover:bg-background z-10 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => e.stopPropagation()} 
+                        >
                             <MoreHorizontal size={16} />
                         </Button>
                     </DropdownMenuTrigger>
@@ -365,15 +377,25 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) 
                                 <Edit3 size={12} className="mr-2" /> Edit
                             </Link>
                         </DropdownMenuItem>
-                        {isContestTab && (
+                        
+                        {/* TOGGLE LOGIC FIXED: Show if contestTitle exists (it's a contest entry), regardless of tab */}
+                        {contestTitle && (
                             <DropdownMenuItem 
                                 onClick={(e) => { e.stopPropagation(); onTogglePublic(project); }}
                                 className={`text-[10px] font-mono uppercase h-8 cursor-pointer focus:text-white ${isHidden ? 'text-accent focus:bg-accent hover:text-white hover:bg-accent' : 'text-zinc-500 focus:bg-zinc-700 hover:bg-zinc-800'}`}
                             >
-                                {isHidden ? <><Globe size={12} className="mr-2" /> Make Public</> : <><Lock size={12} className="mr-2" /> Make Private</>}
+                                {isHidden ? (
+                                    <><Globe size={12} className="mr-2" /> Make Public</>
+                                ) : (
+                                    <><Lock size={12} className="mr-2" /> Make Private</>
+                                )}
                             </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDeleteRequest(project); }} className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-500 focus:text-white focus:bg-red-600 hover:text-white hover:bg-red-600">
+
+                        <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); onDeleteRequest(project); }} 
+                            className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-500 focus:text-white focus:bg-red-600 hover:text-white hover:bg-red-600"
+                        >
                             <Trash2 size={12} className="mr-2" /> Delete
                         </DropdownMenuItem>
                     </DropdownMenuContent>

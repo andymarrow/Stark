@@ -10,12 +10,14 @@ import {
   Activity, 
   Terminal, 
   LogOut,
+  Trophy,
 } from "lucide-react";
 import { useAuth } from "@/app/_context/AuthContext";
 
 const NAV_ITEMS = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin" },
   { label: "User Management", icon: Users, href: "/admin/users" },
+  { label: "Contest Control", icon: Trophy, href: "/admin/contests" },
   { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation" },
   { label: "System Health", icon: Activity, href: "/admin/health" },
   { label: "Audit Logs", icon: Terminal, href: "/admin/logs" },
