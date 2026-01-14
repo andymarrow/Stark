@@ -12,18 +12,17 @@ const getStatus = (c) => {
     const end = new Date(c.submission_deadline).getTime();
     const reveal = new Date(c.winner_announce_date).getTime();
     
-    if (c.winners_revealed) return { label: "Completed", color: "text-zinc-500 border-zinc-700" };
-    if (now > end && now < reveal) return { label: "Judging", color: "text-yellow-500 border-yellow-500" };
-    if (now > reveal) return { label: "Ended", color: "text-red-500 border-red-500" };
+    if (c.winners_revealed) return { label: "Completed", color: "text-zinc-500 border-zinc-700 bg-zinc-900" };
+    if (now > end && now < reveal) return { label: "Judging", color: "text-yellow-500 border-yellow-500 bg-yellow-500/10" };
+    if (now > reveal) return { label: "Ended", color: "text-red-500 border-red-500 bg-red-500/10" };
     return { label: "Live", color: "text-green-500 border-green-500 bg-green-500/10" };
 };
 
 export default function ContestListModal({ isOpen, onClose, contests }) {
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all"); // all, live, completed
-  const [sortOrder, setSortOrder] = useState("newest"); // newest, prize, deadline
+  const [filterStatus, setFilterStatus] = useState("all"); 
+  const [sortOrder, setSortOrder] = useState("newest"); 
 
-  // --- FILTER ENGINE ---
   const filtered = useMemo(() => {
     let result = contests.filter(c => c.title.toLowerCase().includes(search.toLowerCase()));
 
@@ -40,11 +39,10 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
     return result.sort((a, b) => {
         if (sortOrder === 'newest') return new Date(b.created_at) - new Date(a.created_at);
         if (sortOrder === 'deadline') return new Date(a.submission_deadline) - new Date(b.submission_deadline);
+        // Fix prize sort logic too
         if (sortOrder === 'prize') {
-            // Rough heuristic: parse first number from reward string
-            const prizeA = parseInt(a.prizes?.[0]?.reward?.replace(/\D/g, '') || 0);
-            const prizeB = parseInt(b.prizes?.[0]?.reward?.replace(/\D/g, '') || 0);
-            return prizeB - prizeA;
+            const getVal = (p) => parseInt(p.prizes?.[0]?.rewards?.[0]?.replace(/\D/g, '') || 0);
+            return getVal(b) - getVal(a);
         }
         return 0;
     });
@@ -54,7 +52,6 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl w-[95vw] h-[90vh] bg-black border border-zinc-800 p-0 overflow-hidden flex flex-col rounded-none shadow-2xl">
         
-        {/* HEADER */}
         <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
             <div>
                 <h2 className="text-xl font-black uppercase tracking-tighter text-white flex items-center gap-3">
@@ -69,9 +66,7 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
             </button>
         </div>
 
-        {/* CONTROLS BAR */}
         <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex flex-col md:flex-row gap-4">
-            {/* Search */}
             <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 <input 
@@ -82,7 +77,6 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
                 />
             </div>
 
-            {/* Filters */}
             <div className="flex gap-2">
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                     <SelectTrigger className="w-[140px] h-10 rounded-none bg-black border-zinc-800 text-xs uppercase font-mono">
@@ -108,7 +102,6 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
             </div>
         </div>
 
-        {/* GRID LIST */}
         <div className="flex-1 overflow-y-auto p-6 bg-black custom-scrollbar">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filtered.map((contest) => {
@@ -117,17 +110,19 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
                     const deadline = new Date(contest.submission_deadline);
                     const daysLeft = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
                     const isClosed = now > deadline;
+                    
+                    // NEW PRIZE LOGIC: Get top 3 rewards
+                    const topRewards = contest.prizes?.slice(0,3).map(p => p.rewards?.[0]).filter(Boolean) || [];
 
                     return (
                         <Link 
                             key={contest.id} 
                             href={`/contests/${contest.slug}`}
-                            className="flex flex-col border border-zinc-800 bg-zinc-950 hover:border-accent transition-all group relative overflow-hidden"
+                            className="flex flex-col border border-zinc-800 bg-zinc-950 hover:border-accent hover:shadow-[0_0_15px_rgba(220,38,38,0.1)] transition-all duration-300 group relative overflow-hidden"
                         >
-                            {/* Top Image */}
-                            <div className="relative aspect-[2/1] bg-zinc-900 border-b border-zinc-800">
+                            <div className="relative aspect-[2/1] bg-zinc-900 border-b border-zinc-800 overflow-hidden">
                                 {contest.cover_image ? (
-                                    <Image src={contest.cover_image} alt="c" fill className="object-cover opacity-80 group-hover:opacity-100 grayscale group-hover:grayscale-0 transition-all" />
+                                    <Image src={contest.cover_image} alt="c" fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center text-zinc-800"><Trophy size={32} /></div>
                                 )}
@@ -136,7 +131,6 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
                                 </div>
                             </div>
                             
-                            {/* Info */}
                             <div className="p-5 flex-1 flex flex-col justify-between">
                                 <div>
                                     <h3 className="font-bold text-sm uppercase text-white leading-tight line-clamp-2 mb-3 group-hover:text-accent transition-colors">
@@ -159,16 +153,20 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
                                     </div>
                                 </div>
 
-                                <div className="mt-5 pt-4 border-t border-dashed border-zinc-800 flex justify-between items-center">
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] font-mono text-zinc-600 uppercase">Top Prize</span>
-                                        <span className="text-sm font-bold text-white">
-                                            {contest.prizes?.[0]?.reward || "Undisclosed"}
-                                        </span>
-                                    </div>
-                                    <div className="w-8 h-8 flex items-center justify-center bg-white text-black group-hover:bg-accent group-hover:text-white transition-colors">
-                                        <CheckCircle2 size={16} />
-                                    </div>
+                                <div className="mt-5 pt-4 border-t border-dashed border-zinc-800">
+                                    <span className="text-[9px] font-mono text-zinc-600 uppercase block mb-1">Prize Pool</span>
+                                    {topRewards.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {topRewards.map((reward, i) => (
+                                                <span key={i} className="text-[10px] font-bold text-white bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 truncate max-w-[100px]">
+                                                    {reward}
+                                                </span>
+                                            ))}
+                                            {contest.prizes?.length > 3 && <span className="text-[9px] text-zinc-500">+{contest.prizes.length - 3}</span>}
+                                        </div>
+                                    ) : (
+                                        <span className="text-[10px] font-bold text-zinc-500">Undisclosed</span>
+                                    )}
                                 </div>
                             </div>
                         </Link>

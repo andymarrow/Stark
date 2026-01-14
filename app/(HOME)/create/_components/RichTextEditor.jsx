@@ -2,7 +2,6 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from 'tiptap-markdown';
-// FIXED: Using named imports instead of default imports
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
@@ -134,7 +133,6 @@ export default function RichTextEditor({ value, onChange }) {
     extensions: [
       StarterKit,
       Markdown,
-      // FIXED: Using named imports here as well
       Table.configure({
         resizable: true,
       }),
@@ -142,7 +140,7 @@ export default function RichTextEditor({ value, onChange }) {
       TableHeader,
       TableCell,
     ],
-    content: value,
+    content: '', // Initial content handled by useEffect for safety
     immediatelyRender: false, 
     editorProps: {
       attributes: {
@@ -151,13 +149,28 @@ export default function RichTextEditor({ value, onChange }) {
     },
     onUpdate: ({ editor }) => {
       const markdown = editor.storage.markdown.getMarkdown();
-      onChange(markdown);
+      // Emitting as object to match backend schema expectations
+      onChange({ type: "markdown", text: markdown });
     },
   });
 
+  // Handle incoming value changes (e.g. initial load or external update)
   useEffect(() => {
-    if (editor && value !== editor.storage.markdown.getMarkdown()) {
-      editor.commands.setContent(value);
+    if (editor && value) {
+      let contentToSet = "";
+      
+      // Check if value is our custom object or legacy string
+      if (typeof value === 'object' && value.type === 'markdown') {
+          contentToSet = value.text;
+      } else if (typeof value === 'string') {
+          contentToSet = value;
+      }
+
+      // Only update if different to prevent cursor jumping/loops
+      const currentContent = editor.storage.markdown.getMarkdown();
+      if (contentToSet !== currentContent) {
+          editor.commands.setContent(contentToSet);
+      }
     }
   }, [value, editor]);
 

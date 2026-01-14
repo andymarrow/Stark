@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Crown, PlayCircle } from "lucide-react";
+import { Trophy, ChevronRight, Crown, PlayCircle } from "lucide-react";
 
 // --- THUMBNAIL HELPER ---
 const getThumbnail = (url) => {
@@ -43,7 +43,8 @@ export default function HallOfFame({ topEntries }) {
                         className={`text-[9px] font-mono uppercase px-3 py-1 transition-colors
                             ${filter === opt.id 
                                 ? 'bg-zinc-800 text-white' 
-                                : 'text-zinc-500 hover:text-zinc-300'}`}
+                                : 'text-zinc-500 hover:text-zinc-300'}
+                        `}
                     >
                         {opt.label}
                     </button>
@@ -61,8 +62,8 @@ export default function HallOfFame({ topEntries }) {
                     <Link key={entry.id} href={`/project/${entry.project.slug}`} className="flex items-center gap-3 p-3 hover:bg-zinc-900 transition-colors group">
                         <div className="font-mono text-xs font-bold text-zinc-600 w-4 text-center">{i + 1}</div>
                         
-                        <div className="relative w-10 h-10 bg-black border border-zinc-800 flex-shrink-0 overflow-hidden">
-                            <Image src={thumb} alt="t" fill className="object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
+                        <div className="relative w-10 h-10 bg-black border border-zinc-800 group-hover:border-accent flex-shrink-0 overflow-hidden transition-colors">
+                            <Image src={thumb} alt="t" fill className="object-cover" /> {/* Removed grayscale */}
                             {isVideo && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                                     <PlayCircle size={12} className="text-white opacity-80" />
@@ -71,7 +72,7 @@ export default function HallOfFame({ topEntries }) {
                         </div>
                         
                         <div className="min-w-0 flex-1">
-                            <div className="text-xs font-bold uppercase truncate text-zinc-300 group-hover:text-white">{entry.project.title}</div>
+                            <div className="text-xs font-bold uppercase truncate text-zinc-300 group-hover:text-white transition-colors">{entry.project.title}</div>
                             <div className="text-[9px] font-mono text-zinc-500 truncate">{entry.contest.title}</div>
                         </div>
 
@@ -86,7 +87,14 @@ export default function HallOfFame({ topEntries }) {
             })}
         </div>
 
-        
+        {/* Footer */}
+        <div className="p-2 bg-zinc-900 border-t border-zinc-800 text-center">
+            <Link href="/explore?sort=popular">
+                <button className="text-[9px] font-mono uppercase text-zinc-500 hover:text-white flex items-center justify-center gap-1 w-full h-8">
+                    Browse All Top Rated <ChevronRight size={10} />
+                </button>
+            </Link>
+        </div>
     </div>
   );
 }

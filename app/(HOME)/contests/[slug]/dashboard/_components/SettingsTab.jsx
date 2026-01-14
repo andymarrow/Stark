@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { 
-  Save, AlertTriangle, Trash2, Lock, 
-  LayoutTemplate, Image as ImageIcon, Calendar 
+  AlertTriangle, Trash2, Lock, 
+  LayoutTemplate, Image as ImageIcon 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,14 +10,31 @@ import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
-// Reuse components from Create Page (Ensure these paths are correct)
+// Reuse components from Create Page
 import PrizeManager from "../../../create/_components/PrizeManager";
 import MetricsManager from "../../../create/_components/MetricsManager";
 import CoverImageUpload from "../../../create/_components/CoverImageUpload";
 import StepMedia from "@/app/(HOME)/create/_components/StepMedia";
 import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor";
 
-// Simple Date Picker Wrapper
+// --- TIMEZONE HELPER ---
+// Converts a UTC ISO string (from DB) to "YYYY-MM-DDTHH:mm" (Local time for Input)
+const toLocalInputFormat = (isoString) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    // Get offset in minutes (e.g., -180 for GMT+3)
+    const offset = date.getTimezoneOffset() * 60000;
+    // Adjust time to local, then ISO string it, then slice for input format
+    const localISOTime = new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    return localISOTime;
+};
+
+// Converts "YYYY-MM-DDTHH:mm" (Local Input) back to UTC ISO String for DB
+const toUTCISOString = (localString) => {
+    if (!localString) return null;
+    return new Date(localString).toISOString();
+};
+
 const DateTimePicker = ({ label, value, onChange }) => (
   <div className="space-y-1.5">
     <label className="text-[10px] font-mono uppercase text-muted-foreground">{label}</label>
@@ -27,6 +44,7 @@ const DateTimePicker = ({ label, value, onChange }) => (
       onChange={onChange}
       className="rounded-none bg-background border-border text-xs font-mono" 
     />
+    <p className="text-[8px] text-muted-foreground text-right">Local Time</p>
   </div>
 );
 
@@ -42,32 +60,34 @@ export default function SettingsTab({ contest }) {
     submissionCount: 0
   });
 
+  // Extract description safely (Handle JSON object from TipTap vs String)
+  const initialDescription = typeof contest.description === 'object' ? contest.description : contest.description;
+
   // Form State
   const [formData, setFormData] = useState({
     title: contest.title,
-    description: contest.description, // JSON or String
-    start_date: new Date(contest.start_date).toISOString().slice(0, 16),
-    submission_deadline: new Date(contest.submission_deadline).toISOString().slice(0, 16),
-    winner_announce_date: new Date(contest.winner_announce_date).toISOString().slice(0, 16),
+    description: initialDescription, 
+    // Convert DB UTC to Local for Inputs
+    start_date: toLocalInputFormat(contest.start_date),
+    submission_deadline: toLocalInputFormat(contest.submission_deadline),
+    winner_announce_date: toLocalInputFormat(contest.winner_announce_date),
     prizes: contest.prizes || [],
     metrics: contest.metrics_config || [],
     
     // Media Logic
     cover_preview: contest.cover_image, 
-    cover_file: null, // Only set if changed
-    gallery_files: contest.sponsors || [], // Using sponsors col for assets as per previous hack, ideally rename col
+    cover_file: null, 
+    gallery_files: contest.sponsors || [], // Legacy column use
   });
 
   // 1. Fetch Constraints on Mount
   useEffect(() => {
     const checkConstraints = async () => {
-        // Check Submissions
         const { count: subCount } = await supabase
             .from('contest_submissions')
             .select('*', { count: 'exact', head: true })
             .eq('contest_id', contest.id);
 
-        // Check Judge Scores
         const { count: scoreCount } = await supabase
             .from('contest_scores')
             .select('*', { count: 'exact', head: true })
@@ -95,7 +115,7 @@ export default function SettingsTab({ contest }) {
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
-        let coverUrl = formData.cover_preview; // Default to existing
+        let coverUrl = formData.cover_preview; 
 
         // 1. Upload New Cover if changed
         if (formData.cover_file) {
@@ -107,24 +127,24 @@ export default function SettingsTab({ contest }) {
             coverUrl = data.publicUrl;
         }
 
-        // 2. Update DB
+        // 2. Update DB (Convert Local Time back to UTC)
         const { error } = await supabase
             .from('contests')
             .update({
                 title: formData.title,
-                description: formData.description,
-                start_date: formData.start_date,
-                submission_deadline: formData.submission_deadline,
-                winner_announce_date: formData.winner_announce_date,
+                description: formData.description, // Pass the raw object/string from editor
+                start_date: toUTCISOString(formData.start_date),
+                submission_deadline: toUTCISOString(formData.submission_deadline),
+                winner_announce_date: toUTCISOString(formData.winner_announce_date),
                 prizes: formData.prizes,
                 metrics_config: formData.metrics,
                 cover_image: coverUrl,
-                sponsors: formData.gallery_files // Saving assets here
+                sponsors: formData.gallery_files 
             })
             .eq('id', contest.id);
 
         if (error) throw error;
-        toast.success("Settings Updated");
+        toast.success("Settings Updated", { description: "Timestamps synced to global UTC." });
         router.refresh();
 
     } catch (error) {
@@ -136,7 +156,7 @@ export default function SettingsTab({ contest }) {
   };
 
   const handleDelete = async () => {
-    if (constraints.hasSubmissions) return; // Should be disabled anyway
+    if (constraints.hasSubmissions) return; 
     if (!confirm("Are you sure? This is irreversible.")) return;
     
     const { error } = await supabase.from('contests').delete().eq('id', contest.id);
@@ -151,7 +171,7 @@ export default function SettingsTab({ contest }) {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 max-w-4xl pb-20">
         
-        {/* SECTION 1: IDENTITY (Always Editable) */}
+        {/* SECTION 1: IDENTITY */}
         <div className="border border-border bg-background p-6 space-y-6">
             <div className="flex items-center gap-2 text-accent border-b border-border pb-2">
                 <LayoutTemplate size={16} />
@@ -168,15 +188,26 @@ export default function SettingsTab({ contest }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <DateTimePicker label="Start Date" value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} />
-                <DateTimePicker label="Deadline" value={formData.submission_deadline} onChange={(e) => setFormData({...formData, submission_deadline: e.target.value})} />
-                <DateTimePicker label="Winner Reveal" value={formData.winner_announce_date} onChange={(e) => setFormData({...formData, winner_announce_date: e.target.value})} />
+                <DateTimePicker 
+                    label="Start Date" 
+                    value={formData.start_date} 
+                    onChange={(e) => setFormData({...formData, start_date: e.target.value})} 
+                />
+                <DateTimePicker 
+                    label="Deadline" 
+                    value={formData.submission_deadline} 
+                    onChange={(e) => setFormData({...formData, submission_deadline: e.target.value})} 
+                />
+                <DateTimePicker 
+                    label="Winner Reveal" 
+                    value={formData.winner_announce_date} 
+                    onChange={(e) => setFormData({...formData, winner_announce_date: e.target.value})} 
+                />
             </div>
 
             <div className="space-y-1.5">
                 <label className="text-[10px] font-mono uppercase text-muted-foreground">Description & Rules</label>
                 <div className="min-h-[200px] border border-border">
-                    {/* Assuming RichTextEditor can handle the value format passed */}
                     <RichTextEditor 
                         value={formData.description} 
                         onChange={(val) => setFormData({...formData, description: val})} 
@@ -185,7 +216,7 @@ export default function SettingsTab({ contest }) {
             </div>
         </div>
 
-        {/* SECTION 2: VISUALS (Always Editable) */}
+        {/* SECTION 2: VISUALS */}
         <div className="border border-border bg-background p-6 space-y-6">
             <div className="flex items-center gap-2 text-accent border-b border-border pb-2">
                 <ImageIcon size={16} />
@@ -212,7 +243,7 @@ export default function SettingsTab({ contest }) {
             </div>
         </div>
 
-        {/* SECTION 3: PRIZES (Locked if Submissions > 0) */}
+        {/* SECTION 3: PRIZES */}
         <div className={`border border-border bg-background p-6 space-y-6 relative transition-opacity ${constraints.hasSubmissions ? 'opacity-70 pointer-events-none' : ''}`}>
             {constraints.hasSubmissions && (
                 <div className="absolute inset-0 bg-background/50 z-10 flex items-center justify-center backdrop-blur-[1px]">
@@ -221,14 +252,13 @@ export default function SettingsTab({ contest }) {
                     </div>
                 </div>
             )}
-            
             <PrizeManager 
                 prizes={formData.prizes} 
                 onChange={(p) => setFormData({...formData, prizes: p})} 
             />
         </div>
 
-        {/* SECTION 4: METRICS (Locked if Judging Started) */}
+        {/* SECTION 4: METRICS */}
         <div className={`border border-border bg-background p-6 space-y-6 relative transition-opacity ${constraints.hasJudging ? 'opacity-70 pointer-events-none' : ''}`}>
             {constraints.hasJudging && (
                 <div className="absolute inset-0 bg-background/50 z-10 flex items-center justify-center backdrop-blur-[1px]">
@@ -251,7 +281,7 @@ export default function SettingsTab({ contest }) {
             </Button>
         </div>
 
-        {/* DANGER ZONE (Disabled if Submissions > 0) */}
+        {/* DANGER ZONE */}
         <div className={`border border-red-900/30 bg-red-900/5 p-6 mt-12 ${constraints.hasSubmissions ? 'opacity-50' : ''}`}>
             <div className="flex items-center gap-2 text-red-500 mb-2">
                 <AlertTriangle size={16} />
