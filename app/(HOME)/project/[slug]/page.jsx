@@ -149,7 +149,7 @@ export default async function ProjectDetailPage({ params }) {
           {/* --- RIGHT COLUMN (Sticky Sidebar) --- */}
           <div className="lg:col-span-4">
             {/* top-24 accounts for the sticky header + some breathing room */}
-            <div className="sticky top-24">
+            <div className="sticky top-32">
               <ProjectSidebar project={project} />
             </div>
           </div>
