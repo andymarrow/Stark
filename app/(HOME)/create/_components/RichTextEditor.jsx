@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect } from 'react';
 
+// ... (MenuBar Component remains exactly the same) ...
 const MenuBar = ({ editor }) => {
   if (!editor) return null;
 
@@ -140,7 +141,7 @@ export default function RichTextEditor({ value, onChange }) {
       TableHeader,
       TableCell,
     ],
-    content: '', // Initial content handled by useEffect for safety
+    content: '',
     immediatelyRender: false, 
     editorProps: {
       attributes: {
@@ -149,25 +150,22 @@ export default function RichTextEditor({ value, onChange }) {
     },
     onUpdate: ({ editor }) => {
       const markdown = editor.storage.markdown.getMarkdown();
-      // Emitting as object to match backend schema expectations
-      onChange({ type: "markdown", text: markdown });
+      // FIX: Return purely the string, not an object
+      onChange(markdown); 
     },
   });
 
   // Handle incoming value changes (e.g. initial load or external update)
   useEffect(() => {
     if (editor && value) {
-      let contentToSet = "";
+      // FIX: Simplify logic to accept only strings, as per current architecture
+      const contentToSet = typeof value === 'string' ? value : "";
       
-      // Check if value is our custom object or legacy string
-      if (typeof value === 'object' && value.type === 'markdown') {
-          contentToSet = value.text;
-      } else if (typeof value === 'string') {
-          contentToSet = value;
-      }
-
       // Only update if different to prevent cursor jumping/loops
+      // We check against markdown output to ensure parity
       const currentContent = editor.storage.markdown.getMarkdown();
+      
+      // Simple equality check usually works for markdown strings
       if (contentToSet !== currentContent) {
           editor.commands.setContent(contentToSet);
       }
@@ -189,7 +187,7 @@ export default function RichTextEditor({ value, onChange }) {
         }
         .ProseMirror td, .ProseMirror th {
           min-width: 1em;
-          border: 1px solid #3f3f46; /* Match border-border color */
+          border: 1px solid #3f3f46;
           padding: 6px 8px;
           vertical-align: top;
           box-sizing: border-box;
@@ -199,23 +197,6 @@ export default function RichTextEditor({ value, onChange }) {
           font-weight: bold;
           text-align: left;
           background-color: rgba(63, 63, 70, 0.1);
-        }
-        .ProseMirror .selectedCell:after {
-          z-index: 2;
-          content: "";
-          position: absolute;
-          left: 0; right: 0; top: 0; bottom: 0;
-          background: rgba(220, 38, 38, 0.05); /* Stark Accent tint */
-          pointer-events: none;
-        }
-        .ProseMirror .column-resize-handle {
-          position: absolute;
-          right: -2px;
-          top: 0;
-          bottom: -2px;
-          width: 4px;
-          background-color: #ef4444; /* Accent color */
-          pointer-events: none;
         }
       `}</style>
     </div>
