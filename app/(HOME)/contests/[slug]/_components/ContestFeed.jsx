@@ -27,22 +27,30 @@ export default function ContestFeed({ contestId }) {
         .order('submitted_at', { ascending: false });
 
       if (data) {
-        // Map to FeedItem format
-        const formatted = data.map(sub => ({
-            id: sub.project.id,
-            slug: sub.project.slug,
-            title: sub.project.title,
-            description: sub.project.description,
-            created_at: sub.submitted_at, // Use submission time for feed
-            author: sub.project.owner,
-            likes: sub.project.likes_count,
-            views: sub.project.views,
-            media: [sub.project.thumbnail_url, ...(sub.project.images || [])].filter(Boolean),
-            tech: sub.project.tags,
-            source_link: sub.project.source_link,
-            demo_link: sub.project.demo_link,
-            type: 'project' // Normal project type
-        }));
+        // Map to FeedItem format with Deduplication
+        const formatted = data.map(sub => {
+            const rawImages = sub.project.images || [];
+            const thumbnail = sub.project.thumbnail_url;
+            
+            // Deduplicate: Create Set from thumbnail + images, filtering out nulls
+            const uniqueMedia = [...new Set([thumbnail, ...rawImages].filter(Boolean))];
+
+            return {
+                id: sub.project.id,
+                slug: sub.project.slug,
+                title: sub.project.title,
+                description: sub.project.description,
+                created_at: sub.submitted_at, // Use submission time for feed
+                author: sub.project.owner,
+                likes: sub.project.likes_count,
+                views: sub.project.views,
+                media: uniqueMedia, // Fixed: No duplicates
+                tech: sub.project.tags,
+                source_link: sub.project.source_link,
+                demo_link: sub.project.demo_link,
+                type: 'project'
+            };
+        });
         setItems(formatted);
       }
       setLoading(false);
