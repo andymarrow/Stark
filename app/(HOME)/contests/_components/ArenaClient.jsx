@@ -1,13 +1,13 @@
 "use client";
 import { useState } from "react";
-import { Zap, Trophy, RefreshCw, Layers, Terminal, Grid, List, Plus, Swords } from "lucide-react";
+import { Zap, Trophy, RefreshCw, Layers, Terminal, Grid, List, Plus, Swords, AlertCircle, Cpu } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 import ArenaHero from "./ArenaHero";
 import CyberCard from "./CyberCard";
 import HallOfFame from "./HallOfFame";
-import ArenaFeed from "./ArenaFeed"; // NEW
+import ArenaFeed from "./ArenaFeed"; 
 import ContestListModal from "./ContestListModal";
 
 export default function ArenaClient({ initialContests, activeContest, hallOfFame, initialFeed }) {
@@ -45,6 +45,7 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
                         </div>
 
                         <div className="flex items-center gap-3">
+                            
                             {viewMode === 'grid' && (
                                 <button onClick={handleShuffle} disabled={isShuffling} className="h-10 px-4 border border-zinc-800 bg-zinc-950 text-[10px] font-mono uppercase flex items-center gap-2 text-zinc-400 hover:text-accent transition-all">
                                     <RefreshCw size={12} className={isShuffling ? "animate-spin" : ""} /> Randomize
@@ -71,13 +72,47 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
 
                 {/* SIDEBAR */}
                 <div className="lg:w-[25%] space-y-6">
-                    <Link href="/contests/create" className="block group">
-                        <div className="relative overflow-hidden bg-accent text-white p-6 border border-accent hover:shadow-[0_0_30px_rgba(220,38,38,0.4)] transition-all">
-                            <Swords size={64} className="absolute top-0 right-0 p-4 opacity-20 -rotate-12" />
-                            <h3 className="text-2xl font-black uppercase tracking-tighter leading-none mb-1">Host Event</h3>
-                            <p className="text-[10px] font-mono opacity-80 uppercase">Launch your own arena protocol.</p>
+                    {/* ENHANCED HOST EVENT CARD */}
+                    <Link href="/contests/create" className="block group relative">
+                        {/* Outer Glow Effect */}
+                        <div className="absolute -inset-0.5 bg-accent opacity-20 group-hover:opacity-50 blur transition duration-500"></div>
+                        
+                        <div className="relative overflow-hidden bg-zinc-950 text-white p-6 border border-accent transition-all">
+                            {/* Animated Scanline */}
+                            <motion.div 
+                                animate={{ top: ["-100%", "200%"] }}
+                                transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                                className="absolute left-0 right-0 h-20 bg-gradient-to-b from-transparent via-accent/10 to-transparent pointer-events-none"
+                            />
+
+                            <div className="relative z-10">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="p-2 bg-accent text-white">
+                                        <Swords size={20} />
+                                    </div>
+                                    
+                                </div>
+
+                                <h3 className="text-2xl font-black uppercase tracking-tighter leading-none mb-1 group-hover:text-accent transition-colors">
+                                    Host Event
+                                </h3>
+                                <p className="text-[10px] font-mono text-zinc-400 uppercase leading-relaxed mb-6">
+                                    Initialize a new arena protocol and invite challengers.
+                                </p>
+
+                                <div className="flex items-center justify-between py-2 border-t border-zinc-900">
+                                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Auth_Level: 01</span>
+                                    <div className="flex items-center gap-1 text-accent text-[10px] font-bold font-mono">
+                                        INITIATE <Plus size={12} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Background Tech Icon */}
+                            <Cpu size={80} className="absolute -bottom-4 -right-4 p-4 text-zinc-900 opacity-20 group-hover:text-accent/20 transition-colors" />
                         </div>
                     </Link>
+
                     <HallOfFame topEntries={hallOfFame} />
                 </div>
             </div>
