@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { 
   X, ChevronLeft, ChevronRight, MessageSquare, Heart, 
-  Share2, Loader2, Play, Send, Globe, Github, FileCode 
+  Share2, Loader2, Play, Send, Globe, Github, FileCode, Eye 
 } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,13 +58,13 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
   const isChangelog = item?.type === 'changelog';
   const projectId = isChangelog ? item?.project?.id : item?.id; 
 
-  // Resolve Links based on Item Type
   const demoLink = isChangelog ? item?.metadata?.demo_link : item?.demo_link;
   const sourceLink = isChangelog ? item?.metadata?.source_link : item?.source_link;
-  // If video_link is in metadata use it, otherwise check if any asset is video, or just use generic
-  const videoLink = isChangelog ? item?.metadata?.video_link : null; 
+  const videoLink = isChangelog ? item?.metadata?.video_link : null;
 
-  // --- INITIALIZATION ---
+  // View Count (From prop, eventually consistent)
+  const viewCount = item?.views || 0;
+
   useEffect(() => {
     if (isOpen && item) {
         setIndex(initialIndex);
@@ -74,8 +74,6 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
         setIsDescExpanded(false); 
     }
   }, [isOpen, item, initialIndex]);
-
-  // --- ACTIONS ---
 
   const checkLikeStatus = async () => {
       if (!user) return;
@@ -156,19 +154,9 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
 
   if (!item) return null;
 
-  // Description Content (Markdown safe)
-  // For changelogs, we prefer the 'content' field if available (which is rich text), else title
-  // For projects, description
-  let rawContent = "";
-  if (isChangelog) {
-     // If content is object (tiptap), extract text, else use string
-     rawContent = typeof item.content === 'object' ? (item.content.text || item.title) : (item.content || item.title);
-  } else {
-     rawContent = item.description || "";
-  }
-  
-  const isLongDesc = rawContent.length > 200;
-  const displayContent = isDescExpanded ? rawContent : rawContent.slice(0, 200) + (isLongDesc ? "..." : "");
+  const rawDescription = isChangelog ? item.title : (item.description || "");
+  const isLongDesc = rawDescription.length > 200;
+  const displayContent = isDescExpanded ? rawDescription : rawDescription.slice(0, 200) + (isLongDesc ? "..." : "");
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -176,11 +164,9 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
         
         {/* LEFT: Media Stage */}
         <div className="flex-1 bg-black relative flex items-center justify-center border-b md:border-b-0 md:border-r border-border min-h-[40vh] md:min-h-full">
-            
             <button onClick={onClose} className="absolute top-4 left-4 z-50 p-2 bg-black/50 rounded-full md:hidden text-white">
                 <X size={20} />
             </button>
-
             {item.media.length > 1 && (
                 <>
                     <button onClick={() => setIndex((prev) => (prev - 1 + item.media.length) % item.media.length)} className="absolute left-4 z-40 p-2 bg-black/50 text-white hover:bg-white/10 rounded-full">
@@ -191,7 +177,6 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
                     </button>
                 </>
             )}
-
             <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
                 {isVideo(currentMedia) ? (
                     <iframe 
@@ -241,7 +226,7 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
             <ScrollArea className="flex-1 p-4">
                 <div className="space-y-6">
                     
-                    {/* Description Section (RICH TEXT) */}
+                    {/* Description Section */}
                     <div>
                         {isChangelog && (
                             <div className="inline-block px-2 py-0.5 bg-accent/10 border border-accent/20 text-accent text-[10px] font-mono mb-2 rounded-sm">
@@ -269,7 +254,7 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
                         </div>
                     </div>
 
-                    {/* Action Buttons (External Links) */}
+                    {/* Action Buttons */}
                     {(demoLink || sourceLink || videoLink) && (
                         <div className="flex flex-wrap gap-2 pt-2">
                             {demoLink && (
@@ -335,6 +320,11 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
                     <button onClick={handleShare} className="text-muted-foreground hover:text-foreground transition-colors">
                         <Share2 size={24} />
                     </button>
+                    {/* Added View Count Here */}
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Eye size={24} />
+                        <span className="text-xs font-bold font-mono">{viewCount}</span>
+                    </div>
                     <div className="ml-auto text-xs font-bold font-mono">{likeCount} Likes</div>
                 </div>
 

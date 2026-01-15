@@ -9,26 +9,34 @@ export async function getFeedContent({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // We fetch a larger batch for "For You" to allow for shuffling/filtering
-  // but we only return 'limit' items to the frontend.
   const fetchLimit = filter === "for_you" ? limit * 3 : limit;
   const from = (page - 1) * limit;
   const to = from + fetchLimit - 1;
 
   try {
-    // 1. Get "Seen" IDs (Items viewed in last 7 days) to exclude from "For You"
-    let seenIds = [];
-    if (user && filter === "for_you") {
-        const { data: seenLogs } = await supabase
-            .from("analytics_logs")
-            .select("entity_id")
-            .eq("viewer_hash", user.id) // Assuming we log user_id as hash for auth users
-            .gt("last_viewed_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-        
-        seenIds = seenLogs?.map(l => l.entity_id) || [];
+    let finalProjects = [];
+    let finalLogs = [];
+
+    // --- STRATEGY A: PREFERENCE MIX (For You Only, First Page) ---
+    if (filter === "for_you" && user && page === 1) {
+        const { data: profile } = await supabase.from("profiles").select("preferences").eq("id", user.id).single();
+        const prefs = profile?.preferences || {};
+        const topTags = Object.entries(prefs).sort(([,a], [,b]) => b - a).slice(0, 3).map(([tag]) => tag);
+
+        if (topTags.length > 0) {
+             const { data: preferred } = await supabase
+                .from("projects")
+                .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`) // 'views' is included in *
+                .eq("status", "published")
+                .eq("is_contest_entry", false)
+                .overlaps("tags", topTags)
+                .order("quality_score", { ascending: false })
+                .limit(5);
+             if (preferred) finalProjects.push(...preferred);
+        }
     }
 
-    // 2. Determine Network Scope
+    // --- STRATEGY B: STANDARD FETCH ---
     let ownerIds = [];
     if (filter === "network" && user) {
         const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", user.id);
@@ -36,33 +44,47 @@ export async function getFeedContent({
         if (ownerIds.length === 0) return { data: [], hasMore: false };
     }
 
-    // 3. Fetch Projects
+    // 1. Projects Query
     let projectQuery = supabase
         .from("projects")
-        .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
+        .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`) // 'views' is included in *
         .eq("status", "published")
         .eq("is_contest_entry", false)
         .order("created_at", { ascending: false })
         .range(from, to);
 
-    // Apply Filters
     if (filter === "network") projectQuery = projectQuery.in("owner_id", ownerIds);
-    if (filter === "today") {
+    else if (filter === "today") {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         projectQuery = projectQuery.gte("created_at", yesterday.toISOString());
     }
-    // Exclude seen items for "For You" (Smart Feed)
-    if (filter === "for_you" && seenIds.length > 0) {
-        projectQuery = projectQuery.not("id", "in", `(${seenIds.join(',')})`);
+
+    // Exclude preference IDs
+    const existingIds = finalProjects.map(p => p.id);
+    // (We handle deduplication in JS merging below for simplicity/performance with small batches)
+
+    const { data: standardProjects } = await projectQuery;
+    if (standardProjects) {
+        const newItems = standardProjects.filter(p => !existingIds.includes(p.id));
+        finalProjects.push(...newItems);
     }
 
-    const { data: projects } = await projectQuery;
-
-    // 4. Fetch Changelogs
+    // 2. Changelogs Query
     let logQuery = supabase
         .from("project_logs")
-        .select(`*, project:projects!inner(slug, title, owner_id, status, is_contest_entry)`)
+        .select(`
+            *,
+            project:projects!inner(
+                id,
+                slug, 
+                title, 
+                owner_id, 
+                status,
+                is_contest_entry,
+                views
+            )
+        `)
         .eq("project.status", "published")
         .eq("project.is_contest_entry", false)
         .order("created_at", { ascending: false })
@@ -73,32 +95,13 @@ export async function getFeedContent({
         yesterday.setDate(yesterday.getDate() - 1);
         logQuery = logQuery.gte("created_at", yesterday.toISOString());
     }
-    // Exclude seen logs
-    if (filter === "for_you" && seenIds.length > 0) {
-        logQuery = logQuery.not("id", "in", `(${seenIds.join(',')})`);
-    }
 
     const { data: logsData } = await logQuery;
+    finalLogs = logsData || [];
 
-    // --- FALLBACK LOGIC ---
-    // If "For You" returns nothing because you've seen everything, fetch again WITHOUT exclusion
-    let finalProjects = projects || [];
-    let finalLogs = logsData || [];
-
-    if (filter === "for_you" && finalProjects.length === 0 && finalLogs.length === 0) {
-        // Retry fetching projects without seen filter
-        const { data: fallbackProjects } = await supabase
-            .from("projects")
-            .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
-            .eq("status", "published")
-            .eq("is_contest_entry", false)
-            .order("created_at", { ascending: false })
-            .range(from, from + limit - 1); // Normal limit
-        
-        if (fallbackProjects) finalProjects = fallbackProjects;
-    }
-
-    // 5. Post-Process Logs (Attach Authors)
+    // --- FORMATTING ---
+    
+    // Get Authors for logs
     const logOwnerIds = [...new Set(finalLogs.map(l => l.project.owner_id))];
     let authorsMap = {};
     if (logOwnerIds.length > 0) {
@@ -120,7 +123,13 @@ export async function getFeedContent({
             content: log.content,
             media: log.media_urls || [],
             likes: log.likes_count,
-            project: { id: log.project_id, title: log.project.title, slug: log.project.slug },
+            // For Changelogs, we usually show the PARENT PROJECT'S view count
+            views: log.project.views, 
+            project: {
+                id: log.project.id,
+                title: log.project.title,
+                slug: log.project.slug
+            },
             metadata: log.metadata, 
             author: authorsMap[log.project.owner_id]
         };
@@ -134,30 +143,27 @@ export async function getFeedContent({
         description: p.description,
         media: p.images || [],
         likes: p.likes_count,
+        views: p.views, // Pass views
         slug: p.slug,
         author: p.author,
         tech: p.tags,
         metadata: p.metadata
     }));
 
-    // 6. Combine
+    // Merge & Sort
     let combined = [...formattedProjects, ...formattedLogs];
 
-    // 7. Sort / Shuffle
     if (filter === "for_you") {
-        // Shuffle for randomness
         combined = combined.sort(() => Math.random() - 0.5);
     } else {
-        // Strict chronological for others
         combined = combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
-    // 8. Slice to requested limit (since we might have fetched extra for shuffling)
     const sliced = combined.slice(0, limit);
 
     return { 
         data: sliced,
-        hasMore: combined.length > limit // Crude check, but works if we fetched extra
+        hasMore: combined.length > limit 
     };
 
   } catch (error) {

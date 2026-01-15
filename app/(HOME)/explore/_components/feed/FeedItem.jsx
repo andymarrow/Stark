@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, MessageSquare, Share2, MoreHorizontal, ArrowUpRight, GitCommit } from "lucide-react";
+import { Heart, MessageSquare, Share2, MoreHorizontal, ArrowUpRight, GitCommit, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import FeedMediaGrid from "./FeedMediaGrid";
 import { supabase } from "@/lib/supabaseClient";
@@ -11,16 +11,11 @@ import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { updateUserPreference } from "@/app/actions/updatePreference";
+import { registerView } from "@/app/actions/viewAnalytics"; 
 
 // Link Renderer for Markdown
 const LinkRenderer = (props) => (
-    <a 
-      href={props.href} 
-      target="_blank" 
-      rel="noopener noreferrer" 
-      onClick={(e) => e.stopPropagation()} 
-      className="text-accent underline hover:text-foreground break-all"
-    >
+    <a href={props.href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-accent underline hover:text-foreground break-all">
       {props.children}
     </a>
 );
@@ -28,15 +23,40 @@ const LinkRenderer = (props) => (
 export default function FeedItem({ item, onOpen }) {
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
-  
-  // Interaction State
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(item.likes || 0);
+  
+  // View Tracking State
+  const containerRef = useRef(null);
+  const hasViewedRef = useRef(false);
+
+  // We can track local view increment optimistically if we want, 
+  // but usually views update on refresh. Let's keep it simple for now.
+  const viewCount = item.views || 0; 
 
   const isChangelog = item.type === 'changelog';
   const projectId = isChangelog ? item.project.slug : item.slug;
 
-  // --- 1. Check Initial Like Status ---
+  // --- VIEW TRACKING LOGIC ---
+  useEffect(() => {
+    if (hasViewedRef.current) return; 
+
+    const observer = new IntersectionObserver((entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting) {
+            hasViewedRef.current = true;
+            registerView(isChangelog ? 'project' : 'project', item.id); 
+            observer.disconnect();
+        }
+    }, { threshold: 0.5 });
+
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [item.id, isChangelog]);
+
+
+  // --- INITIALIZATION ---
   useEffect(() => {
     const checkLike = async () => {
         if (!user) return;
@@ -55,15 +75,13 @@ export default function FeedItem({ item, onOpen }) {
     checkLike();
   }, [user, item.id, isChangelog]);
 
-  // --- 2. Handle Like Action ---
   const handleLike = async (e) => {
-    e.stopPropagation(); // Prevent opening modal
+    e.stopPropagation(); 
     if (!user) { toast.error("Login Required"); return; }
 
     const table = isChangelog ? "project_log_likes" : "project_likes";
     const idColumn = isChangelog ? "log_id" : "project_id";
 
-    // Optimistic Update
     const newLikedState = !isLiked;
     setIsLiked(newLikedState);
     setLikeCount(prev => newLikedState ? prev + 1 : prev - 1);
@@ -71,20 +89,17 @@ export default function FeedItem({ item, onOpen }) {
     try {
         if (newLikedState) {
             await supabase.from(table).insert({ user_id: user.id, [idColumn]: item.id });
-            // Track preference on like
             if (item.tech) updateUserPreference(item.tech);
         } else {
             await supabase.from(table).delete().match({ user_id: user.id, [idColumn]: item.id });
         }
     } catch (err) {
-        // Revert on error
         setIsLiked(!newLikedState);
         setLikeCount(prev => newLikedState ? prev - 1 : prev + 1);
         toast.error("Action Failed");
     }
   };
 
-  // --- 3. Handle Share ---
   const handleShare = (e) => {
     e.stopPropagation();
     const url = `${window.location.origin}/project/${projectId}`;
@@ -92,25 +107,18 @@ export default function FeedItem({ item, onOpen }) {
     toast.success("Link Copied");
   };
 
-  // --- 4. Handle Open (Track Preference) ---
   const handleOpenModal = (idx) => {
       onOpen(item, idx);
-      // Track preference on deep dive
-      if (item.tech) {
-          updateUserPreference(item.tech);
-      }
+      if (item.tech) updateUserPreference(item.tech);
   };
 
-  // --- Content Logic ---
   const MAX_LENGTH = 200;
-  // Use title for changelog if no description, or project description
   const contentText = isChangelog ? (item.content?.text || item.title) : (item.description || "");
   const shouldTruncate = contentText.length > MAX_LENGTH;
-  
   const displayContent = (!isExpanded && shouldTruncate) ? contentText.slice(0, MAX_LENGTH) + "..." : contentText;
 
   return (
-    <article className={`border-b border-border bg-background py-6 ${isChangelog ? 'bg-secondary/5' : ''}`}>
+    <article ref={containerRef} className={`border-b border-border bg-background py-6 ${isChangelog ? 'bg-secondary/5' : ''}`}>
       
       {/* 1. Header */}
       <div className="flex items-start justify-between px-4 mb-3">
@@ -139,13 +147,10 @@ export default function FeedItem({ item, onOpen }) {
          </button>
       </div>
 
-      {/* 2. Text Content (Rich Text) */}
+      {/* 2. Text Content */}
       <div className="px-4 mb-3 text-sm leading-relaxed text-foreground/90 font-light relative">
          <div className="prose prose-zinc dark:prose-invert max-w-none prose-p:my-0 prose-a:text-accent prose-code:bg-secondary/50 prose-code:px-1 prose-code:text-xs">
-             <ReactMarkdown 
-                remarkPlugins={[remarkGfm]}
-                components={{ a: LinkRenderer }}
-             >
+             <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: LinkRenderer }}>
                  {displayContent}
              </ReactMarkdown>
          </div>
@@ -164,32 +169,25 @@ export default function FeedItem({ item, onOpen }) {
       {/* 4. Footer Actions */}
       <div className="px-4 flex items-center justify-between">
          <div className="flex gap-6">
-            <button 
-                onClick={handleLike}
-                className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}
-            >
+            <button onClick={handleLike} className={`flex items-center gap-1.5 text-xs font-mono transition-colors ${isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-foreground'}`}>
                 <Heart size={18} fill={isLiked ? "currentColor" : "none"} />
                 <span>{likeCount}</span>
             </button>
-
-            <button 
-                onClick={() => handleOpenModal(0)} // Open modal to comment
-                className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button onClick={() => handleOpenModal(0)} className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors">
                 <MessageSquare size={18} />
                 <span>Comment</span>
             </button>
-
-            <button 
-                onClick={handleShare}
-                className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-            >
+            {/* Added View Count */}
+            <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground cursor-default">
+                <Eye size={18} />
+                <span>{viewCount}</span>
+            </div>
+            <button onClick={handleShare} className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors">
                 <Share2 size={18} />
                 <span>Share</span>
             </button>
          </div>
 
-         {/* Detail Link */}
          <Link href={`/project/${projectId}`}>
             <button className="flex items-center gap-1 text-[10px] font-mono border border-border px-3 py-1.5 hover:bg-secondary transition-colors uppercase">
                 View Detail <ArrowUpRight size={12} />
