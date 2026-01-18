@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { Users, ChevronDown, ChevronUp, Shield, BarChart3 } from "lucide-react";
+import { Users, ChevronDown, ChevronUp, Shield, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Pagination from "@/components/ui/Pagination";
 import Link from "next/link";
@@ -12,12 +12,16 @@ const getThumbnail = (url) => {
         let videoId = "";
         if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1];
         else if (url.includes("v=")) videoId = url.split("v=")[1].split("&")[0];
-        if (videoId) return `https://img.youtube.com/vi/${videoId.split("?")[0]}/mqdefault.jpg`;
+        else if (url.includes("embed/")) videoId = url.split("embed/")[1];
+        if (videoId) {
+            const cleanId = videoId.split("?")[0].split("/")[0];
+            return `https://img.youtube.com/vi/${cleanId}/mqdefault.jpg`;
+        }
     }
     return url;
 };
 
-export default function FullRankingsTable({ rankings, metrics }) {
+export default function FullRankingsTable({ rankings, metrics, judges = [] }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedRow, setExpandedRow] = useState(null);
   
@@ -111,24 +115,32 @@ export default function FullRankingsTable({ rankings, metrics }) {
                                                 </div>
                                                 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                    {row.projectScores?.length > 0 ? row.projectScores.map((score, sIdx) => (
-                                                        <div key={sIdx} className="border border-border p-3 bg-card shadow-sm">
-                                                            <div className="flex justify-between items-center mb-2 border-b border-border border-dashed pb-2">
-                                                                <span className="text-[9px] font-black uppercase text-muted-foreground">Judge #{sIdx + 1}</span>
-                                                                <span className="text-[8px] font-mono text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 border border-green-500/20">VERIFIED_LOG</span>
+                                                    {row.projectScores?.length > 0 ? row.projectScores.map((scorePacket, sIdx) => {
+                                                        // FIND JUDGE NAME FROM THE JUROR ROSTER
+                                                        const juror = judges.find(j => j.id === scorePacket.judge_id);
+                                                        const judgeName = juror?.profile?.full_name || juror?.profile?.username || juror?.email?.split('@')[0] || `Jury_Node_${sIdx + 1}`;
+
+                                                        return (
+                                                            <div key={sIdx} className="border border-border p-3 bg-card shadow-sm">
+                                                                <div className="flex justify-between items-center mb-2 border-b border-border border-dashed pb-2">
+                                                                    <span className="text-[9px] font-black uppercase text-muted-foreground truncate max-w-[120px]">
+                                                                        {judgeName}
+                                                                    </span>
+                                                                    <span className="text-[8px] font-mono text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 border border-green-500/20">VERIFIED_LOG</span>
+                                                                </div>
+                                                                <div className="space-y-1.5">
+                                                                    {metrics.filter(m => m.type === 'manual').map((m, k) => (
+                                                                        <div key={k} className="flex justify-between text-[10px] font-mono">
+                                                                            <span className="text-zinc-600 uppercase">{m.name}:</span>
+                                                                            <span className="text-foreground font-bold">{scorePacket.scores[m.name] ?? '-'}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
                                                             </div>
-                                                            <div className="space-y-1.5">
-                                                                {metrics.filter(m => m.type === 'manual').map((m, k) => (
-                                                                    <div key={k} className="flex justify-between text-[10px] font-mono">
-                                                                        <span className="text-muted-foreground uppercase">{m.name}:</span>
-                                                                        <span className="text-foreground font-bold">{score.scores[m.name] ?? '-'}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )) : (
-                                                        <div className="text-[10px] text-muted-foreground font-mono uppercase italic p-4 border border-border border-dashed w-full col-span-full text-center">
-                                                            No manual judge data found in registry.
+                                                        );
+                                                    }) : (
+                                                        <div className="text-[10px] text-zinc-500 font-mono uppercase italic p-4 border border-border border-dashed w-full col-span-full text-center bg-secondary/5">
+                                                            No individual judge packets detected in registry.
                                                         </div>
                                                     )}
                                                 </div>

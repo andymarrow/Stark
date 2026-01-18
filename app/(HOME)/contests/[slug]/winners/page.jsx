@@ -25,30 +25,42 @@ export default async function WinnersRevealPage({ params }) {
     redirect(`/contests/${slug}`);
   }
 
-  // 2. Fetch Entries + Judge Scores + Metadata
-  // We need to fetch everything to calculate the final leaderboard
-  const { data: submissions } = await supabase
-    .from('contest_submissions')
-    .select(`
-        *,
-        project:projects!inner (
-            id, title, slug, thumbnail_url, likes_count, views,
-            owner:profiles!projects_owner_id_fkey(username, full_name, avatar_url),
-            collaborators:collaborations(role, profile:profiles(username, avatar_url), invite_email)
-        )
-    `)
-    .eq('contest_id', contest.id);
+  // 2. Fetch Entries, Judge Scores, and the Judges themselves
+  // We need the judges list to map names to the raw score packets
+  const [submissionsRes, rawScoresRes, judgesRes] = await Promise.all([
+    supabase
+        .from('contest_submissions')
+        .select(`
+            *,
+            project:projects!inner (
+                id, title, slug, thumbnail_url, likes_count, views,
+                owner:profiles!projects_owner_id_fkey(username, full_name, avatar_url),
+                collaborators:collaborations(role, profile:profiles(username, avatar_url), invite_email)
+            )
+        `)
+        .eq('contest_id', contest.id),
+    
+    supabase
+        .from('contest_scores')
+        .select('*')
+        .eq('contest_id', contest.id),
 
-  const { data: rawScores } = await supabase
-    .from('contest_scores')
-    .select('*')
-    .eq('contest_id', contest.id);
+    supabase
+        .from('contest_judges')
+        .select('id, email, profile:profiles(full_name, username, avatar_url)')
+        .eq('contest_id', contest.id)
+  ]);
 
-  // 3. CALCULATION ENGINE (Mirror of Matrix Logic)
+  const submissions = submissionsRes.data || [];
+  const rawScores = rawScoresRes.data || [];
+  const judges = judgesRes.data || [];
+
+  // 3. CALCULATION ENGINE
   const maxLikes = Math.max(...(submissions || []).map(s => s.project.likes_count), 1);
   const maxViews = Math.max(...(submissions || []).map(s => s.project.views), 1);
 
   const finalRankings = (submissions || []).map(sub => {
+    // Extract scores specific to this project
     const projectScores = (rawScores || []).filter(s => s.project_id === sub.project.id);
     const metricAverages = {};
     
@@ -66,11 +78,16 @@ export default async function WinnersRevealPage({ params }) {
     let total = 0;
     contest.metrics_config.forEach(m => total += (metricAverages[m.name] || 0) * (m.weight / 100));
 
-    return { ...sub, metricAverages,projectScores, finalTotal: total };
+    return { 
+        ...sub, 
+        metricAverages, 
+        projectScores, // Pass raw breakdown
+        finalTotal: total 
+    };
   }).sort((a, b) => b.finalTotal - a.finalTotal);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-white pb-32">
+    <div className="min-h-screen bg-white dark:bg-black pb-32">
         {/* 🎉 The Reveal Stage */}
         <WinnersHero 
             contest={contest} 
@@ -78,14 +95,17 @@ export default async function WinnersRevealPage({ params }) {
         />
 
         {/* 📊 Detailed Audit Table */}
-        <div className="container mx-auto px-4 max-w-6xl mt-20 ">
+        <div className="container mx-auto px-4 max-w-6xl mt-20">
             <div className="flex items-center gap-3 mb-8">
                 <Trophy className="text-accent" size={24} />
-                <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800 dark:text-white">Protocol: Final_Rankings</h2>
+                <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800 dark:text-white">
+                    Protocol: Final_Rankings
+                </h2>
             </div>
             <FullRankingsTable 
                 rankings={finalRankings} 
                 metrics={contest.metrics_config} 
+                judges={judges}
             />
         </div>
     </div>
