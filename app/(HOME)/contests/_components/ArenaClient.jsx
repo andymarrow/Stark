@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Zap, Trophy, RefreshCw, Layers, Terminal, Grid, List, Plus, Swords, AlertCircle, Cpu } from "lucide-react";
+import { Zap, Trophy, RefreshCw, Grid, List, Plus, Swords, Cpu } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
@@ -11,7 +11,7 @@ import ArenaFeed from "./ArenaFeed";
 import ContestListModal from "./ContestListModal";
 
 export default function ArenaClient({ initialContests, activeContest, hallOfFame, initialFeed }) {
-  const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'feed'
+  const [viewMode, setViewMode] = useState("grid");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [feed, setFeed] = useState(initialFeed);
   const [isShuffling, setIsShuffling] = useState(false);
@@ -25,33 +25,32 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
   };
 
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="min-h-screen bg-background pb-20">
         <ArenaHero activeContest={activeContest} />
 
         <div className="container mx-auto px-4 max-w-[1400px] mt-8">
             <div className="flex flex-col lg:flex-row gap-8">
                 
                 <div className="lg:w-[75%]">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-zinc-900 pb-6">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-border pb-6">
                         
                         {/* MODE SWITCHER */}
-                        <div className="flex items-center bg-zinc-950 border border-zinc-800 p-1">
-                            <button onClick={() => setViewMode('grid')} className={`flex items-center gap-2 px-6 py-2 text-xs font-mono uppercase transition-all ${viewMode === 'grid' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                        <div className="flex items-center bg-secondary border border-border p-1">
+                            <button onClick={() => setViewMode('grid')} className={`flex items-center gap-2 px-6 py-2 text-xs font-mono uppercase transition-all ${viewMode === 'grid' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                                 <Grid size={14} /> GRID
                             </button>
-                            <button onClick={() => setViewMode('feed')} className={`flex items-center gap-2 px-6 py-2 text-xs font-mono uppercase transition-all ${viewMode === 'feed' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                            <button onClick={() => setViewMode('feed')} className={`flex items-center gap-2 px-6 py-2 text-xs font-mono uppercase transition-all ${viewMode === 'feed' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                                 <List size={14} /> FEED
                             </button>
                         </div>
 
                         <div className="flex items-center gap-3">
-                            
                             {viewMode === 'grid' && (
-                                <button onClick={handleShuffle} disabled={isShuffling} className="h-10 px-4 border border-zinc-800 bg-zinc-950 text-[10px] font-mono uppercase flex items-center gap-2 text-zinc-400 hover:text-accent transition-all">
+                                <button onClick={handleShuffle} disabled={isShuffling} className="h-10 px-4 border border-border bg-background text-[10px] font-mono uppercase flex items-center gap-2 text-muted-foreground hover:text-accent transition-all">
                                     <RefreshCw size={12} className={isShuffling ? "animate-spin" : ""} /> Randomize
                                 </button>
                             )}
-                            <button onClick={() => setIsModalOpen(true)} className="h-10 px-6 bg-zinc-950 border border-zinc-800 text-white text-[10px] font-mono uppercase hover:border-accent transition-all">
+                            <button onClick={() => setIsModalOpen(true)} className="h-10 px-6 bg-background border border-border text-foreground text-[10px] font-mono uppercase hover:border-accent transition-all">
                                 <Trophy size={14} className="inline mr-2 text-accent" /> All Contests
                             </button>
                         </div>
@@ -72,17 +71,14 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
 
                 {/* SIDEBAR */}
                 <div className="lg:w-[25%] space-y-6">
-                    {/* ENHANCED HOST EVENT CARD */}
                     <Link href="/contests/create" className="block group relative">
-                        {/* Outer Glow Effect */}
-                        <div className="absolute -inset-0.5 bg-accent opacity-20 group-hover:opacity-50 blur transition duration-500"></div>
+                        <div className="absolute -inset-0.5 bg-accent opacity-10 group-hover:opacity-30 blur transition duration-500"></div>
                         
-                        <div className="relative overflow-hidden bg-zinc-950 text-white p-6 border border-accent transition-all">
-                            {/* Animated Scanline */}
+                        <div className="relative overflow-hidden bg-background text-foreground p-6 border border-accent transition-all">
                             <motion.div 
                                 animate={{ top: ["-100%", "200%"] }}
                                 transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                                className="absolute left-0 right-0 h-20 bg-gradient-to-b from-transparent via-accent/10 to-transparent pointer-events-none"
+                                className="absolute left-0 right-0 h-20 bg-gradient-to-b from-transparent via-accent/5 to-transparent pointer-events-none"
                             />
 
                             <div className="relative z-10">
@@ -90,26 +86,24 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
                                     <div className="p-2 bg-accent text-white">
                                         <Swords size={20} />
                                     </div>
-                                    
                                 </div>
 
                                 <h3 className="text-2xl font-black uppercase tracking-tighter leading-none mb-1 group-hover:text-accent transition-colors">
                                     Host Event
                                 </h3>
-                                <p className="text-[10px] font-mono text-zinc-400 uppercase leading-relaxed mb-6">
+                                <p className="text-[10px] font-mono text-muted-foreground uppercase leading-relaxed mb-6">
                                     Initialize a new arena protocol and invite challengers.
                                 </p>
 
-                                <div className="flex items-center justify-between py-2 border-t border-zinc-900">
-                                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Auth_Level: 01</span>
+                                <div className="flex items-center justify-between py-2 border-t border-border">
+                                    <span className="text-[10px] font-mono text-muted-foreground uppercase">Auth_Level: 01</span>
                                     <div className="flex items-center gap-1 text-accent text-[10px] font-bold font-mono">
                                         INITIATE <Plus size={12} />
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Background Tech Icon */}
-                            <Cpu size={80} className="absolute -bottom-4 -right-4 p-4 text-zinc-900 opacity-20 group-hover:text-accent/20 transition-colors" />
+                            <Cpu size={80} className="absolute -bottom-4 -right-4 p-4 text-muted/20 group-hover:text-accent/10 transition-colors" />
                         </div>
                     </Link>
 

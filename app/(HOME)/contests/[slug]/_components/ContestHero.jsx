@@ -50,14 +50,14 @@ export default function ContestHero({ contest, userEntry }) {
   };
 
   return (
-    <div className="relative w-full border-b border-border bg-black">
+    <div className="relative w-full border-b border-border bg-background transition-colors duration-300">
       
-      {/* Background Ambience */}
-      <div className="absolute inset-0 overflow-hidden opacity-30 pointer-events-none">
+      {/* Background Ambience - Shifts with Theme */}
+      <div className="absolute inset-0 overflow-hidden opacity-20 dark:opacity-30 pointer-events-none">
         {contest.cover_image && (
             <Image src={contest.cover_image} alt="bg" fill className="object-cover blur-3xl scale-110" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
       </div>
 
       <div className="container mx-auto px-4 py-12 md:py-20 relative z-10">
@@ -65,11 +65,11 @@ export default function ContestHero({ contest, userEntry }) {
             
             {/* Left: Cover Art Card */}
             <div className="md:col-span-4">
-                <div className="relative aspect-video w-full border border-border bg-secondary shadow-2xl overflow-hidden group">
+                <div className="relative aspect-video w-full border border-border bg-secondary shadow-2xl overflow-hidden group rounded-none">
                     {contest.cover_image ? (
                         <Image src={contest.cover_image} alt={contest.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-700">
+                        <div className="w-full h-full flex items-center justify-center bg-secondary text-muted-foreground">
                             <Trophy size={48} />
                         </div>
                     )}
@@ -90,59 +90,59 @@ export default function ContestHero({ contest, userEntry }) {
             {/* Right: Meta Info & Logic Actions */}
             <div className="md:col-span-8 space-y-6">
                 <div>
-                    <h1 className="text-3xl md:text-6xl font-black uppercase tracking-tighter text-white mb-2 leading-[0.9]">
+                    <h1 className="text-3xl md:text-6xl font-black uppercase tracking-tighter text-foreground mb-2 leading-[0.9]">
                         {contest.title}
                     </h1>
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-500 uppercase tracking-widest">
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-muted-foreground uppercase tracking-widest">
                         <span className="flex items-center gap-1.5">
-                            <Users size={14} className="text-zinc-600" />
+                            <Users size={14} className="text-muted-foreground/60" />
                             Node: @{contest.creator?.username || 'stark'}
                         </span>
-                        <span>//</span>
+                        <span className="opacity-30">//</span>
                         <span>{contest.max_participants ? `Quota: ${contest.max_participants}` : "Open_Quota"}</span>
                     </div>
                 </div>
 
                 {/* Timer / Winner Announcement Block */}
-                <div className="bg-zinc-950 border border-white/5 p-5 inline-flex items-center gap-5 shadow-inner">
-                    <div className={`p-3 rounded-none ${status === 'completed' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-accent/10 text-accent'}`}>
+                <div className="bg-secondary/50 border border-border p-5 inline-flex items-center gap-5 shadow-inner rounded-none">
+                    <div className={`p-3 rounded-none ${status === 'completed' ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500' : 'bg-accent/10 text-accent'}`}>
                         {status === 'completed' ? <Award size={24} /> : <Clock size={24} />}
                     </div>
                     <div>
-                        <div className="text-[9px] uppercase text-zinc-500 font-mono tracking-[0.2em] mb-1">
+                        <div className="text-[9px] uppercase text-muted-foreground font-mono tracking-[0.2em] mb-1">
                             {status === 'completed' ? 'Final_Resolution' : 'Time_Buffer_Remaining'}
                         </div>
                         <div className={`text-xl md:text-2xl font-black font-mono tracking-tighter 
-                            ${status === 'completed' ? 'text-yellow-500' : 'text-white'}`}>
+                            ${status === 'completed' ? 'text-yellow-600 dark:text-yellow-500' : 'text-foreground'}`}>
                             {timeLeft}
                         </div>
                     </div>
                 </div>
 
-                {/* 🕹️ ACTION SECTION */}
+                {/* ACTION SECTION */}
                 <div className="flex flex-wrap gap-3 pt-2">
                     
-                    {/* 1. VIEW WINNERS (Priority Button) */}
+                    {/* 1. VIEW WINNERS (Yellow Logic) */}
                     {contest.winners_revealed && (
                         <Link href={`/contests/${contest.slug}/winners`}>
-                            <Button className="h-14 px-10 bg-yellow-500 hover:bg-yellow-400 text-black rounded-none font-mono font-black uppercase tracking-widest shadow-[8px_8px_0px_0px_rgba(234,179,8,0.2)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
+                            <Button className="h-14 px-10 bg-yellow-500 hover:bg-yellow-400 text-black rounded-none font-mono font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all">
                                 <Award size={18} className="mr-2" /> View Final Results
                             </Button>
                         </Link>
                     )}
 
-                    {/* 2. SUBMIT ENTRY (Only if Live & Not Revealed) */}
+                    {/* 2. SUBMIT ENTRY (Red Logic) */}
                     {status === 'active' && !userEntry && !contest.winners_revealed && (
                         <Link href={`/create?contest=${contest.slug}`}>
-                            <Button className="h-14 px-10 bg-accent hover:bg-red-700 text-white rounded-none font-mono font-bold uppercase tracking-widest shadow-[0_0_25px_rgba(220,38,38,0.3)] transition-all">
+                            <Button className="h-14 px-10 bg-accent hover:bg-red-700 text-white rounded-none font-mono font-bold uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[0_0_25px_rgba(220,38,38,0.3)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none">
                                 <Plus size={18} className="mr-2" /> Initiate Submission
                             </Button>
                         </Link>
                     )}
                     
-                    {/* 3. ENTRY STATUS (Already Submitted) */}
+                    {/* 3. ENTRY STATUS */}
                     {userEntry && !contest.winners_revealed && (
-                        <div className="h-14 px-8 flex items-center bg-green-500/5 border border-green-500/30 text-green-500 text-[10px] font-mono font-bold uppercase tracking-widest">
+                        <div className="h-14 px-8 flex items-center bg-green-500/5 border border-green-500/30 text-green-600 dark:text-green-500 text-[10px] font-mono font-bold uppercase tracking-widest">
                             <CheckCircle2 size={18} className="mr-3" /> Node_Registered_Successfully
                         </div>
                     )}
@@ -151,7 +151,7 @@ export default function ContestHero({ contest, userEntry }) {
                     <Button 
                         onClick={handleShare} 
                         variant="outline" 
-                        className="h-14 px-8 rounded-none border-white/10 text-zinc-500 hover:text-white hover:bg-white/5 uppercase font-mono text-[10px] tracking-widest transition-colors"
+                        className="h-14 px-8 rounded-none border-border bg-background text-muted-foreground hover:text-foreground hover:bg-secondary uppercase font-mono text-[10px] tracking-widest transition-colors"
                     >
                         <Share2 size={16} className="mr-2" /> Broadcast_Link
                     </Button>

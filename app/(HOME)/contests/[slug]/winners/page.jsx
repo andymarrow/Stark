@@ -70,7 +70,7 @@ export default async function WinnersRevealPage({ params }) {
   }).sort((a, b) => b.finalTotal - a.finalTotal);
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32">
+    <div className="min-h-screen bg-white dark:bg-black text-white pb-32">
         {/* 🎉 The Reveal Stage */}
         <WinnersHero 
             contest={contest} 
@@ -78,10 +78,10 @@ export default async function WinnersRevealPage({ params }) {
         />
 
         {/* 📊 Detailed Audit Table */}
-        <div className="container mx-auto px-4 max-w-6xl mt-20">
+        <div className="container mx-auto px-4 max-w-6xl mt-20 ">
             <div className="flex items-center gap-3 mb-8">
                 <Trophy className="text-accent" size={24} />
-                <h2 className="text-2xl font-black uppercase tracking-tighter">Protocol: Final_Rankings</h2>
+                <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800 dark:text-white">Protocol: Final_Rankings</h2>
             </div>
             <FullRankingsTable 
                 rankings={finalRankings} 

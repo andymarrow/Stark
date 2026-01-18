@@ -31,7 +31,7 @@ export default function ArenaFeed() {
     <div className="space-y-6 max-w-2xl mx-auto">
         
         {/* SUB-FILTER BAR */}
-        <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 p-1 w-fit mx-auto md:mx-0">
+        <div className="flex items-center gap-2 bg-secondary border border-border p-1 w-fit mx-auto md:mx-0">
             <FilterBtn active={filter === 'for_you'} onClick={() => setFilter('for_you')} icon={Flame} label="For You" />
             <FilterBtn active={filter === 'today'} onClick={() => setFilter('today')} icon={Clock} label="Today" />
             <FilterBtn active={filter === 'network'} onClick={() => setFilter('network')} icon={Users} label="Network" />
@@ -56,7 +56,7 @@ export default function ArenaFeed() {
             {!loading && hasMore && (
                 <button 
                     onClick={() => { setPage(p => p + 1); fetchFeed(); }}
-                    className="w-full py-4 border border-dashed border-zinc-800 text-[10px] font-mono text-zinc-500 hover:text-white uppercase transition-colors"
+                    className="w-full py-4 border border-dashed border-border text-[10px] font-mono text-muted-foreground hover:text-foreground uppercase transition-colors"
                 >
                     <Terminal size={14} className="inline mr-2" /> Load_More_Entries()
                 </button>
@@ -78,7 +78,7 @@ function FilterBtn({ active, onClick, icon: Icon, label }) {
         <button 
             onClick={onClick}
             className={`flex items-center gap-2 px-4 py-1.5 text-[10px] font-mono uppercase transition-all
-                ${active ? 'bg-accent text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+                ${active ? 'bg-accent text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
         >
             <Icon size={12} /> {label}
         </button>
