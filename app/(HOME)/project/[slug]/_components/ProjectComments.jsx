@@ -14,6 +14,18 @@ import { getAvatar } from "@/constants/assets";
 import { MentionsInput, Mention } from 'react-mentions';
 import mentionStyles from "./mentionStyles"; 
 
+// HELPER: Extract Mentions from Text
+const extractMentions = (text) => {
+    // Regex matches @[display](username) -> returns array of usernames (group 1)
+    const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
+    const matches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        matches.push(match[1]); // The username part (ID)
+    }
+    return [...new Set(matches)]; // Unique usernames only
+};
+
 export default function ProjectComments({ projectId, changelogId = null }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -153,6 +165,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
             changelog_id: changelogId 
         };
 
+        // 1. Insert Comment
         const { data, error } = await supabase
             .from('comments')
             .insert(payload)
@@ -166,11 +179,39 @@ export default function ProjectComments({ projectId, changelogId = null }) {
         if (error) throw error;
         
         setNewComment("");
-        
         // Optimistic Update: Add to state immediately
         setComments(prev => [data, ...prev]);
-        
         toast.success("Log Added");
+
+        // 2. PROCESS MENTIONS
+        const mentionedUsernames = extractMentions(payload.content);
+        
+        if (mentionedUsernames.length > 0) {
+            // A. Get User IDs for these usernames
+            const { data: usersData } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .in('username', mentionedUsernames);
+
+            if (usersData && usersData.length > 0) {
+                // B. Prepare Notification Objects
+                const notifications = usersData
+                    .filter(u => u.id !== user.id) // Don't notify self
+                    .map(u => ({
+                        receiver_id: u.id,
+                        sender_id: user.id,
+                        type: 'comment_mention', 
+                        message: `mentioned you in a discussion log.`,
+                        link: `/project/${projectId}` 
+                    }));
+
+                // C. Bulk Insert Notifications
+                if (notifications.length > 0) {
+                    await supabase.from('notifications').insert(notifications);
+                }
+            }
+        }
+
     } catch (error) {
         toast.error("Failed", { description: error.message });
     } finally {
