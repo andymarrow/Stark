@@ -26,9 +26,22 @@ const getYoutubeThumbnail = (url) => {
     
     if (videoId) {
         const cleanId = videoId.split("?")[0].split("/")[0];
-        return `https://img.youtube.com/vi/${cleanId}/hqdefault.jpg`;
+        return `https://img.youtube.com/vi/${cleanId}/0.jpg`;
     }
     return null;
+};
+
+// HELPER: Extract Mentions
+const extractMentions = (text) => {
+    if (!text) return [];
+    // Regex to match @[display](username) pattern used by Mention extension
+    const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
+    const matches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        matches.push(match[1]); // capturing group 1 is the username
+    }
+    return [...new Set(matches)]; // unique usernames
 };
 
 export default function EditChangelogPage({ params }) {
@@ -217,6 +230,38 @@ export default function EditChangelogPage({ params }) {
         };
         const { error } = await supabase.from("project_logs").update(payload).eq("id", logId);
         if (error) throw error;
+
+        // 2. HANDLE MENTIONS IN DESCRIPTION (The Fix)
+        const mentionedUsernames = extractMentions(formData.content);
+        
+        if (mentionedUsernames.length > 0) {
+            // Fetch IDs
+            const { data: usersData } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .in('username', mentionedUsernames);
+
+            if (usersData?.length > 0) {
+                // For updates, we usually only notify NEW mentions, but simple logic is notify all.
+                // Or better: filter out users who already received a mention for this log (advanced)
+                // For now, simple implementation:
+                const notifications = usersData
+                    .filter(u => u.id !== user.id)
+                    .map(u => ({
+                        receiver_id: u.id,
+                        sender_id: user.id,
+                        type: 'mention_in_project', // Reusing this type, works for changelogs too if link is correct
+                        message: `mentioned you in an update for '${project.title}'.`,
+                        link: `/project/${slug}` // Link to project main page
+                    }));
+
+                // Only insert if not exists recently? Or simple insert:
+                if (notifications.length > 0) {
+                    await supabase.from('notifications').insert(notifications);
+                }
+            }
+        }
+
         toast.success("Log Updated");
         router.push(`/project/${slug}`);
     } catch (error) {
@@ -326,7 +371,7 @@ export default function EditChangelogPage({ params }) {
                                         <GripVertical size={10} />
                                     </div>
 
-                                    {/* Thumbnail Image (Handles both uploaded images and YouTube thumbs) */}
+                                    {/* Thumbnail Image */}
                                     <Image 
                                         src={thumbnail || "/placeholder.jpg"} 
                                         alt={`Asset ${idx}`} 

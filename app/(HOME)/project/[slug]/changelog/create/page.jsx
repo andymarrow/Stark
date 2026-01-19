@@ -27,9 +27,22 @@ const getYoutubeThumbnail = (url) => {
     
     if (videoId) {
         const cleanId = videoId.split("?")[0].split("/")[0];
-        return `https://img.youtube.com/vi/${cleanId}/hqdefault.jpg`;
+        return `https://img.youtube.com/vi/${cleanId}/0.jpg`;
     }
     return null;
+};
+
+// Helper to extract mentions from text
+const extractMentions = (text) => {
+    if (!text) return [];
+    // Regex to match @[display](username) pattern used by Mention extension
+    const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
+    const matches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        matches.push(match[1]); // capturing group 1 is the username
+    }
+    return [...new Set(matches)]; // unique usernames
 };
 
 export default function CreateChangelogPage({ params }) {
@@ -223,7 +236,12 @@ export default function CreateChangelogPage({ params }) {
             }
         };
 
-        const { error: logError } = await supabase.from("project_logs").insert(payload);
+        const { data: logData, error: logError } = await supabase
+            .from("project_logs")
+            .insert(payload)
+            .select()
+            .single();
+
         if (logError) throw logError;
 
         // 2. Handle New Collaborators
@@ -242,6 +260,35 @@ export default function CreateChangelogPage({ params }) {
                     const inviterName = user.user_metadata?.full_name || user.email;
                     await sendCollaboratorInvite(ghost.email, project.title, inviterName);
                 });
+            }
+        }
+
+        // 3. HANDLE MENTIONS IN DESCRIPTION (Updated Logic)
+        const mentionedUsernames = extractMentions(formData.content);
+        
+        if (mentionedUsernames.length > 0) {
+            // Fetch IDs for mentioned users
+            const { data: usersData } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .in('username', mentionedUsernames);
+
+            if (usersData?.length > 0) {
+                // Prepare notifications for mentioned users
+                // Note: The SQL trigger handles followers/likers. This handles specific mentions in text.
+                const notifications = usersData
+                    .filter(u => u.id !== user.id) // Don't notify self
+                    .map(u => ({
+                        receiver_id: u.id,
+                        sender_id: user.id,
+                        type: 'mention_in_project', // Using 'mention_in_project' type so it links correctly
+                        message: `mentioned you in a changelog for '${project.title}'.`,
+                        link: `/project/${slug}` // Direct link to project (or ideally changelog anchor if supported)
+                    }));
+
+                if (notifications.length > 0) {
+                    await supabase.from('notifications').insert(notifications);
+                }
             }
         }
 

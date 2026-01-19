@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   GitCommit, ChevronDown, Calendar, Heart, 
@@ -8,6 +8,7 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm"; // Added
 import Image from "next/image";
 import ProjectComments from "./ProjectComments";
 import { toast } from "sonner";
@@ -40,7 +41,7 @@ const getYoutubeThumbnail = (url) => {
     
     if (videoId) {
         const cleanId = videoId.split("?")[0].split("/")[0];
-        return `https://img.youtube.com/vi/${cleanId}/hqdefault.jpg`;
+        return `https://img.youtube.com/vi/${cleanId}/0.jpg`;
     }
     return null; 
 };
@@ -53,9 +54,24 @@ const getEmbedUrl = (url) => {
     
     if (videoId) {
         const cleanId = videoId.split("?")[0].split("/")[0];
-        return `https://www.youtube.com/embed/${cleanId}?autoplay=1`;
+        return `https://www.youtube.com/embed/${cleanId}?autoplay=1&mute=0`;
     }
     return url;
+};
+
+// Custom Link Renderer
+const LinkRenderer = (props) => {
+  return (
+    <a 
+      href={props.href} 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="text-accent underline decoration-accent/50 underline-offset-2 break-all hover:text-accent/80 hover:decoration-accent transition-colors cursor-pointer"
+      onClick={(e) => e.stopPropagation()} 
+    >
+      {props.children}
+    </a>
+  );
 };
 
 export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
@@ -195,6 +211,13 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
         const isLiked = likedLogs.has(log.id);
         const hasMedia = log.media_urls && log.media_urls.length > 0;
         
+        // --- PARSE CONTENT ---
+        const rawContent = typeof log.content === 'object' ? log.content.text : log.content;
+        const displayContent = rawContent.replace(
+            /@\[([^\]]+)\]\(([^)]+)\)/g, 
+            '[@$1](/profile/$2)'
+        );
+
         return (
           <div key={log.id} className="relative pl-10 pb-10 group">
             
@@ -292,9 +315,14 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
                                     </div>
                                 )}
 
-                                {/* 2. Markdown Text */}
+                                {/* 2. Markdown Text with Parsed Mentions */}
                                 <div className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-p:text-muted-foreground prose-a:text-accent prose-code:bg-secondary/50 prose-code:px-1 prose-code:rounded-none prose-code:text-xs">
-                                    <ReactMarkdown>{typeof log.content === 'object' ? log.content.text : log.content}</ReactMarkdown>
+                                    <ReactMarkdown 
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{ a: LinkRenderer }}
+                                    >
+                                        {displayContent}
+                                    </ReactMarkdown>
                                 </div>
 
                                 {/* 3. Media Gallery */}

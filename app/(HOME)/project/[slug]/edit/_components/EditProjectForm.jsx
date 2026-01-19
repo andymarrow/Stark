@@ -35,6 +35,18 @@ const getYoutubeThumbnail = (url) => {
     return null;
 };
 
+// Helper: Extract Mentions
+const extractMentions = (text) => {
+    if (!text) return [];
+    const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
+    const matches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        matches.push(match[1]); // username
+    }
+    return [...new Set(matches)];
+};
+
 export default function EditProjectForm({ project }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -251,6 +263,39 @@ export default function EditProjectForm({ project }) {
                     const inviterName = user.user_metadata?.full_name || user.email;
                     await sendCollaboratorInvite(ghost.email, formData.title, inviterName);
                 });
+            }
+        }
+
+        // D. HANDLE MENTIONS IN DESCRIPTION (Updated Logic)
+        const mentionedUsernames = extractMentions(formData.description);
+        
+        if (mentionedUsernames.length > 0) {
+            // Fetch IDs
+            const { data: usersData } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .in('username', mentionedUsernames);
+
+            if (usersData?.length > 0) {
+                // In edit mode, we ideally filter out users who already got notified for this project
+                // But a simple "User X mentioned you in Y" is usually acceptable on update if they are still mentioned.
+                // A better approach: Check if notification exists for (sender, receiver, type, link) recently.
+                // For simplicity here, we insert.
+                const notifications = usersData
+                    .filter(u => u.id !== user.id) 
+                    .map(u => ({
+                        receiver_id: u.id,
+                        sender_id: user.id,
+                        type: 'mention_in_project', 
+                        message: `mentioned you in the updated documentation for '${formData.title}'.`,
+                        link: `/project/${project.slug}`
+                    }));
+
+                // Use UPSERT or check existence if you want to avoid spam on every edit
+                // Here we just insert.
+                if (notifications.length > 0) {
+                    await supabase.from('notifications').insert(notifications);
+                }
             }
         }
 
