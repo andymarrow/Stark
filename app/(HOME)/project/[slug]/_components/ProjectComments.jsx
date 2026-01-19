@@ -34,6 +34,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
+  const [projectSlug, setProjectSlug] = useState(""); // Store slug for notifications
 
   // Determine dynamic labels based on context
   const contextLabel = changelogId ? "Update Discussion" : "Discussion Log";
@@ -43,6 +44,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     
     // Initial Fetch
     fetchComments();
+    fetchProjectSlug(); // Fetch slug once
 
     // Set up Realtime Listener for this specific scope
     const channelName = changelogId ? `comments-log-${changelogId}` : `comments-project-${projectId}`;
@@ -76,6 +78,11 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     };
     fetchProfile();
   }, [user]);
+
+  const fetchProjectSlug = async () => {
+      const { data } = await supabase.from('projects').select('slug').eq('id', projectId).single();
+      if (data) setProjectSlug(data.slug);
+  };
 
   const fetchComments = async () => {
     try {
@@ -183,7 +190,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
         setComments(prev => [data, ...prev]);
         toast.success("Log Added");
 
-        // 2. PROCESS MENTIONS
+        // 2. PROCESS MENTIONS (FIXED LINK LOGIC)
         const mentionedUsernames = extractMentions(payload.content);
         
         if (mentionedUsernames.length > 0) {
@@ -195,6 +202,10 @@ export default function ProjectComments({ projectId, changelogId = null }) {
 
             if (usersData && usersData.length > 0) {
                 // B. Prepare Notification Objects
+                // Use fetched projectSlug if available, else fallback to projectId (which might be wrong but better than crash)
+                // Ideally projectSlug is fetched on mount
+                const targetLink = projectSlug ? `/project/${projectSlug}` : `/project/${projectId}`;
+
                 const notifications = usersData
                     .filter(u => u.id !== user.id) // Don't notify self
                     .map(u => ({
@@ -202,7 +213,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
                         sender_id: user.id,
                         type: 'comment_mention', 
                         message: `mentioned you in a discussion log.`,
-                        link: `/project/${projectId}` 
+                        link: targetLink 
                     }));
 
                 // C. Bulk Insert Notifications
