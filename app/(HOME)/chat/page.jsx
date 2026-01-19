@@ -16,13 +16,13 @@ function ChatContent() {
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set()); // Global Agent Set
+  const [onlineUsers, setOnlineUsers] = useState(new Set()); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
   const currentChatRef = useRef(chatIdFromUrl);
 
-  // --- 1. DATA FETCHING ---
+  // --- 1. DATA RETRIEVAL ---
   const fetchConversations = useCallback(async (silent = false) => {
     if (!user) return;
     try {
@@ -30,9 +30,7 @@ function ChatContent() {
       const { data, error } = await supabase
         .from('conversation_participants')
         .select(`
-          status,
-          role,
-          unread_count,
+          status, unread_count,
           conversation:conversations (
             id, type, title, description, avatar_url, is_public,
             last_message, last_message_at, owner_id, linked_group_id, 
@@ -50,13 +48,12 @@ function ChatContent() {
         const conv = item.conversation;
         if (!conv) return null; 
 
-        // --- STARK LOGIC: TARGET INDIVIDUAL MAPPING ---
-        // Find the specific agent who is NOT me
+        // CRITICAL FIX: Find the specific profile that is NOT the logged-in user
         const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
         const profile = otherParticipant?.profile;
         
         let displayName = conv.type === 'direct' 
-            ? (profile?.full_name || profile?.username || "Unknown Node")
+            ? (profile?.full_name || profile?.username || "Unknown Agent")
             : conv.title;
 
         return {
@@ -65,7 +62,6 @@ function ChatContent() {
           title: conv.title, 
           description: conv.description, 
           myStatus: item.status, 
-          // READ GUARD: If window is open, force count to 0 to prevent flickering
           unreadCount: currentChatRef.current === conv.id ? 0 : (item.unread_count || 0),
           lastMessage: conv.last_message,
           lastMessageAt: conv.last_message_at, 
@@ -73,9 +69,9 @@ function ChatContent() {
           name: displayName,
           avatar: conv.type === 'direct' ? profile?.avatar_url : conv.avatar_url,
           
-          // --- UNIQUE INDIVIDUAL STATUS ---
+          // These are unique per user row
           lastSeen: profile?.last_seen_at, 
-          otherUserId: profile?.id, // Checked against onlineUsers set in sidebar
+          otherUserId: profile?.id, // Unique UUID for presence check
           
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
@@ -83,7 +79,6 @@ function ChatContent() {
         };
       })
       .filter(Boolean)
-      // TELEGRAM SORTING: Most recent interaction bumped to the top
       .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0));
 
       setConversations(formatted);
@@ -94,18 +89,16 @@ function ChatContent() {
     }
   }, [user]);
 
-  // --- 2. SELECTION & ACKNOWLEDGEMENT ---
+  // --- 2. HANDLERS ---
   const handleSelectChat = (id) => {
     const targetId = typeof id === 'object' ? id.id : id;
     setSelectedConvId(id);
     currentChatRef.current = targetId;
 
     if (typeof id === 'string') {
-        // Optimistic UI clear
-        setConversations(prev => prev.map(c => 
-            c.id === targetId ? { ...c, unreadCount: 0 } : c
-        ));
-        // Reset DB count
+        // Optimistic UI clear for unread bubble
+        setConversations(prev => prev.map(c => c.id === targetId ? { ...c, unreadCount: 0 } : c));
+        // Persistent Reset
         supabase.rpc('reset_unread_count', { p_conversation_id: targetId, p_user_id: user.id });
     }
   };
@@ -114,25 +107,25 @@ function ChatContent() {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. REALTIME SYNC HUB ---
+  // --- 3. REALTIME SYNC & GLOBAL PRESENCE ---
   useEffect(() => {
     if (user) {
       fetchConversations();
       
-      // A. Global Presence Listener (Subscribed to the heartbeat in AuthContext)
+      // A. PRESENCE LISTENER: Subscribes to the site-wide channel defined in AuthContext
       const presenceChannel = supabase.channel('stark-global-presence');
 
       presenceChannel
         .on('presence', { event: 'sync' }, () => {
           const state = presenceChannel.presenceState();
-          // Populate the set with unique User IDs currently browsing Stark
-          setOnlineUsers(new Set(Object.keys(state)));
+          // Extract unique User IDs from the presence state keys
+          const onlineIds = new Set(Object.keys(state));
+          setOnlineUsers(onlineIds);
         })
         .subscribe();
 
-      // B. Data Sync Listener (Sorting & Banners)
-      const dataChannel = supabase
-        .channel('sidebar-sync-v11')
+      // B. DATA SYNC: Messages & Sorting
+      const dataChannel = supabase.channel('sidebar-sync-v12')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
         .on('postgres_changes', { 
             event: 'UPDATE', 
@@ -140,7 +133,6 @@ function ChatContent() {
             table: 'conversation_participants', 
             filter: `user_id=eq.${user.id}` 
         }, (payload) => {
-            // Read-Guard logic for active window
             if (payload.new.conversation_id === currentChatRef.current && payload.new.unread_count > 0) {
                  supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
                  return;
@@ -151,9 +143,9 @@ function ChatContent() {
             if (payload.new.conversation_id === currentChatRef.current) {
                 supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
             }
-            fetchConversations(true); // Re-sort instantly when a signal is sent or received
+            fetchConversations(true); // Re-sort immediately
         })
-        // Profile Listener: Updates "Last Seen" text instantly when someone else heartbeats or leaves
+        // Profile Listener: Updates "Last Seen" text instantly
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
             fetchConversations(true);
         })
@@ -178,7 +170,6 @@ function ChatContent() {
 
   return (
     <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
-      {/* SIDEBAR PANE */}
       <div className={`
         w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full border-r border-border bg-background transition-transform duration-300 ease-in-out absolute md:relative z-10
         ${selectedConvId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
@@ -193,7 +184,6 @@ function ChatContent() {
         />
       </div>
 
-      {/* WINDOW PANE */}
       <div className={`flex-1 h-full bg-secondary/5 relative transition-transform duration-300 ease-in-out absolute md:relative inset-0 md:inset-auto z-20 md:z-0 ${selectedConvId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'} md:block`}>
         {selectedConvId ? (
            <ChatWindow 
