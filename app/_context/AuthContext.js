@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- NEW: GLOBAL PRESENCE & HEARTBEAT ---
+  // --- STARK GLOBAL HEARTBEAT & PRESENCE ---
   useEffect(() => {
     if (!user) return;
 
@@ -45,27 +45,39 @@ export const AuthProvider = ({ children }) => {
     .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
         // When this specific user leaves the site (closes all tabs)
         if (leftPresences.some(p => p.presence_ref === user.id)) {
-            // Update the Database timestamp
+            // Update the Database timestamp to show exactly when they went dark
             await supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
     })
     .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             // Track the user across the site
-            await channel.track({ online_at: new Date().toISOString() });
+            await channel.track({ 
+                user_id: user.id,
+                online_at: new Date().toISOString() 
+            });
             
-            // Mark as active in the DB immediately upon opening the site
+            // Mark as active in the DB immediately upon opening any Stark node
             await supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
     });
 
+    // Handle browser/tab closure
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+            supabase.rpc('update_last_seen', { p_user_id: user.id });
+        }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
         supabase.removeChannel(channel);
     };
   }, [user]);
 
   const signOut = async () => {
-    // Before signing out, record the last seen timestamp
+    // Before signing out, record the final last seen timestamp
     if (user) await supabase.rpc('update_last_seen', { p_user_id: user.id });
     
     await supabase.auth.signOut();
