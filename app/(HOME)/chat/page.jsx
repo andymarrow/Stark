@@ -16,7 +16,7 @@ function ChatContent() {
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set()); // Real-time global online set
+  const [onlineUsers, setOnlineUsers] = useState(new Set()); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
@@ -50,7 +50,7 @@ function ChatContent() {
         const conv = item.conversation;
         if (!conv) return null; 
 
-        // FIND THE OTHER AGENT UNIQUE DATA
+        // FIND THE UNIQUE "OTHER" PARTICIPANT
         const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
         const profile = otherParticipant?.profile;
         
@@ -64,7 +64,6 @@ function ChatContent() {
           title: conv.title, 
           description: conv.description, 
           myStatus: item.status, 
-          // READ GUARD: If window is open, force count to 0 in local state
           unreadCount: currentChatRef.current === conv.id ? 0 : (item.unread_count || 0),
           lastMessage: conv.last_message,
           lastMessageAt: conv.last_message_at, 
@@ -72,9 +71,9 @@ function ChatContent() {
           name: displayName,
           avatar: conv.type === 'direct' ? profile?.avatar_url : conv.avatar_url,
           
-          // INDIVIDUAL STATUS DATA (Used for unique sidebar status)
+          // MAP UNIQUE INDIVIDUAL DATA
           lastSeen: profile?.last_seen_at, 
-          otherUserId: profile?.id, // ID to check against global onlineUsers set
+          otherUserId: profile?.id, 
           
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
@@ -82,7 +81,6 @@ function ChatContent() {
         };
       })
       .filter(Boolean)
-      // TELEGRAM SORTING: Most recent interaction pushed to top
       .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0));
 
       setConversations(formatted);
@@ -93,18 +91,14 @@ function ChatContent() {
     }
   }, [user]);
 
-  // --- 2. SELECTION & ACKNOWLEDGEMENT ---
+  // --- 2. SELECTION ---
   const handleSelectChat = (id) => {
     const targetId = typeof id === 'object' ? id.id : id;
     setSelectedConvId(id);
     currentChatRef.current = targetId;
 
     if (typeof id === 'string') {
-        // Optimistic UI clear
-        setConversations(prev => prev.map(c => 
-            c.id === targetId ? { ...c, unreadCount: 0 } : c
-        ));
-        // Persistent DB Reset
+        setConversations(prev => prev.map(c => c.id === targetId ? { ...c, unreadCount: 0 } : c));
         supabase.rpc('reset_unread_count', { p_conversation_id: targetId, p_user_id: user.id });
     }
   };
@@ -113,56 +107,47 @@ function ChatContent() {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. REALTIME SYNC & GLOBAL PRESENCE HUB ---
+  // --- 3. GLOBAL SYNC HUB ---
   useEffect(() => {
-    if (user) {
-      fetchConversations();
-      
-      // A. Global Presence Listener (Synced with AuthContext)
-      const presenceChannel = supabase.channel('stark-global-presence');
+    if (!user) return;
+    fetchConversations();
+    
+    // A. Presence Listener (Tracks who is on Stark globally)
+    const presenceChannel = supabase.channel('stark-global-presence');
 
-      presenceChannel
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannel.presenceState();
-          // Keep local set of who is currently browsing Stark
-          setOnlineUsers(new Set(Object.keys(state)));
-        })
-        .subscribe();
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        setOnlineUsers(new Set(Object.keys(state)));
+      })
+      .subscribe();
 
-      // B. Data Sync Listeners (Sorting & Status Updates)
-      const dataChannel = supabase
-        .channel('sidebar-sync-v8')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
-        .on('postgres_changes', { 
+    // B. Data Sync (Messages & Status)
+    const dataChannel = supabase.channel('sidebar-sync-final')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
+      .on('postgres_changes', { 
             event: 'UPDATE', 
             schema: 'public', 
             table: 'conversation_participants', 
             filter: `user_id=eq.${user.id}` 
         }, (payload) => {
-            // Read Guard: Don't allow unread bubble to reappear for open chat
             if (payload.new.conversation_id === currentChatRef.current && payload.new.unread_count > 0) {
                  supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
                  return;
             }
             fetchConversations(true);
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-            if (payload.new.conversation_id === currentChatRef.current) {
-                supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
-            }
-            fetchConversations(true); // Trigger instant re-sort
-        })
-        // Profile Listener (Updates "Last Seen" text when users go offline)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
-            fetchConversations(true);
-        })
-        .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchConversations(true))
+      // --- NEW: Update Last Seen text in real-time when profiles change ---
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
+          fetchConversations(true);
+      })
+      .subscribe();
 
-      return () => { 
-          supabase.removeChannel(presenceChannel); 
-          supabase.removeChannel(dataChannel); 
-      };
-    }
+    return () => { 
+        supabase.removeChannel(presenceChannel); 
+        supabase.removeChannel(dataChannel); 
+    };
   }, [user, fetchConversations]);
 
   const filteredConversations = conversations.filter(conv => {

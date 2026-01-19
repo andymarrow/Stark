@@ -36,48 +36,41 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    // A. Create a global channel for the entire platform
+    // A. Create the global presence channel
     const channel = supabase.channel('stark-global-presence', {
         config: { presence: { key: user.id } }
     });
 
-    channel
-    .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
-        // When this specific user leaves the site (closes all tabs)
-        if (leftPresences.some(p => p.presence_ref === user.id)) {
-            // Update the Database timestamp to show exactly when they went dark
-            await supabase.rpc('update_last_seen', { p_user_id: user.id });
-        }
-    })
-    .subscribe(async (status) => {
+    channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-            // Track the user across the site
+            // Track user session across the platform
             await channel.track({ 
                 user_id: user.id,
                 online_at: new Date().toISOString() 
             });
             
-            // Mark as active in the DB immediately upon opening any Stark node
+            // Mark as active in the DB immediately upon arrival
             await supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
     });
 
-    // Handle browser/tab closure
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'hidden') {
+    // B. PERSISTENT HEARTBEAT
+    // We update the DB every 30 seconds to keep the "Last Seen" timestamp warm.
+    // We REMOVED the 'leave' listeners that were forcing users offline too early.
+    const heartbeat = setInterval(() => {
+        if (user) {
             supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    }, 30000); 
 
     return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        clearInterval(heartbeat);
         supabase.removeChannel(channel);
     };
   }, [user]);
 
   const signOut = async () => {
-    // Before signing out, record the final last seen timestamp
+    // Final timestamp update on manual logout
     if (user) await supabase.rpc('update_last_seen', { p_user_id: user.id });
     
     await supabase.auth.signOut();
