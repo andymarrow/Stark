@@ -32,31 +32,31 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- STARK GLOBAL HEARTBEAT & PRESENCE ---
+  // --- NEW: STARK GLOBAL HEARTBEAT & PRESENCE ---
   useEffect(() => {
     if (!user) return;
 
-    // A. Create the global presence channel
+    // A. Initialize Global Presence Channel
     const channel = supabase.channel('stark-global-presence', {
         config: { presence: { key: user.id } }
     });
 
     channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-            // Track user session across the platform
+            // Track the agent across the platform
             await channel.track({ 
                 user_id: user.id,
                 online_at: new Date().toISOString() 
             });
             
-            // Mark as active in the DB immediately upon arrival
+            // Initial arrival ping to DB
             await supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
     });
 
-    // B. PERSISTENT HEARTBEAT
-    // We update the DB every 30 seconds to keep the "Last Seen" timestamp warm.
-    // We REMOVED the 'leave' listeners that were forcing users offline too early.
+    // B. PERSISTENT BACKGROUND HEARTBEAT
+    // We update the DB timestamp every 30 seconds to keep the "Last Seen" accurate.
+    // We do NOT use 'leave' listeners here because they are too sensitive for mobile.
     const heartbeat = setInterval(() => {
         if (user) {
             supabase.rpc('update_last_seen', { p_user_id: user.id });
@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const signOut = async () => {
-    // Final timestamp update on manual logout
+    // Final timestamp update on manual exit
     if (user) await supabase.rpc('update_last_seen', { p_user_id: user.id });
     
     await supabase.auth.signOut();
