@@ -5,23 +5,23 @@ import { useAuth } from "@/app/_context/AuthContext";
 import ChatSidebar from "./_components/ChatSidebar";
 import ChatWindow from "./_components/ChatWindow";
 import { MessageSquareDashed, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import LoginRequiredState from "@/components/LoginRequiredState";
 
 function ChatContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, onlineUsers } = useAuth();
   const searchParams = useSearchParams();
   const chatIdFromUrl = searchParams.get('id');
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set()); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
   const currentChatRef = useRef(chatIdFromUrl);
 
-  // --- 1. DATA RETRIEVAL ---
+  // --- 1. DATA FETCHING ---
   const fetchConversations = useCallback(async (silent = false) => {
     if (!user) return;
     try {
@@ -29,7 +29,9 @@ function ChatContent() {
       const { data, error } = await supabase
         .from('conversation_participants')
         .select(`
-          status, unread_count,
+          status,
+          role,
+          unread_count,
           conversation:conversations (
             id, type, title, description, avatar_url, is_public,
             last_message, last_message_at, owner_id, linked_group_id, 
@@ -46,13 +48,11 @@ function ChatContent() {
       const formatted = (data || []).map(item => {
         const conv = item.conversation;
         if (!conv) return null; 
-
-        // Find the specific profile that is NOT the logged-in user
         const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
         const profile = otherParticipant?.profile;
         
         let displayName = conv.type === 'direct' 
-            ? (profile?.full_name || profile?.username || "Unknown Agent")
+            ? (profile?.full_name || profile?.username || "Unknown Node")
             : conv.title;
 
         return {
@@ -68,9 +68,8 @@ function ChatContent() {
           name: displayName,
           avatar: conv.type === 'direct' ? profile?.avatar_url : conv.avatar_url,
           
-          // These are unique per user row
           lastSeen: profile?.last_seen_at, 
-          otherUserId: profile?.id, // Unique UUID for presence check
+          otherUserId: profile?.id, 
           
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
@@ -88,16 +87,14 @@ function ChatContent() {
     }
   }, [user]);
 
-  // --- 2. HANDLERS ---
+  // --- 2. SELECTION ---
   const handleSelectChat = (id) => {
     const targetId = typeof id === 'object' ? id.id : id;
     setSelectedConvId(id);
     currentChatRef.current = targetId;
 
     if (typeof id === 'string') {
-        // Optimistic UI clear for unread bubble
         setConversations(prev => prev.map(c => c.id === targetId ? { ...c, unreadCount: 0 } : c));
-        // Persistent Reset
         supabase.rpc('reset_unread_count', { p_conversation_id: targetId, p_user_id: user.id });
     }
   };
@@ -106,39 +103,13 @@ function ChatContent() {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. REALTIME SYNC & BULLETPROOF PRESENCE ---
+  // --- 3. DATA SYNC (Presence handled by AuthContext now) ---
   useEffect(() => {
     if (user) {
       fetchConversations();
       
-      // A. PRESENCE LISTENER (Independent from AuthContext exports)
-      // We listen to the SAME channel name that AuthContext broadcasts to.
-      const presenceChannel = supabase.channel('stark-global-presence');
-
-      presenceChannel
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannel.presenceState();
-          
-          // BULLETPROOF PARSER:
-          // Checks both the Object Keys (if config.key was set) AND the payload (if it wasn't)
-          const onlineIds = new Set();
-          
-          Object.keys(state).forEach(key => {
-            // 1. Try to use the key as ID
-            onlineIds.add(key);
-            
-            // 2. Also check the data payload for 'user_id' property just in case
-            state[key].forEach(presence => {
-                if (presence.user_id) onlineIds.add(presence.user_id);
-            });
-          });
-
-          setOnlineUsers(onlineIds);
-        })
-        .subscribe();
-
-      // B. DATA SYNC: Messages & Sorting
-      const dataChannel = supabase.channel('sidebar-sync-v12')
+      const dataChannel = supabase
+        .channel('sidebar-sync-v13')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
         .on('postgres_changes', { 
             event: 'UPDATE', 
@@ -156,16 +127,15 @@ function ChatContent() {
             if (payload.new.conversation_id === currentChatRef.current) {
                 supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
             }
-            fetchConversations(true); // Re-sort immediately
+            fetchConversations(true);
         })
-        // Profile Listener: Updates "Last Seen" text instantly
+        // Profile Listener: Updates Last Seen if someone goes offline
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
             fetchConversations(true);
         })
         .subscribe();
 
       return () => { 
-          supabase.removeChannel(presenceChannel); 
           supabase.removeChannel(dataChannel); 
       };
     }
@@ -193,7 +163,7 @@ function ChatContent() {
             onSelectChat={handleSelectChat}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
-            onlineUsers={onlineUsers} 
+            onlineUsers={onlineUsers} // Passed from AuthContext
         />
       </div>
 
