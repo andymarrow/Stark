@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
@@ -9,7 +9,12 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+  // NEW: Store online users globally here
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
   const router = useRouter();
+  
+  // Use a ref to track the channel to prevent duplicate subscriptions
+  const channelRef = useRef(null);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -33,45 +38,63 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    // 1. Initialize the global presence channel
-    // We only define the presence key here for the broadcaster
+    // 1. Define the channel once
+    // We use the user.id as the presence key so the state object keys are simply User IDs
     const channel = supabase.channel('stark-global-presence', {
         config: { presence: { key: user.id } }
     });
 
-    channel.subscribe(async (status) => {
+    channelRef.current = channel;
+
+    // 2. Listen for Sync (Who is online?)
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        // Since we set key: user.id, Object.keys returns the UUIDs directly
+        const onlineIds = new Set(Object.keys(state));
+        setOnlineUsers(onlineIds);
+      })
+      .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-            // 2. Start tracking this session
+            // 3. Broadcast I am online
             await channel.track({ 
                 user_id: user.id,
                 online_at: new Date().toISOString() 
             });
             
-            // 3. Mark DB as active immediately
+            // 4. Mark DB as active immediately
             await supabase.rpc('update_last_seen', { p_user_id: user.id });
         }
     });
 
-    // 4. Heartbeat: Keeps the 'last_seen_at' column fresh in the database
-    // This runs in the background regardless of which page you are on.
+    // 5. Database Heartbeat (Backup for cold storage/offline logic)
     const heartbeat = setInterval(() => {
         if (user) supabase.rpc('update_last_seen', { p_user_id: user.id });
-    }, 45000); // 45 seconds is safe for DB and mobile battery
+    }, 45000); 
 
     return () => {
         clearInterval(heartbeat);
-        supabase.removeChannel(channel);
+        // Clean up: Untrack presence before leaving
+        if (channelRef.current) {
+            channelRef.current.untrack().then(() => {
+                supabase.removeChannel(channelRef.current);
+            });
+        }
     };
   }, [user]);
 
-
   const signOut = async () => {
-    if (user) await supabase.rpc('update_last_seen', { p_user_id: user.id });
+    if (user && channelRef.current) {
+        // Attempt to remove self from presence list instantly on logout
+        await channelRef.current.untrack();
+        await supabase.rpc('update_last_seen', { p_user_id: user.id });
+    }
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  const value = { session, user, loading, signOut };
+  // Export onlineUsers so the Chat Page can use it
+  const value = { session, user, loading, signOut, onlineUsers };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

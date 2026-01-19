@@ -10,13 +10,14 @@ import { useSearchParams } from "next/navigation";
 import LoginRequiredState from "@/components/LoginRequiredState";
 
 function ChatContent() {
-  const { user, loading: authLoading } = useAuth();
+  // 1. UPDATED: We now pull 'onlineUsers' from the global AuthContext
+  const { user, loading: authLoading, onlineUsers } = useAuth();
+  
   const searchParams = useSearchParams();
   const chatIdFromUrl = searchParams.get('id');
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState(new Set()); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
@@ -48,7 +49,7 @@ function ChatContent() {
         const conv = item.conversation;
         if (!conv) return null; 
 
-        // CRITICAL FIX: Find the specific profile that is NOT the logged-in user
+        // Find the specific profile that is NOT the logged-in user
         const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
         const profile = otherParticipant?.profile;
         
@@ -71,7 +72,7 @@ function ChatContent() {
           
           // These are unique per user row
           lastSeen: profile?.last_seen_at, 
-          otherUserId: profile?.id, // Unique UUID for presence check
+          otherUserId: profile?.id, // Unique UUID used to check against onlineUsers Set
           
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
@@ -107,24 +108,15 @@ function ChatContent() {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. REALTIME SYNC & GLOBAL PRESENCE ---
+  // --- 3. REALTIME SYNC (DATA ONLY) ---
   useEffect(() => {
     if (user) {
       fetchConversations();
       
-      // A. PRESENCE LISTENER: Subscribes to the site-wide channel defined in AuthContext
-      const presenceChannel = supabase.channel('stark-global-presence');
+      // NOTE: Presence logic has been removed from here and moved to AuthContext.
+      // This prevents double-subscriptions and race conditions.
 
-      presenceChannel
-        .on('presence', { event: 'sync' }, () => {
-          const state = presenceChannel.presenceState();
-          // Extract unique User IDs from the presence state keys
-          const onlineIds = new Set(Object.keys(state));
-          setOnlineUsers(onlineIds);
-        })
-        .subscribe();
-
-      // B. DATA SYNC: Messages & Sorting
+      // DATA SYNC: Messages & Sorting
       const dataChannel = supabase.channel('sidebar-sync-v12')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
         .on('postgres_changes', { 
@@ -152,7 +144,6 @@ function ChatContent() {
         .subscribe();
 
       return () => { 
-          supabase.removeChannel(presenceChannel); 
           supabase.removeChannel(dataChannel); 
       };
     }
@@ -180,6 +171,7 @@ function ChatContent() {
             onSelectChat={handleSelectChat}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            // Pass the global online users Set down to the sidebar
             onlineUsers={onlineUsers} 
         />
       </div>
