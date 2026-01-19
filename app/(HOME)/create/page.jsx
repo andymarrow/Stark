@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, Suspense } from "react"; // Added Suspense
+import { useState, useEffect, Suspense } from "react"; 
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowLeft, Rocket, Loader2, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,19 @@ import StepSource from "./_components/StepSource";
 import StepDetails from "./_components/StepDetails";
 import StepMedia from "./_components/StepMedia";
 import StepReview from "./_components/StepReview";
+
+// HELPER: Extract Mentions
+const extractMentions = (text) => {
+    if (!text) return [];
+    // Regex to match @[display](username) pattern used by Mention extension
+    const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
+    const matches = [];
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        matches.push(match[1]); // capturing group 1 is the username
+    }
+    return [...new Set(matches)]; // unique usernames
+};
 
 // Inner component to use searchParams
 function CreateForm() {
@@ -203,6 +216,31 @@ function CreateForm() {
                     const inviterName = user.user_metadata?.full_name || user.email;
                     await sendCollaboratorInvite(ghost.email, formData.title, inviterName);
                 });
+            }
+        }
+
+        // 5. HANDLE MENTIONS IN DESCRIPTION (The Fix)
+        const mentionedUsernames = extractMentions(formData.description);
+        
+        if (mentionedUsernames.length > 0) {
+            // Fetch IDs
+            const { data: usersData } = await supabase
+                .from('profiles')
+                .select('id, username')
+                .in('username', mentionedUsernames);
+
+            if (usersData?.length > 0) {
+                const notifications = usersData
+                    .filter(u => u.id !== user.id)
+                    .map(u => ({
+                        receiver_id: u.id,
+                        sender_id: user.id,
+                        type: 'mention_in_project', // Distinct type for project mentions
+                        message: `mentioned you in the documentation for '${formData.title}'.`,
+                        link: `/project/${slug}`
+                    }));
+
+                await supabase.from('notifications').insert(notifications);
             }
         }
 
