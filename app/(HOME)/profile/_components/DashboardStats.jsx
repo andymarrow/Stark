@@ -1,11 +1,8 @@
 "use client";
-import { TrendingUp, Users, Heart, Eye } from "lucide-react";
+import { TrendingUp, Users, Heart, Eye, UserPlus } from "lucide-react";
 
-export default function DashboardStats({ stats }) {
+export default function DashboardStats({ stats, onStatClick }) {
   
-  /**
-   * Converts numbers like 1500 to "1.5k" for clean industrial UI
-   */
   const formatNum = (num) => {
     if (!num || num === 0) return "0";
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'm';
@@ -14,23 +11,30 @@ export default function DashboardStats({ stats }) {
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border-y border-border">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-border border-y border-border">
       
-      {/* 1. Total views across all of the user's projects */}
       <StatBox 
         label="Project Traffic" 
         value={formatNum(stats.totalViews)} 
         icon={Eye} 
       />
 
-      {/* 2. Real follower count from the follows table */}
       <StatBox 
         label="Followers" 
         value={formatNum(stats.followers)} 
         icon={Users} 
+        isClickable
+        onClick={() => onStatClick("followers")}
       />
 
-      {/* 3. Total likes (stars) earned across all projects */}
+      <StatBox 
+        label="Following" 
+        value={formatNum(stats.following)} 
+        icon={UserPlus} 
+        isClickable
+        onClick={() => onStatClick("following")}
+      />
+
       <StatBox 
         label="Stars Earned" 
         value={formatNum(stats.starsEarned)} 
@@ -38,7 +42,6 @@ export default function DashboardStats({ stats }) {
         isHighlighted
       />
 
-      {/* 4. Total views on the user's specific profile page */}
       <StatBox 
         label="Node Reach" 
         value={formatNum(stats.nodeReach)} 
@@ -49,21 +52,38 @@ export default function DashboardStats({ stats }) {
   );
 }
 
-function StatBox({ label, value, icon: Icon, isHighlighted }) {
+function StatBox({ label, value, icon: Icon, isHighlighted, isClickable, onClick }) {
   return (
-    <div className="bg-background p-6 flex flex-col justify-between h-28 group hover:bg-secondary/5 transition-colors cursor-default">
+    <div 
+        onClick={isClickable ? onClick : undefined}
+        className={`bg-background p-6 flex flex-col justify-between h-28 group transition-all duration-200
+            ${isClickable ? 'cursor-pointer hover:bg-secondary/20 active:bg-secondary/40' : 'cursor-default hover:bg-secondary/5'}
+        `}
+    >
       <div className="flex justify-between items-start">
-        <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">{label}</span>
+        <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest leading-none">
+            {label}
+        </span>
         <Icon 
             size={14} 
-            className={`transition-colors ${isHighlighted ? 'text-accent' : 'text-muted-foreground group-hover:text-foreground'}`} 
+            className={`transition-colors 
+                ${isHighlighted ? 'text-accent' : 'text-muted-foreground group-hover:text-foreground'}
+                ${isClickable && 'group-hover:text-accent'}
+            `} 
         />
       </div>
       <div>
-        <div className={`text-2xl font-bold font-mono tracking-tighter ${isHighlighted ? 'text-accent' : 'text-foreground'}`}>
+        <div className={`text-2xl font-bold font-mono tracking-tighter 
+            ${isHighlighted ? 'text-accent' : 'text-foreground'}
+            ${isClickable && 'group-hover:scale-105 origin-left transition-transform'}
+        `}>
             {value}
         </div>
-        
+        {isClickable && (
+            <div className="text-[8px] font-mono text-accent opacity-0 group-hover:opacity-100 transition-opacity mt-1 uppercase tracking-tighter">
+                View_Registry →
+            </div>
+        )}
       </div>
     </div>
   );

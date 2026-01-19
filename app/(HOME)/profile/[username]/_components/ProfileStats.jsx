@@ -5,11 +5,10 @@ import {
   Users, 
   UserPlus, 
   BarChart3, 
-  Radio, 
-  Activity 
+  Radio 
 } from "lucide-react";
 
-export default function ProfileStats({ stats }) {
+export default function ProfileStats({ stats, onStatClick }) {
   
   const statItems = [
     { 
@@ -22,7 +21,7 @@ export default function ProfileStats({ stats }) {
       label: "Total Likes", 
       value: stats.likes, 
       icon: Heart, 
-      highlight: true, // Accent color
+      highlight: true, 
       desc: "Community Endorsements"
     },
     { 
@@ -35,13 +34,17 @@ export default function ProfileStats({ stats }) {
       label: "Followers", 
       value: stats.followers, 
       icon: Users,
-      desc: "Network Size"
+      desc: "Network Size",
+      isClickable: true,
+      onClick: () => onStatClick('followers')
     },
     { 
       label: "Following", 
       value: stats.following, 
       icon: UserPlus,
-      desc: "Network Connections"
+      desc: "Network Connections",
+      isClickable: true,
+      onClick: () => onStatClick('following')
     },
     { 
       label: "Node Reach", 
@@ -62,41 +65,56 @@ export default function ProfileStats({ stats }) {
   );
 }
 
-function StatItem({ label, value, icon: Icon, highlight, desc }) {
+function StatItem({ label, value, icon: Icon, highlight, desc, isClickable, onClick }) {
   return (
-    <div className="p-5 flex flex-col justify-between h-32 hover:bg-secondary/5 transition-colors group cursor-default relative overflow-hidden">
+    <div 
+      onClick={isClickable ? onClick : undefined}
+      className={`p-5 flex flex-col justify-between h-32 transition-all group relative overflow-hidden
+        ${isClickable ? "cursor-pointer hover:bg-secondary/20 active:bg-secondary/40" : "cursor-default hover:bg-secondary/5"}
+      `}
+    >
       
       {/* Top Row: Label & Icon */}
       <div className="flex justify-between items-start mb-2">
-        <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono group-hover:text-foreground transition-colors">
+        <span className={`text-[10px] uppercase tracking-widest font-mono transition-colors
+            ${isClickable ? "text-accent font-bold" : "text-muted-foreground group-hover:text-foreground"}
+        `}>
           {label}
         </span>
         <Icon 
           size={16} 
           className={`transition-colors duration-300 ${
-            highlight ? "text-accent" : "text-muted-foreground group-hover:text-accent"
+            highlight || isClickable ? "text-accent" : "text-muted-foreground group-hover:text-accent"
           }`} 
         />
       </div>
 
       {/* Value */}
       <div>
-        <span className={`text-3xl font-bold font-mono tracking-tighter ${
-            highlight ? "text-accent" : "text-foreground"
-        }`}>
+        <span className={`text-3xl font-bold font-mono tracking-tighter transition-transform duration-300 inline-block
+            ${highlight ? "text-accent" : "text-foreground"}
+            ${isClickable ? "group-hover:scale-110 origin-left" : ""}
+        `}>
           {formatNumber(value)}
         </span>
+        {isClickable && (
+            <div className="text-[7px] font-mono text-accent opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-tighter">
+                Access_Node_Registry →
+            </div>
+        )}
       </div>
 
-      {/* Decorative / Context (Optional UX touch) */}
+      {/* Decorative / Context */}
       <div className="mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
         <span className="text-[9px] text-muted-foreground font-mono truncate">
             // {desc}
         </span>
       </div>
       
-      {/* Subtle corner accent on hover */}
-      <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-accent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {/* Subtle corner accent for interactive elements */}
+      {isClickable && (
+          <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-accent opacity-20 group-hover:opacity-100 transition-opacity" />
+      )}
     </div>
   );
 }

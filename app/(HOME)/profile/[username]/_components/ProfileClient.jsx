@@ -9,6 +9,11 @@ import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
+// NEW: Network Registry Imports
+import NetworkRegistry from "../../_components/NetworkRegistry";
+import { supabase } from "@/lib/supabaseClient";
+import { toast } from "sonner";
+
 const ITEMS_PER_PAGE = 6;
 
 export default function ProfileClient({ 
@@ -25,6 +30,12 @@ export default function ProfileClient({
   const [activeTab, setActiveTab] = useState("work");
   const [viewMode, setViewMode] = useState("grid");
   
+  // --- NEW: CONNECTION STATES ---
+  const [isConnectionsOpen, setIsConnectionsOpen] = useState(false);
+  const [connectionType, setConnectionType] = useState("followers");
+  const [connections, setConnections] = useState([]);
+  const [connLoading, setConnLoading] = useState(false);
+
   // Filtering State
   const [sortOrder, setSortOrder] = useState("latest");
   const [popularMetric, setPopularMetric] = useState("hype");
@@ -34,7 +45,7 @@ export default function ProfileClient({
 
   const hasCountedRef = useRef(false);
 
-  // 1. Increment View Count (Server Action logic with 24h debounce)
+  // 1. View Counting Logic
   useEffect(() => {
     if (!initialProfile?.id) return;
     if (hasCountedRef.current) return;
@@ -47,18 +58,43 @@ export default function ProfileClient({
     increment();
   }, [initialProfile.id, currentUser]);
 
-  // 2. Reset pagination when tab/sort changes
+  // --- NEW: FETCH PUBLIC CONNECTIONS ---
+  const fetchConnectionsList = async (type) => {
+    setConnLoading(true);
+    setConnectionType(type);
+    setIsConnectionsOpen(true);
+
+    try {
+        let query;
+        if (type === 'followers') {
+            query = supabase
+                .from('follows')
+                .select('profile:profiles!follows_follower_id_fkey(*)')
+                .eq('following_id', initialProfile.id);
+        } else {
+            query = supabase
+                .from('follows')
+                .select('profile:profiles!follows_following_id_fkey(*)')
+                .eq('follower_id', initialProfile.id);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        setConnections(data.map(d => d.profile));
+    } catch (err) {
+        toast.error("NODE_REGISTRY_SYNC_FAILED");
+    } finally {
+        setConnLoading(false);
+    }
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, sortOrder, popularMetric]);
 
-  // 3. SORTING LOGIC (Only applies to Work/Saved tabs)
   const sortedProjects = useMemo(() => {
-    // If we are in the Competitions tab, this list isn't used directly
     if (activeTab === 'competitions') return [];
-
     let list = activeTab === "work" ? [...initialWork] : [...initialSaved];
-
     return list.sort((a, b) => {
         if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
         if (sortOrder === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
@@ -75,7 +111,6 @@ export default function ProfileClient({
     });
   }, [initialWork, initialSaved, activeTab, sortOrder, popularMetric]);
 
-  // 4. STATS AGGREGATION
   const publicStats = {
     projects: initialWork.length,
     followers: initialFollowerStats.followers,
@@ -85,7 +120,6 @@ export default function ProfileClient({
     projectTraffic: initialWork.reduce((acc, p) => acc + (p.views || 0), 0)
   };
 
-  // 5. PAGINATION CALCULATION (For Work/Saved)
   const totalPages = Math.ceil(sortedProjects.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentProjects = sortedProjects.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -98,7 +132,8 @@ export default function ProfileClient({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
           <div className="lg:col-span-2">
-              <ProfileStats stats={publicStats} />
+              {/* Updated ProfileStats with Click Handler */}
+              <ProfileStats stats={publicStats} onStatClick={fetchConnectionsList} />
           </div>
           <div className="lg:col-span-1">
               <ActivityGraph projects={initialWork} />
@@ -120,12 +155,9 @@ export default function ProfileClient({
           judgingHistory={judgingHistory}
       />
 
-      {/* Conditional Rendering: Work/Saved Grid OR Competition View is handled inside ProfileTabs (actually here based on your request) */}
       {(activeTab === 'work' || activeTab === 'saved') && (
           currentProjects.length > 0 ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  
-                  {/* GRID VIEW */}
                   {viewMode === 'grid' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {currentProjects.map((project) => (
@@ -133,26 +165,13 @@ export default function ProfileClient({
                         ))}
                     </div>
                   )}
-
-                  {/* LIST VIEW (The New Compact Layout) */}
                   {viewMode === 'list' && (
                     <div className="flex flex-col border-t border-border">
-                       {/* Optional Header Row for Data Clarity */}
-                       <div className="hidden md:flex items-center justify-between px-3 py-2 bg-secondary/10 border-b border-border text-[9px] font-mono text-muted-foreground uppercase tracking-widest">
-                           <span className="pl-24">Identity</span>
-                           <div className="flex gap-16 pr-12">
-                               <span className="w-16">Metrics</span>
-                               <span className="w-24 text-right">Deployed</span>
-                           </div>
-                       </div>
-
-                       {/* Rows */}
                        {currentProjects.map((project) => (
                          <ProjectListItem key={project.id} project={project} />
                        ))}
                     </div>
                   )}
-                  
                   {totalPages > 1 && (
                       <div className="mt-12">
                           <Pagination 
@@ -172,6 +191,15 @@ export default function ProfileClient({
               </div>
           )
       )}
+
+      {/* --- SHARED NETWORK REGISTRY MODAL --- */}
+      <NetworkRegistry 
+          isOpen={isConnectionsOpen}
+          onClose={() => setIsConnectionsOpen(false)}
+          type={connectionType}
+          connections={connections}
+          loading={connLoading}
+      />
     </div>
   );
 }
