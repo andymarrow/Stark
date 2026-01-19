@@ -26,10 +26,10 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   // Roles & Permissions
   const [role, setRole] = useState('member'); 
   const [myStatus, setMyStatus] = useState(null); // Null initially to detect "not joined"
-  const [otherStatus, setOtherStatus] = useState('active'); 
+  const [otherStatus, setOtherStatus] = useState('active'); // Status of the other person (for one-shot logic)
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   
-  // Interactive State
+  // Interactive & UI State
   const [loading, setLoading] = useState(false);
   const [pinnedMsg, setPinnedMsg] = useState(null);
   const [messageToEdit, setMessageToEdit] = useState(null);
@@ -44,7 +44,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   const actualConvId = isVirtual ? null : convId;
   const currentViewId = activeTab === "discussion" && linkedGroupId ? linkedGroupId : actualConvId;
 
-  // Sync / Fetch Conversation Metadata
+  // Sync Metadata on Mount/Change
   useEffect(() => {
     if (isVirtual) {
         setConversation(convId);
@@ -61,8 +61,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
             setIsChannelLive(initialData.is_live);
         }
     } else if (actualConvId) {
-        // --- DEEP LINK HANDLER ---
-        // If user joins via URL, we need to fetch what this node actually is
+        // Deep Link: Fetch metadata for a conversation joined via URL link
         const fetchDeepLinkMeta = async () => {
             setLoading(true);
             const { data, error } = await supabase
@@ -75,7 +74,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
                 setConversation(data);
                 setIsChannelLive(data.is_live);
             } else {
-                toast.error("Node not found", { description: "The uplink signal is invalid." });
+                toast.error("Handshake Failed", { description: "The node signal is offline or restricted." });
             }
             setLoading(false);
         };
@@ -83,7 +82,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     }
   }, [convId, initialData, isVirtual, actualConvId]);
 
-  // Fetch Linked Group ID for Channels
+  // Fetch Linked Discussion Group ID for Channels
   useEffect(() => {
     if (conversation?.type === 'channel' && !linkedGroupId && actualConvId) {
         const fetchLink = async () => {
@@ -94,9 +93,12 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     }
   }, [actualConvId, conversation?.type, linkedGroupId]);
 
-  // --- 2. DATA FETCHING & REALTIME ---
+  // --- 2. DATA FETCHING & REALTIME HUB ---
   useEffect(() => {
     if (!currentViewId || !user) return;
+
+    // HEARTBEAT: Reset unread count immediately upon entering a view
+    supabase.rpc('reset_unread_count', { p_conversation_id: currentViewId, p_user_id: user.id });
 
     const fetchMessages = async () => {
         const { data } = await supabase
@@ -122,7 +124,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
                 setRole(me.role || 'member');
                 setMyStatus(me.status || 'active');
             } else {
-                setMyStatus(null); // User is viewing but hasn't joined
+                setMyStatus(null); 
             }
             if (them) {
                 setOtherStatus(them.status || 'active');
@@ -148,6 +150,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     fetchParticipantDetails();
     fetchLatestPin();
 
+    // --- REALTIME CHANNEL: MULTI-EVENT LISTENER ---
     const channel = supabase.channel(`chat-room-${currentViewId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${currentViewId}` }, (payload) => {
           setMessages((prev) => {
@@ -155,6 +158,8 @@ export default function ChatWindow({ convId, onBack, initialData }) {
               return [...prev, payload.new];
           });
           setIsOtherTyping(false);
+          // Auto-reset unread if a new message arrives while we are active in the window
+          supabase.rpc('reset_unread_count', { p_conversation_id: currentViewId, p_user_id: user.id });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${currentViewId}` }, async (payload) => {
           setMessages((prev) => prev.map(msg => msg.id === payload.new.id ? payload.new : msg));
@@ -162,7 +167,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
           else if (pinnedMsg?.id === payload.new.id) fetchLatestPin();
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-          // REALTIME DELETE (Requires REPLICA IDENTITY FULL on DB)
+          // Removes message from UI instantly (Requires REPLICA IDENTITY FULL)
           setMessages((prev) => prev.filter(msg => msg.id !== payload.old.id));
           if (pinnedMsg?.id === payload.old.id) fetchLatestPin();
       })
@@ -174,7 +179,17 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     return () => { supabase.removeChannel(channel); };
   }, [currentViewId, user.id, pinnedMsg?.id]); 
 
-  // Live Status Listener
+  // HEARTBEAT RESET: Constant cleanup while window is active to kill "Ghost Notifications"
+  useEffect(() => {
+    if (currentViewId && user?.id && messages.length > 0) {
+        supabase.rpc('reset_unread_count', { 
+            p_conversation_id: currentViewId, 
+            p_user_id: user.id 
+        });
+    }
+  }, [messages.length, currentViewId, user?.id]);
+
+  // Live status listener for broadcast banners
   useEffect(() => {
     if (!actualConvId || conversation?.type !== 'channel') return;
 
@@ -187,17 +202,17 @@ export default function ChatWindow({ convId, onBack, initialData }) {
     return () => { supabase.removeChannel(channel); };
   }, [actualConvId, conversation?.type]);
 
-  // Auto Scroll
+  // Auto Scroll Engine
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isOtherTyping, activeTab]);
 
-  // --- 3. HANDLERS ---
+  // --- 3. CORE HANDLERS ---
   const handleSend = async (content, type = 'text', metadata = {}) => {
     try {
       let targetConvId = actualConvId;
 
-      // Virtual to Real Handshake Trigger
+      // THE HANDSHAKE PROTOCOL: Initialize database records on first signal send
       if (isVirtual) {
           const { data: newConv, error: convErr } = await supabase
             .from('conversations')
@@ -228,11 +243,12 @@ export default function ChatWindow({ convId, onBack, initialData }) {
         .eq('id', targetConvId);
 
       if (isVirtual) {
+          // Full state refresh to transition from Virtual to Persistent UI
           window.location.href = `/chat?id=${targetConvId}`;
       }
         
     } catch (err) {
-      toast.error("Transmission Failed");
+      toast.error("Transmission Error", { description: "The node rejected the signal packet." });
     }
   };
 
@@ -245,13 +261,13 @@ export default function ChatWindow({ convId, onBack, initialData }) {
             role: 'member'
         });
         setMyStatus('active');
-        toast.success("Community Frequency Acquired");
+        toast.success("Frequency Acquired", { description: "Node added to Primary directory." });
     } catch (error) {
-        toast.error("Join Failed");
+        toast.error("Join Protocol Failed");
     }
   };
 
-  // --- DERIVED CONSTANTS & LOGIC ---
+  // --- 4. DERIVED LOGIC & CONSTANTS ---
   const isChannel = conversation?.type === 'channel';
   const isDiscussion = activeTab === 'discussion';
   const isOwner = (conversation?.owner_id === user?.id) || (conversation?.ownerId === user?.id);
@@ -259,8 +275,10 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   const isJoined = myStatus === 'active';
   const canType = isDiscussion ? isJoined : (isChannel ? isOwner : isJoined);
   
-  // Handshake Logic
+  // Handshake restriction logic: Only applies to the initiator (Sender)
   const isSenderWaiting = conversation?.type === 'direct' && myStatus === 'active' && otherStatus === 'pending' && messages.some(m => m.sender_id === user?.id);
+  
+  // Handshake acceptance logic: Only applies to the recipient (Receiver)
   const isReceiver = conversation?.type === 'direct' && myStatus === 'pending';
 
   const displayedMessages = messages.filter(msg => {
@@ -273,10 +291,10 @@ export default function ChatWindow({ convId, onBack, initialData }) {
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
       
-      {/* 1. HEADER */}
+      {/* 1. STARK HEADER */}
       {conversation && <ChatHeader conversation={conversation} onBack={onBack} currentUser={user?.id} onSearch={setSearchFilter} />}
 
-      {/* 2. RECEIVER REQUEST BANNER */}
+      {/* 2. RECEIVER ACKNOWLEDGEMENT BANNER */}
       {isReceiver && !isVirtual && (
           <RequestBanner 
             conversationId={actualConvId} 
@@ -286,7 +304,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
           />
       )}
 
-      {/* 3. LIVE BANNER */}
+      {/* 3. LIVE TRANSMISSION BANNER */}
       {isChannelLive && !isOwner && (
         <div className="bg-red-600/10 border-b border-red-500/30 p-2 px-4 flex items-center justify-between animate-in slide-in-from-top-2 backdrop-blur-sm sticky top-[64px] z-30 shrink-0">
             <div className="flex items-center gap-2">
@@ -294,47 +312,57 @@ export default function ChatWindow({ convId, onBack, initialData }) {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                 </span>
-                <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Live Transmission in Progress</span>
+                <span className="text-[10px] font-bold text-red-500 uppercase tracking-widest font-mono">Live Session in Progress</span>
             </div>
             <button 
                 className="text-[10px] bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-sm font-mono uppercase transition-colors"
                 onClick={() => document.querySelector('button[title="Join Live Stream"]')?.click() || document.querySelector('button[title="Live Stream"]')?.click()}
             >
-                Join Stream ↗
+                Join Stage ↗
             </button>
         </div>
       )}
 
-      {/* 4. CHANNEL TOGGLE BAR */}
+      {/* 4. CHANNEL/DISCUSSION TOGGLE */}
       {isChannel && linkedGroupId && (
         <div className="flex items-center border-b border-border bg-secondary/5 shrink-0">
-            <button onClick={() => setActiveTab("main")} className={`flex-1 py-2 text-xs font-mono uppercase tracking-wider transition-colors ${activeTab === "main" ? "bg-accent/10 text-accent border-b-2 border-accent" : "text-muted-foreground hover:bg-secondary/10"}`}><Radio size={14} /> Broadcast</button>
-            <button onClick={() => setActiveTab("discussion")} className={`flex-1 py-2 text-xs font-mono uppercase tracking-wider transition-colors ${activeTab === "discussion" ? "bg-accent/10 text-accent border-b-2 border-accent" : "text-muted-foreground hover:bg-secondary/10"}`}><MessageSquare size={14} /> Discussion</button>
+            <button onClick={() => setActiveTab("main")} className={`flex-1 py-2 text-xs font-mono uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === "main" ? "bg-accent/10 text-accent border-b-2 border-accent" : "text-zinc-500 hover:bg-secondary/10"}`}><Radio size={14} /> Broadcast</button>
+            <button onClick={() => setActiveTab("discussion")} className={`flex-1 py-2 text-xs font-mono uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTab === "discussion" ? "bg-accent/10 text-accent border-b-2 border-accent" : "text-muted-foreground hover:bg-secondary/10"}`}><MessageSquare size={14} /> Discussion</button>
         </div>
       )}
 
       {pinnedMsg && <div className="shrink-0"><ChatPinnedMessage message={pinnedMsg} isAdmin={isOwner} onUnpin={() => setPinnedMsg(null)} /></div>}
 
-      {/* 5. MESSAGES AREA */}
+      {/* 5. SIGNAL STREAM AREA */}
       <div className="flex-1 min-h-0 relative overflow-hidden bg-background">
         <div ref={scrollRef} className="h-full overflow-y-auto p-4 custom-scrollbar">
             <div className="fixed inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
             
             <div className="relative z-10 pb-4">
                 {isSenderWaiting ? (
+                    /* --- SENDER LOCK INTERFACE --- */
                     <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6 animate-in fade-in zoom-in-95">
                         <div className="w-16 h-16 bg-secondary/20 border border-dashed border-border flex items-center justify-center mb-4">
                             <ShieldAlert className="text-accent opacity-50" size={32} />
                         </div>
                         <h3 className="text-sm font-mono font-bold uppercase tracking-widest text-foreground mb-2 text-wrap">Handshake_Pending</h3>
-                        <p className="text-[10px] text-muted-foreground uppercase leading-relaxed max-w-[240px]">
-                            Signal transmitted. Uplink is restricted until the recipient acknowledges the handshake.
+                        <p className="text-[10px] text-muted-foreground uppercase leading-relaxed max-w-[240px] font-mono">
+                            Signal transmitted. Uplink restricted until recipient acknowledges handshake.
                         </p>
                     </div>
                 ) : (
                     <>
                     {displayedMessages.map((msg) => (
-                        <MessageBubble key={msg.id} message={msg} isMe={msg.sender_id === user?.id} role={role} chatId={currentViewId} currentUserId={user?.id} onEdit={() => setMessageToEdit(msg)} onReply={setMessageToReply} />
+                        <MessageBubble 
+                            key={msg.id} 
+                            message={msg} 
+                            isMe={msg.sender_id === user?.id} 
+                            role={role} 
+                            chatId={currentViewId} 
+                            currentUserId={user?.id} 
+                            onEdit={() => setMessageToEdit(msg)} 
+                            onReply={setMessageToReply} 
+                        />
                     ))}
                     {isOtherTyping && (
                         <div className="flex justify-start mb-4 animate-in fade-in">
@@ -349,14 +377,23 @@ export default function ChatWindow({ convId, onBack, initialData }) {
         </div>
       </div>
 
-      {/* 6. FOOTER / INPUT / JOIN */}
+      {/* 6. SIGNAL INPUT / JOIN PROTOCOL */}
       <div className="shrink-0 relative z-20 bg-background border-t border-border">
           {isSenderWaiting ? null : canType ? (
-              <ChatInput onSend={handleSend} convId={currentViewId} editMessage={messageToEdit} onCancelEdit={() => setMessageToEdit(null)} replyMessage={messageToReply} onCancelReply={() => setMessageToReply(null)} />
+              <ChatInput 
+                onSend={handleSend} 
+                convId={currentViewId} 
+                editMessage={messageToEdit} 
+                onCancelEdit={() => setMessageToEdit(null)} 
+                replyMessage={messageToReply} 
+                onCancelReply={() => setMessageToReply(null)} 
+              />
           ) : (
               <div className="p-4 bg-secondary/5 flex items-center justify-center">
                   {!isJoined && (conversation?.is_public || conversation?.isPublic) ? (
-                      <Button onClick={handleJoin} className="bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase tracking-widest px-8"><UserPlus size={14} className="mr-2" /> Join community</Button>
+                      <Button onClick={handleJoin} className="bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase tracking-widest px-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all">
+                        <UserPlus size={14} className="mr-2" /> Join community
+                      </Button>
                   ) : !isJoined ? (
                       <div className="flex items-center gap-2 text-muted-foreground font-mono text-xs uppercase tracking-widest">
                          <Lock size={14} /> Private_Node_Restricted
@@ -365,7 +402,7 @@ export default function ChatWindow({ convId, onBack, initialData }) {
                       <div className="flex items-center gap-4 w-full justify-center">
                           <span className="text-xs font-mono text-muted-foreground uppercase flex items-center gap-2"><Lock size={12} /> Read-Only Frequency</span>
                           {linkedGroupId && activeTab === 'main' && (
-                              <Button onClick={() => setActiveTab("discussion")} variant="outline" className="h-8 rounded-none border-accent/50 text-accent hover:bg-accent hover:text-white font-mono text-[10px] uppercase">Go to Discussion <ArrowRight size={12} className="ml-2" /></Button>
+                              <Button onClick={() => setActiveTab("discussion")} variant="outline" className="h-8 rounded-none border-accent/50 text-accent hover:bg-accent hover:text-white font-mono text-[10px] uppercase">Discussion Group <ArrowRight size={12} className="ml-2" /></Button>
                           )}
                       </div>
                   )}

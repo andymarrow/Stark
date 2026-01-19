@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 import Image from "next/image";
-import { motion,AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const EMOJI_SET = ["💻", "🚀", "🔥", "✨", "🎨", "🛠️", "📦", "⚡", "💯", "✅", "❌", "❤️", "😂", "🤔", "🙌", "👋"];
 
@@ -205,19 +205,20 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
         </div>
       )}
 
-      {/* --- UI BANNERS (ABSOLUTE OVERLAYS) --- */}
+      {/* --- UI BANNERS (FIXED POSITIONING TO PREVENT OVERLAP) --- */}
       <AnimatePresence>
         {editMessage && (
             <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="absolute top-0 left-0 right-0 -translate-y-full bg-accent/10 border-t border-accent/20 p-2 flex justify-between items-center px-4 backdrop-blur-md z-50"
+                exit={{ opacity: 0, y: 5 }}
+                /* Using bottom-full instead of top-0 ensures it stays above the growing textarea */
+                className="absolute bottom-full left-0 right-0 bg-accent border-t border-accent p-2 flex justify-between items-center px-4 z-50 mb-px"
             >
-                <span className="text-[10px] font-mono text-accent uppercase flex items-center gap-2">
+                <span className="text-[10px] font-mono text-white uppercase flex items-center gap-2">
                     <Edit3 size={12} /> Refining Payload ({editMessage.edit_count || 0}/2)
                 </span>
-                <button onClick={() => { onCancelEdit(); setText(""); }} className="text-muted-foreground hover:text-foreground">
+                <button onClick={() => { onCancelEdit(); setText(""); }} className="text-white/80 hover:text-white transition-colors">
                     <X size={14} />
                 </button>
             </motion.div>
@@ -225,15 +226,16 @@ export default function ChatInput({ onSend, convId, editMessage, onCancelEdit, r
 
         {replyMessage && !editMessage && (
             <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="absolute top-0 left-0 right-0 -translate-y-full bg-secondary/95 border-t border-border p-2 flex justify-between items-center px-4 backdrop-blur-md z-50"
+                exit={{ opacity: 0, y: 5 }}
+                /* Using bottom-full instead of top-0 ensures it stays above the growing textarea */
+                className="absolute bottom-full left-0 right-0 bg-secondary/95 border-t border-border p-2 flex justify-between items-center px-4 backdrop-blur-md z-50 mb-px"
             >
                 <span className="text-[10px] font-mono text-foreground uppercase flex items-center gap-2 truncate max-w-[80%]">
                     <Reply size={12} /> Replying to: "{replyMessage.text.substring(0, 40)}..."
                 </span>
-                <button onClick={onCancelReply} className="text-muted-foreground hover:text-foreground">
+                <button onClick={onCancelReply} className="text-muted-foreground hover:text-foreground transition-colors">
                     <X size={14} />
                 </button>
             </motion.div>

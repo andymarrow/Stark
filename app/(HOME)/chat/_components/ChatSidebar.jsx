@@ -32,42 +32,32 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
         setIsSearching(true);
         try {
-            // 1. STRICT BLACKLIST FETCH
-            // Fetch everyone I blocked OR who blocked me
             const { data: blockedList } = await supabase
                 .from('blocked_users')
                 .select('blocker_id, blocked_id')
                 .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
 
-            // Create a clean set of IDs to hide (excluding myself)
             const restrictedIds = new Set();
             blockedList?.forEach(row => {
                 if (row.blocker_id !== user.id) restrictedIds.add(row.blocker_id);
                 if (row.blocked_id !== user.id) restrictedIds.add(row.blocked_id);
             });
 
-            // 2. SEARCH DIRECTORY
             let userQuery = supabase
                 .from('profiles')
                 .select('id, username, full_name, avatar_url, settings')
-                // Match username or name
                 .or(`username.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%`)
-                // Exclude self
                 .neq('id', user.id)
-                // Respect privacy settings
                 .not('settings->>global_search', 'eq', 'false')
                 .limit(10);
             
-            // APPLY BLACKLIST
             if (restrictedIds.size > 0) {
-                const idList = Array.from(restrictedIds);
-                userQuery = userQuery.filter('id', 'not.in', `(${idList.join(',')})`);
+                userQuery = userQuery.filter('id', 'not.in', `(${Array.from(restrictedIds).join(',')})`);
             }
 
-            const { data: users, error: userError } = await userQuery;
+            const { data: users } = await userQuery;
 
-            // 3. SEARCH PUBLIC COMMUNITIES (Channels and Public Groups)
-            const { data: communities, error: channelError } = await supabase
+            const { data: channels } = await supabase
                 .from('conversations')
                 .select('id, title, type, avatar_url')
                 .eq('is_public', true)
@@ -75,13 +65,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 .ilike('title', `%${searchTerm}%`)
                 .limit(10);
 
-            if (userError || channelError) throw new Error("Search Failure");
-
-            setSearchResults({ 
-                users: users || [], 
-                channels: communities || [] 
-            });
-
+            setSearchResults({ users: users || [], channels: channels || [] });
         } catch (error) {
             console.error("Global Search Error:", error);
         } finally {
@@ -95,18 +79,10 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
   const handleStartChat = async (targetUser) => {
     try {
-        // 1. Check if a real conversation already exists
-        const { data: existingId } = await supabase.rpc('get_conversation_id_by_user', { 
-            target_user_id: targetUser.id 
-        });
-        
+        const { data: existingId } = await supabase.rpc('get_conversation_id_by_user', { target_user_id: targetUser.id });
         if (existingId) {
-            // If it exists, select it normally
             onSelectChat(existingId);
-            setSearchTerm("");
         } else {
-            // 2. VIRTUAL CHAT MODE
-            // Handshake only triggers when the first message is sent in ChatWindow
             onSelectChat({
                 id: 'virtual-' + targetUser.id,
                 isVirtual: true,
@@ -115,34 +91,16 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 avatar: targetUser.avatar_url,
                 targetId: targetUser.id
             });
-            setSearchTerm("");
         }
+        setSearchTerm("");
     } catch (error) {
-        console.error(error);
         toast.error("Failed to initiate link");
     }
   };
 
-  const handleJoinChannel = async (channelId) => {
-    try {
-        const { data: existing } = await supabase
-            .from('conversation_participants')
-            .select('*')
-            .eq('conversation_id', channelId)
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-        if (existing) {
-            // If already a member, just open it
-            onSelectChat(channelId);
-        } else {
-            // Pass to ChatWindow. It will detect user is not a member and show "Join" button.
-            onSelectChat(channelId);
-        }
-        setSearchTerm("");
-    } catch (error) {
-        toast.error("Access Denied");
-    }
+  const handleOpenCommunity = async (id) => {
+    onSelectChat(id);
+    setSearchTerm("");
   };
 
   const showGlobalResults = searchTerm.length >= 3;
@@ -152,7 +110,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
   return (
     <div className="flex flex-col h-full bg-background border-r border-border">
-      <div className="p-4 border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-10">
+      <div className="p-4 border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-10 shrink-0">
         <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold tracking-tight uppercase font-mono">Signals</h1>
             <div className="flex gap-1">
@@ -172,7 +130,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 placeholder="Search frequencies..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full h-10 pl-10 pr-4 bg-secondary/5 border border-border focus:border-accent outline-none text-sm font-mono transition-all placeholder:text-zinc-600"
+                className="w-full h-10 pl-10 pr-4 bg-secondary/5 border border-border focus:border-accent outline-none text-sm font-mono transition-all placeholder:text-zinc-600 text-foreground"
             />
         </div>
         
@@ -206,18 +164,11 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                         </div>
                     ) : searchResults.users.length > 0 ? (
                         searchResults.users.map(u => (
-                            <button 
-                                key={u.id}
-                                onClick={() => handleStartChat(u)}
-                                className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left"
-                            >
+                            <button key={u.id} onClick={() => handleStartChat(u)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
                                 <div className="w-8 h-8 relative rounded-full overflow-hidden bg-secondary border border-border">
                                     <img src={u.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} className="w-full h-full object-cover" />
                                 </div>
-                                <div>
-                                    <div className="text-sm font-bold text-foreground">@{u.username}</div>
-                                    <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Initialize Handshake</div>
-                                </div>
+                                <div><div className="text-sm font-bold text-foreground">@{u.username}</div><div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Initialize Handshake</div></div>
                                 <UserPlus size={14} className="ml-auto text-muted-foreground" />
                             </button>
                         ))
@@ -230,14 +181,9 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                     <h3 className="text-[10px] font-mono uppercase text-muted-foreground mb-2 px-2">Public Communities</h3>
                     {searchResults.channels.length > 0 ? (
                         searchResults.channels.map(c => (
-                            <button key={c.id} onClick={() => handleJoinChannel(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
-                                <div className="p-2 bg-secondary text-accent border border-border rounded-none">
-                                    {c.type === 'channel' ? <Radio size={14} /> : <Users size={14} />}
-                                </div>
-                                <div>
-                                    <div className="text-sm font-bold text-foreground">{c.title}</div>
-                                    <div className="text-[10px] text-muted-foreground font-mono uppercase">Browse Signal</div>
-                                </div>
+                            <button key={c.id} onClick={() => handleOpenCommunity(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
+                                <div className="p-2 bg-secondary text-accent border border-border rounded-none">{c.type === 'channel' ? <Radio size={14} /> : <Users size={14} />}</div>
+                                <div><div className="text-sm font-bold text-foreground">{c.title}</div><div className="text-[10px] text-muted-foreground font-mono uppercase">Browse Signal</div></div>
                             </button>
                         ))
                     ) : (
@@ -248,7 +194,12 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
         ) : (
             filteredLocalChats.length > 0 ? (
                 filteredLocalChats.map((chat) => (
-                    <ChatListItem key={chat.id} chat={chat} isActive={selectedChatId === chat.id} onClick={() => onSelectChat(chat.id)} />
+                    <ChatListItem 
+                        key={chat.id} 
+                        chat={chat} 
+                        isActive={selectedChatId === chat.id || selectedChatId?.id === chat.id} 
+                        onClick={() => onSelectChat(chat.id)} 
+                    />
                 ))
             ) : (
                 <div className="p-8 text-center flex flex-col items-center opacity-50 mt-10">
