@@ -295,7 +295,7 @@ function ProfileContent() {
             </div>
         </DialogContent>
       </Dialog>
-      // Inside the return of ProfileContent
+     
       <NetworkRegistry 
         isOpen={isConnectionsOpen} 
         onClose={() => setIsConnectionsOpen(false)} 
