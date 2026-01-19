@@ -22,20 +22,52 @@ export const AuthProvider = ({ children }) => {
 
     checkSession();
 
-    // 2. Listen for changes (Login, Logout, Auto-refresh)
+    // 2. Listen for Auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      
-      // Optional: Redirect logic could go here, but usually better handled in components
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // 3. Helper functions to keep components clean
+  // --- NEW: GLOBAL PRESENCE & HEARTBEAT ---
+  useEffect(() => {
+    if (!user) return;
+
+    // A. Create a global channel for the entire platform
+    const channel = supabase.channel('stark-global-presence', {
+        config: { presence: { key: user.id } }
+    });
+
+    channel
+    .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
+        // When this specific user leaves the site (closes all tabs)
+        if (leftPresences.some(p => p.presence_ref === user.id)) {
+            // Update the Database timestamp
+            await supabase.rpc('update_last_seen', { p_user_id: user.id });
+        }
+    })
+    .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+            // Track the user across the site
+            await channel.track({ online_at: new Date().toISOString() });
+            
+            // Mark as active in the DB immediately upon opening the site
+            await supabase.rpc('update_last_seen', { p_user_id: user.id });
+        }
+    });
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const signOut = async () => {
+    // Before signing out, record the last seen timestamp
+    if (user) await supabase.rpc('update_last_seen', { p_user_id: user.id });
+    
     await supabase.auth.signOut();
     router.push("/login");
   };

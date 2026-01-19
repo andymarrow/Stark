@@ -16,10 +16,10 @@ function ChatContent() {
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState(new Set()); // Unique user IDs currently on Stark
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
-  // Use Ref to keep track of the open chat across all closures
   const currentChatRef = useRef(chatIdFromUrl);
 
   // --- 1. DATA FETCHING ---
@@ -37,7 +37,8 @@ function ChatContent() {
             id, type, title, description, avatar_url, is_public,
             last_message, last_message_at, owner_id, linked_group_id, 
             participants:conversation_participants (
-              profile:profiles (id, username, avatar_url, full_name)
+              user_id,
+              profile:profiles (id, username, avatar_url, full_name, last_seen_at)
             )
           )
         `)
@@ -48,10 +49,14 @@ function ChatContent() {
       const formatted = (data || []).map(item => {
         const conv = item.conversation;
         if (!conv) return null; 
-        const otherParticipant = conv.participants.find(p => p.profile.id !== user.id);
+
+        // --- STARK LOGIC: FIND THE OTHER AGENT ---
+        // We find the participant who is NOT the current logged-in user
+        const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
+        const profile = otherParticipant?.profile;
         
         let displayName = conv.type === 'direct' 
-            ? (otherParticipant?.profile.full_name || otherParticipant?.profile.username)
+            ? (profile?.full_name || profile?.username || "Unknown Node")
             : conv.title;
 
         return {
@@ -60,89 +65,106 @@ function ChatContent() {
           title: conv.title, 
           description: conv.description, 
           myStatus: item.status, 
-          // --- READ GUARD ---
-          // If this conversation is currently open, always report 0 unread
+          // READ GUARD: If window is open, force count to 0 locally
           unreadCount: currentChatRef.current === conv.id ? 0 : (item.unread_count || 0),
           lastMessage: conv.last_message,
           lastMessageAt: conv.last_message_at, 
           lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
           name: displayName,
-          avatar: conv.type === 'direct' ? otherParticipant?.profile.avatar_url : conv.avatar_url,
+          avatar: conv.type === 'direct' ? profile?.avatar_url : conv.avatar_url,
+          
+          // --- UNIQUE STATUS DATA ---
+          lastSeen: profile?.last_seen_at, 
+          otherUserId: profile?.id, // Unique ID used for onlineUsers.has()
+          
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
           linkedGroupId: conv.linked_group_id
         };
       })
       .filter(Boolean)
+      // TELEGRAM SORT: Most recent activity at the top
       .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0));
 
       setConversations(formatted);
     } catch (err) {
-      console.error(err);
+      console.error("Signal Retrieval Error:", err);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  // --- 2. SELECTION & RESET LOGIC ---
-  const handleSelectChat = useCallback(async (id) => {
+  // --- 2. SELECTION & ACKNOWLEDGEMENT ---
+  const handleSelectChat = (id) => {
     const targetId = typeof id === 'object' ? id.id : id;
     setSelectedConvId(id);
     currentChatRef.current = targetId;
 
     if (typeof id === 'string') {
-        // 1. Optimistic Clear (UI feels instant)
+        // Optimistic clear to kill red bubble instantly
         setConversations(prev => prev.map(c => 
             c.id === targetId ? { ...c, unreadCount: 0 } : c
         ));
-
-        // 2. Persistent Clear (Database update)
-        await supabase.rpc('reset_unread_count', { 
-            p_conversation_id: targetId, 
-            p_user_id: user.id 
-        });
+        // Reset count in database
+        supabase.rpc('reset_unread_count', { p_conversation_id: targetId, p_user_id: user.id });
     }
-  }, [user?.id]);
+  };
 
-  // Sync selection when URL changes
   useEffect(() => {
-    if (chatIdFromUrl && user) {
-        handleSelectChat(chatIdFromUrl);
-    }
-  }, [chatIdFromUrl, user?.id, handleSelectChat]);
+    if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
+  }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. REALTIME SYNC ENGINE ---
+  // --- 3. REALTIME ENGINE & GLOBAL PRESENCE ---
   useEffect(() => {
     if (user) {
       fetchConversations();
       
-      const channel = supabase
-        .channel('sidebar-realtime-v4')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-            fetchConversations(true);
+      // A. GLOBAL PRESENCE: Subscribing to the same channel as AuthContext
+      const presenceChannel = supabase.channel('stark-global-presence', {
+        config: { presence: { key: user.id } }
+      });
+
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          // Extract unique User IDs from the presence state
+          setOnlineUsers(new Set(Object.keys(state)));
         })
+        .subscribe();
+
+      // B. DATA SYNC: Messages, Metadata, and Profile Updates
+      const dataChannel = supabase
+        .channel('sidebar-sync-v7')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
         .on('postgres_changes', { 
             event: 'UPDATE', 
             schema: 'public', 
             table: 'conversation_participants', 
             filter: `user_id=eq.${user.id}` 
         }, (payload) => {
-            // If update tries to set unread for currently open chat, force it back to 0
+            // If new unread arrives for the OPEN chat, auto-reset it
             if (payload.new.conversation_id === currentChatRef.current && payload.new.unread_count > 0) {
-                 supabase.rpc('reset_unread_count', { 
-                    p_conversation_id: payload.new.conversation_id, 
-                    p_user_id: user.id 
-                 });
+                 supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
                  return;
             }
             fetchConversations(true);
         })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-            fetchConversations(true); // Re-sorts instantly on any new message
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+            if (payload.new.conversation_id === currentChatRef.current) {
+                supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
+            }
+            fetchConversations(true); // Triggers re-sort
+        })
+        // LISTEN FOR LAST_SEEN_AT UPDATES (When someone else goes offline)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
+            fetchConversations(true);
         })
         .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      return () => { 
+          supabase.removeChannel(presenceChannel); 
+          supabase.removeChannel(dataChannel); 
+      };
     }
   }, [user, fetchConversations]);
 
@@ -158,6 +180,7 @@ function ChatContent() {
 
   return (
     <div className="fixed inset-0 md:top-16 bottom-16 md:bottom-0 bg-background flex overflow-hidden">
+      {/* SIDEBAR PANE */}
       <div className={`
         w-full md:w-[350px] lg:w-[400px] flex-shrink-0 h-full border-r border-border bg-background transition-transform duration-300 ease-in-out absolute md:relative z-10
         ${selectedConvId ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
@@ -168,9 +191,11 @@ function ChatContent() {
             onSelectChat={handleSelectChat}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
+            onlineUsers={onlineUsers} 
         />
       </div>
 
+      {/* WINDOW PANE */}
       <div className={`flex-1 h-full bg-secondary/5 relative transition-transform duration-300 ease-in-out absolute md:relative inset-0 md:inset-auto z-20 md:z-0 ${selectedConvId ? 'translate-x-0' : 'translate-x-full md:translate-x-0'} md:block`}>
         {selectedConvId ? (
            <ChatWindow 
@@ -186,7 +211,7 @@ function ChatContent() {
                     <MessageSquareDashed size={40} className="text-accent opacity-50" />
                 </div>
                 <h2 className="text-xl font-bold text-foreground mb-2 font-mono uppercase tracking-widest">Select a Channel</h2>
-                <p className="max-w-xs font-light text-sm text-muted-foreground font-mono uppercase text-wrap">Status: Awaiting_Input</p>
+                <p className="max-w-xs font-light text-sm text-muted-foreground font-mono uppercase">Status: Awaiting_Input</p>
               </div>
            </div>
         )}

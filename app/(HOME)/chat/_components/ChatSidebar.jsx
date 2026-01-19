@@ -15,7 +15,7 @@ const TABS = [
     { id: "REQUESTS", label: "Requests", icon: PenSquare } 
 ];
 
-export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, activeTab, setActiveTab }) {
+export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, activeTab, setActiveTab, onlineUsers = new Set() }) {
   const { user } = useAuth();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -32,6 +32,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
         setIsSearching(true);
         try {
+            // 1. Fetch Blacklist to ensure strict invisibility
             const { data: blockedList } = await supabase
                 .from('blocked_users')
                 .select('blocker_id, blocked_id')
@@ -43,6 +44,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 if (row.blocked_id !== user.id) restrictedIds.add(row.blocked_id);
             });
 
+            // 2. Search Directory
             let userQuery = supabase
                 .from('profiles')
                 .select('id, username, full_name, avatar_url, settings')
@@ -52,11 +54,13 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 .limit(10);
             
             if (restrictedIds.size > 0) {
-                userQuery = userQuery.filter('id', 'not.in', `(${Array.from(restrictedIds).join(',')})`);
+                const idList = Array.from(restrictedIds);
+                userQuery = userQuery.filter('id', 'not.in', `(${idList.join(',')})`);
             }
 
             const { data: users } = await userQuery;
 
+            // 3. Search Public Communities
             const { data: channels } = await supabase
                 .from('conversations')
                 .select('id, title, type, avatar_url')
@@ -65,7 +69,11 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 .ilike('title', `%${searchTerm}%`)
                 .limit(10);
 
-            setSearchResults({ users: users || [], channels: channels || [] });
+            setSearchResults({ 
+                users: users || [], 
+                channels: channels || [] 
+            });
+
         } catch (error) {
             console.error("Global Search Error:", error);
         } finally {
@@ -79,10 +87,15 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
 
   const handleStartChat = async (targetUser) => {
     try {
-        const { data: existingId } = await supabase.rpc('get_conversation_id_by_user', { target_user_id: targetUser.id });
+        const { data: existingId } = await supabase.rpc('get_conversation_id_by_user', { 
+            target_user_id: targetUser.id 
+        });
+        
         if (existingId) {
             onSelectChat(existingId);
+            setSearchTerm("");
         } else {
+            // Initiate Virtual Handshake
             onSelectChat({
                 id: 'virtual-' + targetUser.id,
                 isVirtual: true,
@@ -91,14 +104,15 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                 avatar: targetUser.avatar_url,
                 targetId: targetUser.id
             });
+            setSearchTerm("");
         }
-        setSearchTerm("");
     } catch (error) {
+        console.error(error);
         toast.error("Failed to initiate link");
     }
   };
 
-  const handleOpenCommunity = async (id) => {
+  const handleOpenCommunity = (id) => {
     onSelectChat(id);
     setSearchTerm("");
   };
@@ -112,7 +126,7 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
     <div className="flex flex-col h-full bg-background border-r border-border">
       <div className="p-4 border-b border-border bg-background/95 backdrop-blur-sm sticky top-0 z-10 shrink-0">
         <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold tracking-tight uppercase font-mono">Signals</h1>
+            <h1 className="text-xl font-bold tracking-tight uppercase font-mono text-foreground">Signals</h1>
             <div className="flex gap-1">
                 <button onClick={() => setIsCreateOpen(true)} className="p-2 bg-secondary/10 hover:bg-accent hover:text-white transition-colors border border-transparent hover:border-accent">
                     <Plus size={18} />
@@ -164,12 +178,23 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                         </div>
                     ) : searchResults.users.length > 0 ? (
                         searchResults.users.map(u => (
-                            <button key={u.id} onClick={() => handleStartChat(u)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
+                            <button 
+                                key={u.id} 
+                                onClick={() => handleStartChat(u)} 
+                                className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left group"
+                            >
                                 <div className="w-8 h-8 relative rounded-full overflow-hidden bg-secondary border border-border">
                                     <img src={u.avatar_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} className="w-full h-full object-cover" />
+                                    {/* Real-time Presence Indicator for Global Search */}
+                                    {onlineUsers.has(u.id) && (
+                                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background animate-pulse" />
+                                    )}
                                 </div>
-                                <div><div className="text-sm font-bold text-foreground">@{u.username}</div><div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Initialize Handshake</div></div>
-                                <UserPlus size={14} className="ml-auto text-muted-foreground" />
+                                <div>
+                                    <div className="text-sm font-bold text-foreground">@{u.username}</div>
+                                    <div className="text-[10px] text-muted-foreground font-mono uppercase tracking-tighter">Initialize Handshake</div>
+                                </div>
+                                <UserPlus size={14} className="ml-auto text-muted-foreground group-hover:text-accent transition-colors" />
                             </button>
                         ))
                     ) : (
@@ -181,9 +206,14 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                     <h3 className="text-[10px] font-mono uppercase text-muted-foreground mb-2 px-2">Public Communities</h3>
                     {searchResults.channels.length > 0 ? (
                         searchResults.channels.map(c => (
-                            <button key={c.id} onClick={() => handleOpenCommunity(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left">
-                                <div className="p-2 bg-secondary text-accent border border-border rounded-none">{c.type === 'channel' ? <Radio size={14} /> : <Users size={14} />}</div>
-                                <div><div className="text-sm font-bold text-foreground">{c.title}</div><div className="text-[10px] text-muted-foreground font-mono uppercase">Browse Signal</div></div>
+                            <button key={c.id} onClick={() => handleOpenCommunity(c.id)} className="w-full flex items-center gap-3 p-2 hover:bg-secondary/10 transition-colors text-left group">
+                                <div className="p-2 bg-secondary text-accent border border-border rounded-none group-hover:border-accent transition-colors">
+                                    {c.type === 'channel' ? <Radio size={14} /> : <Users size={14} />}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-bold text-foreground">{c.title}</div>
+                                    <div className="text-[10px] text-muted-foreground font-mono uppercase">Browse Signal</div>
+                                </div>
                             </button>
                         ))
                     ) : (
@@ -197,7 +227,9 @@ export default function ChatSidebar({ chats = [], selectedChatId, onSelectChat, 
                     <ChatListItem 
                         key={chat.id} 
                         chat={chat} 
-                        isActive={selectedChatId === chat.id || selectedChatId?.id === chat.id} 
+                        // Comparison handles both direct IDs and Virtual Objects
+                        isActive={selectedChatId === chat.id || (selectedChatId && typeof selectedChatId === 'object' && selectedChatId.id === chat.id)} 
+                        isOnline={chat.type === 'direct' ? onlineUsers.has(chat.otherUserId) : false}
                         onClick={() => onSelectChat(chat.id)} 
                     />
                 ))
