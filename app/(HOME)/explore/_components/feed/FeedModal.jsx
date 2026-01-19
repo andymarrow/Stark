@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react"; // Added useMemo
 import Image from "next/image";
 import Link from "next/link";
 import { 
@@ -28,7 +28,7 @@ const getEmbedUrl = (url) => {
 
     if (videoId) {
         const cleanId = videoId.split("?")[0].split("/")[0];
-        return `https://www.youtube.com/embed/${cleanId}?autoplay=1&rel=0`;
+        return `https://www.youtube.com/embed/${cleanId}?autoplay=1&mute=0`;
     }
     return url;
 };
@@ -68,6 +68,30 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
         setIsDescExpanded(false); 
     }
   }, [isOpen, item, initialIndex]);
+
+  // --- PARSE CONTENT (NEW) ---
+  const displayContent = useMemo(() => {
+      if (!item) return "";
+      
+      const rawDescription = isChangelog 
+        ? (typeof item.content === 'object' ? (item.content.text || item.title) : (item.content || item.title)) 
+        : (item.description || "");
+        
+      // 1. Parse Mentions
+      const parsed = rawDescription.replace(
+         /@\[([^\]]+)\]\(([^)]+)\)/g, 
+         '[@$1](/profile/$2)'
+      );
+
+      // 2. Handle Truncation
+      const isLongDesc = parsed.length > 200;
+      if (!isDescExpanded && isLongDesc) {
+          return parsed.slice(0, 200) + "...";
+      }
+      return parsed;
+  }, [item, isChangelog, isDescExpanded]);
+
+  const isLongContent = (item?.description || "").length > 200; // Simplified check for showing button
 
   const checkLikeStatus = async () => {
       if (!user) return;
@@ -134,10 +158,6 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
 
   if (!item) return null;
 
-  const rawDescription = isChangelog ? (typeof item.content === 'object' ? (item.content.text || item.title) : (item.content || item.title)) : (item.description || "");
-  const isLongDesc = rawDescription.length > 200;
-  const displayContent = isDescExpanded ? rawDescription : rawDescription.slice(0, 200) + (isLongDesc ? "..." : "");
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl w-full h-[100dvh] md:h-[90vh] p-0 gap-0 bg-black border-border overflow-hidden flex flex-col md:flex-row z-[9999]">
@@ -145,8 +165,6 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
         {/* --- LEFT: MEDIA STAGE --- */}
         <div className="flex-1 bg-zinc-950 relative flex items-center justify-center border-b md:border-b-0 md:border-r border-border min-h-[40vh] md:min-h-full transition-all group">
             
-            {/* Removed duplicate mobile close button here */}
-
             {item.media.length > 1 && (
                 <>
                     <button onClick={() => setIndex((prev) => (prev - 1 + item.media.length) % item.media.length)} className="absolute left-4 z-40 p-2 bg-black/50 text-white hover:bg-white/10 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -195,8 +213,6 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
                             </Link>
                             <span className="text-[10px] text-muted-foreground font-mono">@{item.author.username}</span>
                         </div>
-                        {/* Shadcn Dialog handles Close button automatically usually, but if custom close needed: */}
-                        {/* <button onClick={onClose}><X size={20} /></button> */}
                     </div>
                 </div>
             </div>
@@ -216,7 +232,7 @@ export default function FeedModal({ item, isOpen, onClose, initialIndex = 0 }) {
                                 </ReactMarkdown>
                             </div>
                             
-                            {isLongDesc && (
+                            {isLongContent && (
                                 <button onClick={() => setIsDescExpanded(!isDescExpanded)} className="text-muted-foreground hover:text-foreground mt-2 font-mono text-xs hover:underline block">
                                     {isDescExpanded ? "(show less)" : "...more"}
                                 </button>

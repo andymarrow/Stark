@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
-import { Send, MessageSquare, Loader2 } from "lucide-react";
+import { MessageSquare, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -10,11 +10,15 @@ import { useRouter } from "next/navigation";
 import CommentItem from "./CommentItem";
 import { getAvatar } from "@/constants/assets";
 
+// NEW IMPORTS FOR MENTIONS
+import { MentionsInput, Mention } from 'react-mentions';
+import mentionStyles from "./mentionStyles"; 
+
 export default function ProjectComments({ projectId, changelogId = null }) {
   const { user } = useAuth();
   const router = useRouter();
   const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState("");
+  const [newComment, setNewComment] = useState(""); // Holds value with markup
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
@@ -113,6 +117,25 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     }
   };
 
+  // --- MENTION FETCH LOGIC ---
+  const fetchUsers = async (query, callback) => {
+    if (!query) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .ilike('username', `${query}%`)
+      .limit(5);
+    
+    // Transform for react-mentions
+    const suggestions = data?.map(u => ({
+        id: u.username, 
+        display: u.username,
+        avatar: u.avatar_url 
+    })) || [];
+    
+    callback(suggestions);
+  };
+
   const handlePost = async () => {
     if (!user) {
         toast.error("Access Denied", { description: "You must be logged in to comment." });
@@ -126,8 +149,8 @@ export default function ProjectComments({ projectId, changelogId = null }) {
         const payload = {
             project_id: projectId,
             user_id: user.id,
-            content: newComment,
-            changelog_id: changelogId // Can be null
+            content: newComment, // Saves with markup like @[username](username)
+            changelog_id: changelogId 
         };
 
         const { data, error } = await supabase
@@ -190,16 +213,38 @@ export default function ProjectComments({ projectId, changelogId = null }) {
             )}
         </div>
         
-        <div className="flex-1 flex flex-col border border-border bg-secondary/5 focus-within:border-accent transition-colors overflow-hidden">
-            <textarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder={user ? "Input message stream..." : "Unauthorized. Login required."}
-                className="w-full bg-transparent p-4 min-h-[120px] text-sm font-mono outline-none resize-none leading-relaxed"
-                disabled={!user || submitting}
-            />
-            {/* Dedicated Action Bar */}
-            <div className="flex justify-between items-center p-2 border-t border-border bg-background/50">
+        <div className="flex-1 flex flex-col border border-border bg-secondary/5 focus-within:border-accent transition-colors overflow-hidden relative">
+            
+            {/* MENTION INPUT REPLACEMENT */}
+            <div className="w-full min-h-[120px] bg-transparent relative z-0">
+                <MentionsInput
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    style={mentionStyles}
+                    placeholder={user ? "Input message stream... (Type @ to mention)" : "Unauthorized. Login required."}
+                    className="mentions-input"
+                    disabled={!user || submitting}
+                    a11ySuggestionsListLabel={"Suggested users"}
+                >
+                    <Mention
+                        trigger="@"
+                        data={fetchUsers}
+                        renderSuggestion={(suggestion, search, highlightedDisplay, index, focused) => (
+                            <div className={`flex items-center gap-2 ${focused ? 'bg-zinc-800 text-white' : 'text-zinc-400'}`}>
+                                <div className="w-5 h-5 relative rounded-full overflow-hidden border border-zinc-700">
+                                    <img src={suggestion.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} alt="" className="object-cover w-full h-full"/>
+                                </div>
+                                <span className="text-xs font-mono">@{suggestion.display}</span>
+                            </div>
+                        )}
+                        displayTransform={(id, display) => `@${display}`}
+                        markup="@[__display__](__id__)" 
+                    />
+                </MentionsInput>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex justify-between items-center p-2 border-t border-border bg-background/50 relative z-10">
                 <span className="text-[9px] font-mono text-muted-foreground pl-2 uppercase tracking-tighter">
                     Status: {user ? 'Active_Node' : 'Restricted'}
                 </span>

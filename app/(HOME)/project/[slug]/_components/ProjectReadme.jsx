@@ -1,14 +1,26 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import ReactMarkdown from 'react-markdown';
 import { ChevronDown, ChevronUp, Terminal } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import remarkGfm from "remark-gfm"; // Import this to handle standard markdown features well
 
 export default function ProjectReadme({ content }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // If content is short (less than ~500 characters), show it all without buttons.
   const isShortContent = !content || content.length < 500;
+
+  // --- PARSE MENTIONS ---
+  const parsedContent = useMemo(() => {
+    if (!content) return "No documentation provided.";
+    
+    // Replace @[display](id) with Markdown Link: [@display](/profile/id)
+    return content.replace(
+       /@\[([^\]]+)\]\(([^)]+)\)/g, 
+       '[@$1](/profile/$2)'
+    );
+  }, [content]);
 
   return (
     <article className="border-t border-border pt-8 relative">
@@ -32,8 +44,16 @@ export default function ProjectReadme({ content }) {
           prose-img:rounded-none prose-img:border prose-img:border-border
           prose-hr:border-border
         ">
-          <ReactMarkdown>
-              {content || "No documentation provided."}
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            components={{
+                // Custom link renderer to force internal links (mentions) to behave correctly
+                a: ({node, ...props}) => (
+                    <a {...props} className="text-accent hover:underline decoration-dotted cursor-pointer" />
+                )
+            }}
+          >
+              {parsedContent}
           </ReactMarkdown>
         </div>
 
@@ -76,7 +96,7 @@ export default function ProjectReadme({ content }) {
             <div>
                 <h4 className="font-mono text-sm font-bold mb-1">System Note</h4>
                 <p className="text-xs text-muted-foreground font-mono">
-                    This documentation is rendered directly from the source repository.
+                    This documentation is rendered directly from the source repository or creator input.
                 </p>
             </div>
         </motion.div>

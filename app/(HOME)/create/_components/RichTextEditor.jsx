@@ -6,13 +6,15 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
+import Mention from '@tiptap/extension-mention'; // Added Mention
+import suggestion from './suggestion'; // Added Suggestion Logic
 import { 
   Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, 
   Quote, Undo, Redo, Table as TableIcon, Trash2 
 } from 'lucide-react';
 import { useEffect } from 'react';
 
-// ... (MenuBar Component remains exactly the same) ...
+// --- MenuBar Component ---
 const MenuBar = ({ editor }) => {
   if (!editor) return null;
 
@@ -140,8 +142,14 @@ export default function RichTextEditor({ value, onChange }) {
       TableRow,
       TableHeader,
       TableCell,
+      Mention.configure({
+        HTMLAttributes: {
+          class: 'text-accent font-bold cursor-pointer decoration-dotted underline',
+        },
+        suggestion, // Our custom suggestion logic
+      }),
     ],
-    content: '',
+    content: value || '', // Use prop value or empty
     immediatelyRender: false, 
     editorProps: {
       attributes: {
@@ -150,7 +158,7 @@ export default function RichTextEditor({ value, onChange }) {
     },
     onUpdate: ({ editor }) => {
       const markdown = editor.storage.markdown.getMarkdown();
-      // FIX: Return purely the string, not an object
+      // Return purely the string
       onChange(markdown); 
     },
   });
@@ -158,14 +166,11 @@ export default function RichTextEditor({ value, onChange }) {
   // Handle incoming value changes (e.g. initial load or external update)
   useEffect(() => {
     if (editor && value) {
-      // FIX: Simplify logic to accept only strings, as per current architecture
       const contentToSet = typeof value === 'string' ? value : "";
       
-      // Only update if different to prevent cursor jumping/loops
-      // We check against markdown output to ensure parity
       const currentContent = editor.storage.markdown.getMarkdown();
       
-      // Simple equality check usually works for markdown strings
+      // Only update if different to prevent cursor loops
       if (contentToSet !== currentContent) {
           editor.commands.setContent(contentToSet);
       }

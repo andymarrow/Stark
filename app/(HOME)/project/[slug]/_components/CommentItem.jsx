@@ -275,6 +275,19 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     }
   };
 
+  // --- PARSE MENTIONS ---
+  const getParsedContent = () => {
+    // react-mentions saves markup like @[username](username)
+    // We want to convert that to Markdown Link: [@username](/profile/username)
+    if (!localContent) return "";
+    
+    // Regex for @[display](id)
+    return localContent.replace(
+       /@\[([^\]]+)\]\(([^)]+)\)/g, 
+       '[@$1](/profile/$2)'
+    );
+  };
+
   return (
     <div className={`group animate-in fade-in slide-in-from-bottom-2 ${depth > 0 ? 'ml-6 md:ml-10 border-l border-border/50 pl-4 mt-4' : 'mb-6'}`}>
       <div className="flex gap-3">
@@ -335,7 +348,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
             )}
           </div>
 
-          {/* Content Area - NOW WITH AUTO-LINKING */}
+          {/* Content Area - NOW WITH AUTO-LINKING & MENTIONS */}
           {isEditing ? (
             <div className="mb-2">
                 <textarea 
@@ -356,15 +369,15 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
             <div className="text-sm text-muted-foreground/90 leading-relaxed font-mono relative">
                 {depth > 0 && <CornerDownRight size={12} className="absolute -left-3 top-1 text-accent opacity-50" />}
                 
-                {/* Markdown Renderer - Auto-Links Enabled via remarkGfm */}
+                {/* Markdown Renderer - Mentions & Auto-Links Enabled */}
                 <div className="prose prose-zinc dark:prose-invert max-w-none prose-p:my-0 prose-code:bg-secondary/50 prose-code:px-1 prose-code:text-xs prose-pre:bg-black prose-pre:p-2 prose-pre:text-xs">
                     <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]} // This enables auto-linking
+                        remarkPlugins={[remarkGfm]} 
                         components={{
-                            a: LinkRenderer // Use our custom renderer
+                            a: LinkRenderer // Handles both auto-links and our mention links
                         }}
                     >
-                        {localContent}
+                        {getParsedContent()}
                     </ReactMarkdown>
                 </div>
             </div>

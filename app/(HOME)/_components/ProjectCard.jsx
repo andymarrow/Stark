@@ -4,10 +4,14 @@ import Image from "next/image";
 import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck, Trophy } from "lucide-react"; 
 import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
-// --- HELPER: STRIP MARKDOWN ---
+// --- HELPER: STRIP MARKDOWN & MENTIONS ---
 function stripMarkdown(md) {
   if (!md) return "";
   return md
+    // 1. Strip Custom Mentions: @[Display](id) -> @Display
+    .replace(/@\[([^\]]+)\]\([^\)]+\)/g, "@$1")
+    
+    // 2. Standard Markdown Stripping
     .replace(/#+\s/g, "") 
     .replace(/\*\*?|__?/g, "") 
     .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") 
@@ -23,7 +27,7 @@ export default function ProjectCard({ project }) {
   const views = project?.views ?? project?.stats?.views ?? 0;
   const qScore = project?.quality_score ?? project?.qualityScore ?? 0;
   const contestName = project?.contestName; // Passed from ExplorePage
-  const contestSlug = project?.contestSlug; // Passed from ExplorePage (Ensure this is passed)
+  const contestSlug = project?.contestSlug; // Passed from ExplorePage
   
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
   const imageSrc = getSmartThumbnail(rawThumbnail);
@@ -33,6 +37,7 @@ export default function ProjectCard({ project }) {
   const authorUsername = project?.author?.username || "user";
   const authorAvatar = project?.author?.avatar_url || project?.author?.avatar;
 
+  // Now effectively cleans mentions too
   const cleanDescription = stripMarkdown(project?.description || "No description provided.");
 
   return (
