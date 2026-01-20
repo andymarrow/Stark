@@ -1,19 +1,19 @@
 "use client";
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
-import Placeholder from '@tiptap/extension-placeholder';
-import Underline from '@tiptap/extension-underline';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
+import { Link } from '@tiptap/extension-link';
+import { Placeholder } from '@tiptap/extension-placeholder';
+import { Underline } from '@tiptap/extension-underline';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
 
 import { 
   Bold, Italic, Underline as UnderlineIcon, Link as LinkIcon, 
   List, ListOrdered, Quote, Code, Undo, Redo, 
   Heading1, Heading2, Heading3, Table as TableIcon, 
-  PlusSquare, Trash2, ChevronDown
+  Trash2 
 } from 'lucide-react';
 import { useCallback, useEffect } from 'react';
 
@@ -62,7 +62,7 @@ const MenuBar = ({ editor }) => {
       {/* Tables */}
       <ToolbarBtn onClick={addTable} isActive={editor.isActive('table')} icon={TableIcon} />
       
-      {/* Contextual Table Tools (Only show when inside a table) */}
+      {/* Contextual Table Tools */}
       {editor.isActive('table') && (
         <div className="flex gap-1 animate-in fade-in zoom-in-95 duration-200">
             <TableControlBtn onClick={() => editor.chain().focus().addColumnAfter().run()} label="+Col" />
@@ -136,7 +136,6 @@ export default function AnnouncementEditor({ content, onChange, placeholder = "S
       <EditorContent editor={editor} className="flex-1 overflow-y-auto max-h-[600px]" />
 
       <style jsx global>{`
-        /* TipTap Table Styles for the Editor */
         .ProseMirror table {
           border-collapse: collapse;
           table-layout: fixed;
@@ -156,14 +155,6 @@ export default function AnnouncementEditor({ content, onChange, placeholder = "S
           font-weight: bold;
           text-align: left;
           background-color: rgba(255, 255, 255, 0.05);
-        }
-        .ProseMirror .selectedCell:after {
-          z-index: 2;
-          content: "";
-          position: absolute;
-          left: 0; right: 0; top: 0; bottom: 0;
-          background: rgba(200, 200, 255, 0.08);
-          pointer-events: none;
         }
       `}</style>
     </div>
