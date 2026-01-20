@@ -8,7 +8,8 @@ import { toast } from "sonner";
 // Icons
 import { 
   Settings, Grid, Bell, LogOut, Loader2, 
-  Scale, Shield, Users, UserPlus, X, Search, ArrowUpRight 
+  Scale, Shield, Users, UserPlus, X, Search, ArrowUpRight,
+  Megaphone // Added for Announcements
 } from "lucide-react"; 
 
 // Components
@@ -22,7 +23,7 @@ import TermsView from "./_components/legal/TermsView";
 import PrivacyView from "./_components/legal/PrivacyView";
 import NetworkRegistry from "./_components/NetworkRegistry";
 
-// Shadcn UI (Assuming you have dialog)
+// Shadcn UI
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Image from "next/image";
 import Link from "next/link";
@@ -39,7 +40,7 @@ function ProfileContent() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // --- NEW: CONNECTION STATES ---
+  // --- CONNECTION STATES ---
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false);
   const [connectionType, setConnectionType] = useState("followers"); // "followers" | "following"
   const [connections, setConnections] = useState([]);
@@ -86,7 +87,7 @@ function ProfileContent() {
         .select('*', { count: 'exact', head: true })
         .eq('following_id', user.id);
 
-      // 4. NEW: Fetch Following Count
+      // 4. Fetch Following Count
       const { count: followingCount } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
@@ -120,7 +121,6 @@ function ProfileContent() {
     }
   }, [user?.id]);
 
-  // --- NEW: FETCH CONNECTIONS LIST ---
   const fetchConnectionsList = async (type) => {
     if (!user?.id) return;
     setConnLoading(true);
@@ -130,13 +130,11 @@ function ProfileContent() {
     try {
         let query;
         if (type === 'followers') {
-            // Get people who follow me
             query = supabase
                 .from('follows')
                 .select('profile:profiles!follows_follower_id_fkey(*)')
                 .eq('following_id', user.id);
         } else {
-            // Get people I follow
             query = supabase
                 .from('follows')
                 .select('profile:profiles!follows_following_id_fkey(*)')
@@ -177,7 +175,6 @@ function ProfileContent() {
       
       <PersonalHeader user={profile} onUpdate={fetchProfileAndStats} />
       
-      {/* Updated DashboardStats with onClick handler */}
       <DashboardStats stats={stats} onStatClick={fetchConnectionsList} />
 
       <div className="container mx-auto px-4 mt-8">
@@ -187,9 +184,35 @@ function ProfileContent() {
                 <div className="sticky top-24 space-y-8">
                     <div className="space-y-1">
                         <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 pl-2">System_Directories</h3>
-                        <NavButton icon={Grid} label="My Projects" active={currentView === "projects"} onClick={() => handleViewChange("projects")} />
-                        <NavButton icon={Bell} label="Notifications" badge={unreadCount > 0 ? unreadCount.toString() : null} active={currentView === "notifications"} onClick={() => handleViewChange("notifications")} />
-                        <NavButton icon={Settings} label="Settings" active={currentView === "settings"} onClick={() => handleViewChange("settings")} />
+                        
+                        <NavButton 
+                            icon={Grid} 
+                            label="My Projects" 
+                            active={currentView === "projects"} 
+                            onClick={() => handleViewChange("projects")} 
+                        />
+
+                        {/* NEW: Announcements Link in Sidebar */}
+                        <NavButton 
+                            icon={Megaphone} 
+                            label="System Broadcasts" 
+                            onClick={() => router.push('/announcements')} 
+                        />
+
+                        <NavButton 
+                            icon={Bell} 
+                            label="Notifications" 
+                            badge={unreadCount > 0 ? unreadCount.toString() : null} 
+                            active={currentView === "notifications"} 
+                            onClick={() => handleViewChange("notifications")} 
+                        />
+
+                        <NavButton 
+                            icon={Settings} 
+                            label="Settings" 
+                            active={currentView === "settings"} 
+                            onClick={() => handleViewChange("settings")} 
+                        />
                     </div>
 
                     <div className="space-y-1 pt-4 border-t border-border border-dashed">
@@ -236,7 +259,6 @@ function ProfileContent() {
                     </button>
                 </div>
 
-                {/* Registry Search */}
                 <div className="relative mt-6 group">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-accent transition-colors" />
                     <input 

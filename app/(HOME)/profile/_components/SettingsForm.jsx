@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { 
   User, Lock, Bell, Globe, Github, Twitter, Linkedin, 
   Loader2, MapPin, CheckCircle2, AlertTriangle, 
-  Sun, Moon, Monitor, Palette 
+  Sun, Moon, Monitor, Palette, Megaphone 
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
@@ -35,7 +35,12 @@ export default function SettingsForm({ user, onUpdate }) {
         twitter: user?.socials?.twitter || "",
         linkedin: user?.socials?.linkedin || ""
     },
-    is_for_hire: user?.is_for_hire || false
+    is_for_hire: user?.is_for_hire || false,
+    // NEW: Settings JSONB
+    settings: {
+        show_announcements: true,
+        ...user?.settings
+    }
   });
 
   // Ensure theme component is mounted to avoid hydration mismatch
@@ -115,7 +120,12 @@ export default function SettingsForm({ user, onUpdate }) {
                 twitter: user.socials?.twitter || "",
                 linkedin: user.socials?.linkedin || ""
             },
-            is_for_hire: user.is_for_hire || false
+            is_for_hire: user.is_for_hire || false,
+            // NEW: Merge existing with default to prevent crash
+            settings: {
+                show_announcements: true,
+                ...user.settings
+            }
         });
     }
   }, [user]);
@@ -132,6 +142,17 @@ export default function SettingsForm({ user, onUpdate }) {
         socials: {
             ...prev.socials,
             [network]: value
+        }
+    }));
+  };
+
+  // NEW: Settings Handler
+  const handleSettingChange = (key, value) => {
+    setFormData(prev => ({
+        ...prev,
+        settings: {
+            ...prev.settings,
+            [key]: value
         }
     }));
   };
@@ -167,6 +188,7 @@ export default function SettingsForm({ user, onUpdate }) {
                 website: formData.website,
                 socials: formData.socials,
                 is_for_hire: formData.is_for_hire,
+                settings: formData.settings, // Save JSONB Settings
             })
             .eq('id', user.id);
 
@@ -369,6 +391,14 @@ export default function SettingsForm({ user, onUpdate }) {
                 checked={formData.is_for_hire}
                 onCheckedChange={(val) => handleInputChange("is_for_hire", val)}
             />
+            {/* NEW: Global Announcements Toggle */}
+            <ToggleRow 
+                label="System Broadcasts" 
+                description="Show global announcements and countdown banners." 
+                checked={formData.settings.show_announcements}
+                onCheckedChange={(val) => handleSettingChange("show_announcements", val)}
+                icon={Megaphone}
+            />
         </div>
       </section>
 
@@ -461,12 +491,15 @@ function SocialInput({ icon: Icon, label, value, onChange, placeholder }) {
     )
 }
 
-function ToggleRow({ label, description, checked, defaultChecked, onCheckedChange }) {
+function ToggleRow({ label, description, checked, defaultChecked, onCheckedChange, icon: Icon }) {
     return (
         <div className="flex items-center justify-between p-4 border border-border bg-secondary/5">
-            <div>
-                <h4 className="text-sm font-bold">{label}</h4>
-                <p className="text-xs text-muted-foreground">{description}</p>
+            <div className="flex gap-3">
+               {Icon && <div className="text-muted-foreground mt-0.5"><Icon size={16} /></div>}
+               <div>
+                   <h4 className="text-sm font-bold">{label}</h4>
+                   <p className="text-xs text-muted-foreground">{description}</p>
+               </div>
             </div>
             <Switch 
                 checked={checked} 

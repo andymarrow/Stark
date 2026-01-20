@@ -10,7 +10,8 @@ import {
   User, 
   Bell, 
   Settings, 
-  LogOut 
+  LogOut,
+  Megaphone // Added for Announcements
 } from "lucide-react";
 import ThemeToggle from "@/components/Themetoggle"; 
 import { Button } from "@/components/ui/button";
@@ -207,6 +208,14 @@ export default function DesktopNavbar() {
                                 {unreadCount}
                             </span>
                         )}
+                      </Link>
+                    </DropdownMenuItem>
+
+                    {/* NEW: System Broadcasts Link */}
+                    <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
+                      <Link href="/announcements" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
+                        <Megaphone className="mr-3 h-4 w-4 opacity-70" />
+                        System Broadcasts
                       </Link>
                     </DropdownMenuItem>
 
