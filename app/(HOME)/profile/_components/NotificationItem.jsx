@@ -41,12 +41,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // Need to find the collab ID. Ideally, notification.link contains it or we query.
-        // For now, assuming the notification was triggered by a row we can find
-        // Or simpler: The notification link sends them to the project page, 
-        // where the project page handles the "Accept" logic. 
-        // BUT, if we want inline accept:
-        
         // This is complex without the specific collaboration_id in the notif payload.
         // We'll stick to a "View" button that goes to the dashboard for now.
         // OR: Update this logic if you store `metadata: { collaboration_id: '...' }` in notifications table.
@@ -60,8 +54,11 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
 
   const getIcon = () => {
     const props = { size: 14 };
-    const colorClass = isRead ? "text-muted-foreground" : "text-foreground";
     
+    // THE FIX: Detect mentions within system signals
+    const isMention = notification.type === 'system' && notification.message?.toLowerCase().includes('mentioned');
+    if (isMention) return <FileCode {...props} className="text-accent" />;
+
     switch(notification.type) {
         case 'like': return <Heart {...props} className={isRead ? "text-zinc-600" : "text-red-500 fill-red-500"} />;
         case 'follow': return <UserPlus {...props} className={isRead ? "text-zinc-600" : "text-blue-500"} />;
@@ -99,12 +96,12 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             </Link>
         );
     }
-    // 3. View Button (Generic)
+    // 3. View Button (Enabled for Mentions and standard links)
     if (notification.link && notification.link !== '#') {
         return (
             <Link href={notification.link}>
-                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border">
-                    <Eye size={14} className="text-muted-foreground" />
+                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors">
+                    <Eye size={14} className="text-muted-foreground hover:text-accent" />
                 </Button>
             </Link>
         );
@@ -120,10 +117,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             : 'opacity-70 hover:opacity-100'}
     `}>
         
-        {/* Avatar */}
+        {/* Avatar Area */}
         <div className="relative mt-1">
             {notification.sender_id === notification.receiver_id ? ( 
-                // System Notification (Self-Sent)
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
                     <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
                 </div>
@@ -138,20 +134,21 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 </Link>
             )}
             
-            {/* Type Badge Overlay */}
             <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">
                 {getIcon()}
             </div>
         </div>
 
-        {/* Content */}
+        {/* Content Area */}
         <div className="flex-1 min-w-0 pt-0.5">
             <div className="flex justify-between items-start gap-2">
                 <p className="text-xs text-foreground leading-snug">
                     {notification.sender?.username && (
-                        <span className="font-bold mr-1 hover:text-accent cursor-pointer">
-                            @{notification.sender.username}
-                        </span>
+                        <Link href={`/profile/${notification.sender.username}`}>
+                            <span className="font-bold mr-1 hover:text-accent cursor-pointer">
+                                @{notification.sender.username}
+                            </span>
+                        </Link>
                     )}
                     <span className={isRead ? "text-muted-foreground" : "text-foreground"}>
                         {notification.message}
@@ -166,8 +163,11 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
                     <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider bg-secondary/30 px-1.5 py-0.5 rounded-sm">
-                        {notification.type.replace('_', ' ')}
+                        {notification.type === 'system' && notification.message.includes('mentioned') ? 'Mention' : notification.type.replace('_', ' ')}
                     </span>
+                    {!isRead && (
+                        <span className="w-1 h-1 bg-accent rounded-full animate-ping" />
+                    )}
                 </div>
                 
                 <div className="flex items-center gap-2">
@@ -177,7 +177,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                         <button 
                             onClick={() => onRead(notification.id)}
                             className="text-zinc-400 hover:text-accent transition-colors p-1"
-                            title="Mark Read"
+                            title="Acknowledge Signal"
                         >
                             <Check size={14} />
                         </button>
