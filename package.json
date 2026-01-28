@@ -91,6 +91,7 @@
     "react-slick": "^0.30.3",
     "react-swiper": "^0.1.5",
     "recharts": "^3.5.1",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "resend": "^6.7.0",
     "shadcn": "^3.6.3",
