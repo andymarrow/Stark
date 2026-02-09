@@ -4,7 +4,8 @@ import { createClient } from "@/utils/supabase/server";
 export async function getFeedContent({ 
   filter = "for_you", 
   page = 1, 
-  limit = 10 
+  limit = 10,
+  mention = null // New parameter
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -17,8 +18,8 @@ export async function getFeedContent({
     let finalProjects = [];
     let finalLogs = [];
 
-    // --- STRATEGY A: PREFERENCE MIX (For You Only, First Page) ---
-    if (filter === "for_you" && user && page === 1) {
+    // --- STRATEGY A: PREFERENCE MIX (Only if NO specific mention is being filtered) ---
+    if (filter === "for_you" && user && page === 1 && !mention) {
         const { data: profile } = await supabase.from("profiles").select("preferences").eq("id", user.id).single();
         const prefs = profile?.preferences || {};
         const topTags = Object.entries(prefs).sort(([,a], [,b]) => b - a).slice(0, 3).map(([tag]) => tag);
@@ -26,7 +27,7 @@ export async function getFeedContent({
         if (topTags.length > 0) {
              const { data: preferred } = await supabase
                 .from("projects")
-                .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`) // 'views' is included in *
+                .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
                 .eq("status", "published")
                 .eq("is_contest_entry", false)
                 .overlaps("tags", topTags)
@@ -36,7 +37,7 @@ export async function getFeedContent({
         }
     }
 
-    // --- STRATEGY B: STANDARD FETCH ---
+    // --- STRATEGY B: NETWORK SCOPE ---
     let ownerIds = [];
     if (filter === "network" && user) {
         const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", user.id);
@@ -47,11 +48,17 @@ export async function getFeedContent({
     // 1. Projects Query
     let projectQuery = supabase
         .from("projects")
-        .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`) // 'views' is included in *
+        .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
         .eq("status", "published")
         .eq("is_contest_entry", false)
         .order("created_at", { ascending: false })
         .range(from, to);
+
+    // Apply Mention Filter to Projects
+    if (mention) {
+        // Strict syntax check: looks for the (username) part of the TipTap mention markup
+        projectQuery = projectQuery.ilike('description', `%(${mention})%`);
+    }
 
     if (filter === "network") projectQuery = projectQuery.in("owner_id", ownerIds);
     else if (filter === "today") {
@@ -60,12 +67,11 @@ export async function getFeedContent({
         projectQuery = projectQuery.gte("created_at", yesterday.toISOString());
     }
 
-    // Exclude preference IDs
-    const existingIds = finalProjects.map(p => p.id);
-    // (We handle deduplication in JS merging below for simplicity/performance with small batches)
-
     const { data: standardProjects } = await projectQuery;
+    
+    // Deduplication (especially if Strategy A was used)
     if (standardProjects) {
+        const existingIds = finalProjects.map(p => p.id);
         const newItems = standardProjects.filter(p => !existingIds.includes(p.id));
         finalProjects.push(...newItems);
     }
@@ -90,6 +96,12 @@ export async function getFeedContent({
         .order("created_at", { ascending: false })
         .range(from, to);
 
+    // Apply Mention Filter to Changelogs
+    if (mention) {
+        // Searches the text representation of the JSONB content field
+        logQuery = logQuery.ilike('content', `%(${mention})%`);
+    }
+
     if (filter === "today") {
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
@@ -101,7 +113,6 @@ export async function getFeedContent({
 
     // --- FORMATTING ---
     
-    // Get Authors for logs
     const logOwnerIds = [...new Set(finalLogs.map(l => l.project.owner_id))];
     let authorsMap = {};
     if (logOwnerIds.length > 0) {
@@ -123,7 +134,6 @@ export async function getFeedContent({
             content: log.content,
             media: log.media_urls || [],
             likes: log.likes_count,
-            // For Changelogs, we usually show the PARENT PROJECT'S view count
             views: log.project.views, 
             project: {
                 id: log.project.id,
@@ -143,7 +153,7 @@ export async function getFeedContent({
         description: p.description,
         media: p.images || [],
         likes: p.likes_count,
-        views: p.views, // Pass views
+        views: p.views,
         slug: p.slug,
         author: p.author,
         tech: p.tags,
@@ -153,7 +163,8 @@ export async function getFeedContent({
     // Merge & Sort
     let combined = [...formattedProjects, ...formattedLogs];
 
-    if (filter === "for_you") {
+    // If filtering by mention, or today/network, always use date sorting
+    if (filter === "for_you" && !mention) {
         combined = combined.sort(() => Math.random() - 0.5);
     } else {
         combined = combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react"; 
 import ExploreFilters from "./ExploreFilters";
 import TechMap from "./TechMap";
 import ActiveFilters from "./ActiveFilters";
@@ -11,6 +11,7 @@ import FilterSheet from "./FilterSheet";
 import Pagination from "@/components/ui/Pagination";
 import { COUNTRIES } from "@/constants/options";
 import ExploreTrendingBanner from "./ExploreTrendingBanner";
+import { Button } from "@/components/ui/button";
 
 const ITEMS_PER_PAGE = 6;
 
@@ -28,10 +29,11 @@ const getRegionFromLocation = (location) => {
     return "global"; 
 };
 
-export default function GridContainer() {
+export default function GridContainer({ activeMention }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE); 
 
   const [filters, setFilters] = useState({
     region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false
@@ -42,7 +44,8 @@ export default function GridContainer() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, sortOrder, popularMetric]);
+    setVisibleCount(ITEMS_PER_PAGE);
+  }, [filters, sortOrder, popularMetric, activeMention]);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -59,8 +62,7 @@ export default function GridContainer() {
                 contest:contests(title, slug)
             )
           `)
-          .eq('status', 'published')
-          .eq('is_contest_entry', false);
+          .eq('status', 'published');
 
         if (error) throw error;
 
@@ -102,7 +104,30 @@ export default function GridContainer() {
   }, []);
 
   const processedProjects = useMemo(() => {
+    // Fuzzy Detection: Matches official @[display](id) OR simple @username
+    const mentionPattern = /@\[?[a-zA-Z0-9_ -]+\]?\(?[a-zA-Z0-9_ -]+\)?/;
+
     let result = projects.filter(project => {
+        const rawDesc = (project.description || "").toLowerCase();
+        const rawTitle = (project.title || "").toLowerCase();
+        
+        // --- 1. THE MENTION GATE LOGIC ---
+        // Check if ANY mention exists in title or description
+        const hasMentions = mentionPattern.test(project.description || "") || mentionPattern.test(project.title || "");
+
+        if (activeMention) {
+            // IF A SPECIFIC MENTION IS SELECTED:
+            // Only show if the description/title specifically mentions this user
+            const target = activeMention.toLowerCase();
+            const isMatch = rawDesc.includes(`(${target})`) || rawDesc.includes(`@${target}`) || rawTitle.includes(`@${target}`);
+            if (!isMatch) return false;
+        } else {
+            // IF NO MENTION IS SELECTED (Main Feed):
+            // Hide ANY project that contains ANY mention to keep the feed clean
+            if (hasMentions) return false;
+        }
+
+        // --- 2. EXISTING FILTERS ---
         if (filters.region && project.region !== filters.region) return false;
         if (filters.search) {
             const q = filters.search.toLowerCase();
@@ -132,16 +157,21 @@ export default function GridContainer() {
         }
         return 0;
     });
-  }, [filters, projects, sortOrder, popularMetric]);
+  }, [filters, projects, sortOrder, popularMetric, activeMention]);
 
   const totalPages = Math.ceil(processedProjects.length / ITEMS_PER_PAGE);
+  
   const paginatedProjects = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return processedProjects.slice(start, start + ITEMS_PER_PAGE);
-  }, [processedProjects, currentPage]);
+    return processedProjects.slice(start, start + visibleCount);
+  }, [processedProjects, currentPage, visibleCount]);
 
   const handleRegionSelect = (regionId) => {
     setFilters(prev => ({ ...prev, region: prev.region === regionId ? null : regionId }));
+  };
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + 6);
   };
 
   return (
@@ -198,8 +228,13 @@ export default function GridContainer() {
                 ) : (
                     <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5">
                         <span className="text-muted-foreground font-mono text-sm mb-2 uppercase">NO_DATA_FOUND_IN_SECTOR</span>
+                        <p className="text-[10px] text-muted-foreground font-mono mb-4 text-center px-4">
+                           {activeMention ? `No projects found mentioning @${activeMention}` : "This sector of the hub is currently empty based on your filters."}
+                        </p>
                         <button 
-                            onClick={() => setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false })}
+                            onClick={() => {
+                                setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false });
+                            }}
                             className="text-accent text-xs hover:underline font-mono"
                         >
                             RESET_ALL_FILTERS()
@@ -208,13 +243,28 @@ export default function GridContainer() {
                 )}
             </div>
 
+            {/* LOAD MORE BUTTON */}
+            {!loading && (processedProjects.length > ( (currentPage - 1) * ITEMS_PER_PAGE + visibleCount )) && (
+                <div className="mt-8 flex justify-center">
+                    <button 
+                        onClick={handleLoadMore}
+                        className="group flex items-center gap-2 px-8 py-3 bg-secondary/10 border border-border hover:border-accent hover:bg-secondary transition-all text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground"
+                    >
+                        <Plus size={14} className="group-hover:rotate-90 transition-transform" />
+                        Load_More_Resources()
+                    </button>
+                </div>
+            )}
+
+            {/* PAGINATION */}
             {!loading && processedProjects.length > 0 && (
-                <div className="mt-12">
+                <div className="mt-12 border-t border-border border-dashed pt-8">
                     <Pagination 
                         currentPage={currentPage}
                         totalPages={totalPages}
                         onPageChange={(p) => {
                             setCurrentPage(p);
+                            setVisibleCount(ITEMS_PER_PAGE); 
                             window.scrollTo({ top: 300, behavior: 'smooth' });
                         }}
                         isLoading={loading}
