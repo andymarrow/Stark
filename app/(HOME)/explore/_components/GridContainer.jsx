@@ -11,7 +11,6 @@ import FilterSheet from "./FilterSheet";
 import Pagination from "@/components/ui/Pagination";
 import { COUNTRIES } from "@/constants/options";
 import ExploreTrendingBanner from "./ExploreTrendingBanner";
-import { Button } from "@/components/ui/button";
 
 const ITEMS_PER_PAGE = 6;
 
@@ -29,7 +28,7 @@ const getRegionFromLocation = (location) => {
     return "global"; 
 };
 
-export default function GridContainer({ activeMention }) {
+export default function GridContainer({ activeMention, featuredUsernames = [] }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,30 +103,36 @@ export default function GridContainer({ activeMention }) {
   }, []);
 
   const processedProjects = useMemo(() => {
-    // Fuzzy Detection: Matches official @[display](id) OR simple @username
+    // Matches @[display](id) OR @username
     const mentionPattern = /@\[?[a-zA-Z0-9_ -]+\]?\(?[a-zA-Z0-9_ -]+\)?/;
 
     let result = projects.filter(project => {
         const rawDesc = (project.description || "").toLowerCase();
         const rawTitle = (project.title || "").toLowerCase();
         
-        // --- 1. THE MENTION GATE LOGIC ---
-        // Check if ANY mention exists in title or description
+        // --- THE MENTION GATE LOGIC ---
         const hasMentions = mentionPattern.test(project.description || "") || mentionPattern.test(project.title || "");
 
-        if (activeMention) {
-            // IF A SPECIFIC MENTION IS SELECTED:
-            // Only show if the description/title specifically mentions this user
+        if (activeMention === '__COMMUNITY__') {
+            // Logic: Show if project HAS a mention, but NOT for a featured user
+            if (!hasMentions) return false;
+            const mentionsCuratedUser = featuredUsernames.some(name => 
+                rawDesc.includes(`(${name.toLowerCase()})`) || rawDesc.includes(`@${name.toLowerCase()}`)
+            );
+            if (mentionsCuratedUser) return false;
+        } 
+        else if (activeMention) {
+            // Show only this specific user's mentions
             const target = activeMention.toLowerCase();
             const isMatch = rawDesc.includes(`(${target})`) || rawDesc.includes(`@${target}`) || rawTitle.includes(`@${target}`);
             if (!isMatch) return false;
-        } else {
-            // IF NO MENTION IS SELECTED (Main Feed):
-            // Hide ANY project that contains ANY mention to keep the feed clean
+        } 
+        else {
+            // Main Feed (activeMention is null): Hide ALL projects that have any mention
             if (hasMentions) return false;
         }
 
-        // --- 2. EXISTING FILTERS ---
+        // --- EXISTING FILTERS ---
         if (filters.region && project.region !== filters.region) return false;
         if (filters.search) {
             const q = filters.search.toLowerCase();
@@ -157,7 +162,7 @@ export default function GridContainer({ activeMention }) {
         }
         return 0;
     });
-  }, [filters, projects, sortOrder, popularMetric, activeMention]);
+  }, [filters, projects, sortOrder, popularMetric, activeMention, featuredUsernames]);
 
   const totalPages = Math.ceil(processedProjects.length / ITEMS_PER_PAGE);
   
@@ -197,12 +202,11 @@ export default function GridContainer({ activeMention }) {
             <ExploreTrendingBanner />
         </div>
 
-        {/* Mobile Filter Sheet */}
         <div className="lg:hidden mb-4">
             <FilterSheet filters={filters} setFilters={setFilters} />
         </div>
 
-        {/* Main Content Area */}
+        {/* Main Content */}
         <div className="flex-1 flex flex-col">
             
             <ActiveFilters filters={filters} setFilters={setFilters} />
@@ -226,15 +230,17 @@ export default function GridContainer({ activeMention }) {
                         ))}
                     </div>
                 ) : (
-                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5">
+                    <div className="h-64 flex flex-col items-center justify-center border border-dashed border-border mt-8 bg-secondary/5 text-center px-6">
                         <span className="text-muted-foreground font-mono text-sm mb-2 uppercase">NO_DATA_FOUND_IN_SECTOR</span>
-                        <p className="text-[10px] text-muted-foreground font-mono mb-4 text-center px-4">
-                           {activeMention ? `No projects found mentioning @${activeMention}` : "This sector of the hub is currently empty based on your filters."}
+                        <p className="text-[10px] text-muted-foreground font-mono mb-4">
+                           {activeMention === '__COMMUNITY__' 
+                             ? "All current mentions are already in the curated spotlight." 
+                             : activeMention 
+                                ? `No projects found specifically mentioning @${activeMention}` 
+                                : "The main feed is clear of directed mentions."}
                         </p>
                         <button 
-                            onClick={() => {
-                                setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false });
-                            }}
+                            onClick={() => setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false })}
                             className="text-accent text-xs hover:underline font-mono"
                         >
                             RESET_ALL_FILTERS()

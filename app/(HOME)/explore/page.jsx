@@ -11,24 +11,33 @@ import { supabase } from "@/lib/supabaseClient";
 export default function ExplorePage() {
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'feed'
-  const [activeMention, setActiveMention] = useState(null); // 'username' string
+  const [viewMode, setViewMode] = useState("grid"); 
+  const [activeMention, setActiveMention] = useState(null); 
+  const [featuredUsernames, setFeaturedUsernames] = useState([]); // Added state
 
-  // 1. Persist view mode and Check Admin Status
+  // 1. Persist view mode, Check Admin Status, and Fetch Usernames
   useEffect(() => {
     const saved = localStorage.getItem("stark_explore_view");
     if (saved) setViewMode(saved);
 
-    const checkAdmin = async () => {
-        if (!user) return;
-        const { data } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-        if (data?.role === 'admin') setIsAdmin(true);
+    const init = async () => {
+        // Fetch Admin Status
+        if (user) {
+            const { data } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+            if (data?.role === 'admin') setIsAdmin(true);
+        }
+
+        // Fetch Featured Usernames for filtering logic
+        const { data: featuredData } = await supabase.from('featured_mentions_view').select('username');
+        setFeaturedUsernames(featuredData?.map(u => u.username.toLowerCase()) || []);
     };
-    checkAdmin();
+    
+    init();
+
+    // Listen for admin updates to refresh list
+    const handleUpdate = () => init();
+    window.addEventListener("featured_mentions_updated", handleUpdate);
+    return () => window.removeEventListener("featured_mentions_updated", handleUpdate);
   }, [user]);
 
   const toggleView = (mode) => {
@@ -46,12 +55,8 @@ export default function ExplorePage() {
     <div className="min-h-screen bg-background pt-8 pb-20">
       <div className="container mx-auto px-4 max-w-7xl">
         
-        {/* --- 2. ADMIN INTERFACE (Conditional) --- */}
-        {isAdmin && (
-            <AdminMentionManager />
-        )}
+        {isAdmin && <AdminMentionManager />}
 
-        {/* Page Header & View Toggle */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
             <div>
                 <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
@@ -62,12 +67,11 @@ export default function ExplorePage() {
                 </p>
             </div>
 
-            {/* View Switcher (Responsive) */}
             <div className="flex items-center bg-secondary/10 border border-border p-1 w-full md:w-auto">
                 <button 
                     onClick={() => toggleView('grid')}
                     className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-mono uppercase tracking-wider transition-all
-                        ${viewMode === 'grid' ? 'bg-foreground text-background font-bold shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/20'}
+                        ${viewMode === 'grid' ? 'bg-foreground text-background font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/20'}
                     `}
                 >
                     <LayoutGrid size={14} /> Grid
@@ -75,7 +79,7 @@ export default function ExplorePage() {
                 <button 
                     onClick={() => toggleView('feed')}
                     className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-mono uppercase tracking-wider transition-all
-                        ${viewMode === 'feed' ? 'bg-foreground text-background font-bold shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/20'}
+                        ${viewMode === 'feed' ? 'bg-foreground text-background font-bold' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/20'}
                     `}
                 >
                     <List size={14} /> Feed
@@ -83,17 +87,14 @@ export default function ExplorePage() {
             </div>
         </div>
 
-        {/* --- 3. MENTION FILTER BAR --- */}
         <MentionFilterBar 
             activeMention={activeMention} 
             onMentionSelect={setActiveMention} 
         />
 
-        {/* Content Render */}
-        {/* We pass activeMention down so the containers can filter their Supabase queries */}
         <div className="min-h-[600px]">
             {viewMode === 'grid' ? (
-                <GridContainer activeMention={activeMention} />
+                <GridContainer activeMention={activeMention} featuredUsernames={featuredUsernames} />
             ) : (
                 <FeedContainer activeMention={activeMention} />
             )}
