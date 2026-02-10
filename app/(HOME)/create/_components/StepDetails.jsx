@@ -48,14 +48,22 @@ export default function StepDetails({ data, updateData, errors }) {
         )}
       </div>
 
-      {/* 2. Collaborator Manager */}
-      <CollaboratorManager 
-        collaborators={data.collaborators || []} 
-        setCollaborators={(newVal) => {
-            const val = typeof newVal === 'function' ? newVal(data.collaborators || []) : newVal;
-            updateData("collaborators", val);
-        }}
-      />
+      {/* 2. Collaborator Manager (FIXED PROPS) */}
+      <div className="space-y-1.5">
+          <label className="text-xs font-mono uppercase text-muted-foreground">Collaborators</label>
+          <CollaboratorManager 
+            collaborators={data.collaborators || []} 
+            onAdd={(newCollab) => {
+                const current = data.collaborators || [];
+                updateData("collaborators", [...current, newCollab]);
+            }}
+            onRemove={(collabToRemove) => {
+                const current = data.collaborators || [];
+                const filtered = current.filter(c => c.id !== collabToRemove.id);
+                updateData("collaborators", filtered);
+            }}
+          />
+      </div>
 
       {/* 3. Rich Text Description */}
       <div className="space-y-1.5">
@@ -71,7 +79,6 @@ export default function StepDetails({ data, updateData, errors }) {
             )}
         </div>
         
-        {/* Editor wrapper for border color */}
         <div className={`transition-all ${errors?.description ? 'border border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.05)]' : ''}`}>
             <RichTextEditor 
                 value={data.description} 
