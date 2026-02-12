@@ -41,31 +41,41 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // Extract project slug from link (e.g., /project/my-slug)
-        const slug = notification.link?.split('/').pop();
-        if (!slug) throw new Error("Invalid Link");
+        // 1. Robust Slug Extraction
+        // Handles /project/slug or /project/slug/ or /project/slug?something
+        const pathParts = notification.link?.split('?')[0].split('/').filter(Boolean);
+        const slug = pathParts[pathParts.length - 1];
+        
+        if (!slug) throw new Error("Invalid Project Link");
 
-        const { data: project } = await supabase
+        // 2. Resolve Slug to ID
+        const { data: project, error: fetchError } = await supabase
             .from('projects')
             .select('id')
             .eq('slug', slug)
             .single();
 
-        if (!project) throw new Error("Target Missing");
+        if (fetchError || !project) throw new Error("Project Not Found");
 
-        const { error } = await supabase
+        // 3. Update Collaboration Status
+        // We target the specific project and the logged in user
+        const { error: updateError } = await supabase
             .from('collaborations')
             .update({ status: 'accepted' })
             .eq('project_id', project.id)
             .eq('user_id', currentUserId);
 
-        if (error) throw error;
+        if (updateError) throw updateError;
 
-        toast.success("Collaboration Initialized");
-        onRead(notification.id);
-        onUpdateState(notification.id, { is_read: true, message: "Joined the project team successfully." });
+        toast.success("Collaboration Initialized", { description: "Node added to project team." });
+        
+        // 4. Cleanup Notification
+        onRead(notification.id); 
+        onUpdateState(notification.id, { is_read: true, message: "You accepted the collaboration invite." });
+        
     } catch (err) {
-        toast.error("Handshake Failed");
+        console.error("❌ Collaboration Accept Error:", err);
+        toast.error("Handshake Failed", { description: err.message || "Database restricted the update." });
     } finally {
         setProcessing(false);
     }
@@ -74,7 +84,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleRejectCollab = async () => {
     setProcessing(true);
     try {
-        const slug = notification.link?.split('/').pop();
+        const pathParts = notification.link?.split('?')[0].split('/').filter(Boolean);
+        const slug = pathParts[pathParts.length - 1];
+
         const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
 
         if (project) {
@@ -109,7 +121,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         case 'changelog_update': return <GitCommit {...props} className={isRead ? "text-zinc-600" : "text-amber-500"} />;
         case 'collab_invite': return <Handshake {...props} className={isRead ? "text-zinc-600" : "text-indigo-500"} />;
         case 'contest_winner': return <Trophy {...props} className="text-yellow-500" />;
-        case 'project_milestone': return <Zap {...props} className="text-purple-500" />;
+        case 'project_milestone': return <Zap {...props} className={isRead ? "text-zinc-600" : "text-purple-500"} />;
         case 'report_resolved': return <ShieldAlert {...props} className="text-orange-500" />;
         case 'content_takedown': return <AlertTriangle {...props} className="text-red-600" />;
         default: return <Info {...props} className="text-zinc-500" />;
@@ -162,7 +174,12 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   return (
-    <div className={`flex items-start gap-3 p-3 border border-border bg-background transition-all group relative ${!isRead ? 'border-l-2 border-l-accent bg-accent/[0.02]' : 'opacity-70 hover:opacity-100'}`}>
+    <div className={`
+        flex items-start gap-3 p-3 border border-border bg-background transition-all group relative
+        ${!isRead 
+            ? 'border-l-2 border-l-accent bg-accent/[0.02] shadow-[inset_0_0_10px_rgba(0,0,0,0.02)]' 
+            : 'opacity-70 hover:opacity-100'}
+    `}>
         <div className="relative mt-1">
             {notification.sender_id === notification.receiver_id ? ( 
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
@@ -170,21 +187,36 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 </div>
             ) : (
                 <Link href={`/profile/${notification.sender?.username}`} className="block relative w-8 h-8 border border-border bg-secondary overflow-hidden">
-                    <Image src={getAvatar(notification.sender)} alt="User" fill className="object-cover" />
+                    <Image 
+                        src={getAvatar(notification.sender)} 
+                        alt="User" 
+                        fill 
+                        className="object-cover"
+                    />
                 </Link>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">{getIcon()}</div>
+            <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">
+                {getIcon()}
+            </div>
         </div>
 
         <div className="flex-1 min-w-0 pt-0.5">
             <div className="flex justify-between items-start gap-2">
                 <p className="text-xs text-foreground leading-snug">
                     {notification.sender?.username && (
-                        <Link href={`/profile/${notification.sender.username}`} className="font-bold mr-1 hover:text-accent">@{notification.sender.username}</Link>
+                        <Link href={`/profile/${notification.sender.username}`}>
+                            <span className="font-bold mr-1 hover:text-accent cursor-pointer">
+                                @{notification.sender.username}
+                            </span>
+                        </Link>
                     )}
-                    <span className={isRead ? "text-muted-foreground" : "text-foreground"}>{notification.message}</span>
+                    <span className={isRead ? "text-muted-foreground" : "text-foreground"}>
+                        {notification.message}
+                    </span>
                 </p>
-                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">{new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
+                    {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
             </div>
             
             <div className="flex items-center justify-between mt-2">
@@ -193,10 +225,17 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                         {notification.type === 'system' && notification.message.includes('mentioned') ? 'Mention' : notification.type.replace('_', ' ')}
                     </span>
                 </div>
+                
                 <div className="flex items-center gap-2">
                     {getAction()}
                     {!isRead && (
-                        <button onClick={() => onRead(notification.id)} className="text-zinc-400 hover:text-accent transition-colors p-1"><Check size={14} /></button>
+                        <button 
+                            onClick={() => onRead(notification.id)}
+                            className="text-zinc-400 hover:text-accent transition-colors p-1"
+                            title="Acknowledge Signal"
+                        >
+                            <Check size={14} />
+                        </button>
                     )}
                 </div>
             </div>
