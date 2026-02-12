@@ -5,7 +5,7 @@ import Image from "next/image";
 import { 
   Heart, UserPlus, MessageSquare, Info, ShieldAlert, Trophy, 
   GitCommit, Zap, Check, CheckCheck, ArrowRightLeft, Eye, 
-  ShieldCheck, AlertTriangle, FileCode, Handshake 
+  ShieldCheck, AlertTriangle, FileCode, Handshake, X 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -26,7 +26,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
           follower_id: currentUserId, 
           following_id: notification.sender_id 
       });
-      if (error && error.code !== '23505') throw error; // Ignore duplicate error
+      if (error && error.code !== '23505') throw error; 
       
       toast.success("Handshake Established");
       onUpdateState(notification.id, { is_read: true, message: "accepted your connection request." });
@@ -41,10 +41,57 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // This is complex without the specific collaboration_id in the notif payload.
-        // We'll stick to a "View" button that goes to the dashboard for now.
-        // OR: Update this logic if you store `metadata: { collaboration_id: '...' }` in notifications table.
-        toast.info("Redirecting to Project Config...");
+        // 1. Get Project ID from the slug in the link
+        const slug = notification.link?.split('/').pop();
+        if (!slug) throw new Error("Invalid Project Link");
+
+        const { data: project } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('slug', slug)
+            .single();
+
+        if (!project) throw new Error("Project Not Found");
+
+        // 2. Update Collaboration Status
+        const { error } = await supabase
+            .from('collaborations')
+            .update({ status: 'accepted' })
+            .eq('project_id', project.id)
+            .eq('user_id', currentUserId);
+
+        if (error) throw error;
+
+        toast.success("Collaboration Initialized", { description: "Node added to project team." });
+        onRead(notification.id); // Mark notification as read
+        onUpdateState(notification.id, { is_read: true, message: "You are now a collaborator on this project." });
+        
+    } catch (err) {
+        console.error(err);
+        toast.error("Handshake Failed", { description: "Could not join the project team." });
+    } finally {
+        setProcessing(false);
+    }
+  };
+
+  const handleRejectCollab = async () => {
+    setProcessing(true);
+    try {
+        const slug = notification.link?.split('/').pop();
+        const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
+
+        if (project) {
+            await supabase
+                .from('collaborations')
+                .delete() // We delete the pending row if rejected
+                .eq('project_id', project.id)
+                .eq('user_id', currentUserId);
+        }
+
+        toast.info("Invite Declined");
+        onRead(notification.id);
+    } catch (err) {
+        toast.error("Command Failed");
     } finally {
         setProcessing(false);
     }
@@ -54,8 +101,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
 
   const getIcon = () => {
     const props = { size: 14 };
-    
-    // THE FIX: Detect mentions within system signals
     const isMention = notification.type === 'system' && notification.message?.toLowerCase().includes('mentioned');
     if (isMention) return <FileCode {...props} className="text-accent" />;
 
@@ -75,8 +120,10 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   const getAction = () => {
+    if (isRead) return null;
+
     // 1. Follow Back
-    if (notification.type === 'follow' && !isRead) {
+    if (notification.type === 'follow') {
         return (
             <Button 
                 onClick={handleFollowBack} disabled={processing}
@@ -86,17 +133,26 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             </Button>
         );
     }
-    // 2. Collab Invite (Go to Project)
+    // 2. Collab Invite (ACCEPT / REJECT)
     if (notification.type === 'collab_invite') {
         return (
-            <Link href={notification.link || '#'}>
-                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-indigo-500/30 text-indigo-500 hover:bg-indigo-500 hover:text-white">
-                    Review Invite
+            <div className="flex gap-2">
+                <Button 
+                    onClick={handleAcceptCollab} disabled={processing}
+                    className="h-7 text-[10px] uppercase font-mono bg-accent hover:bg-red-700 text-white rounded-none"
+                >
+                    {processing ? <Loader2 size={10} className="animate-spin" /> : "Accept"}
                 </Button>
-            </Link>
+                <Button 
+                    onClick={handleRejectCollab} disabled={processing}
+                    variant="outline" className="h-7 text-[10px] uppercase font-mono border-border hover:bg-secondary text-muted-foreground hover:text-foreground rounded-none"
+                >
+                    <X size={12} className="mr-1" /> Decline
+                </Button>
+            </div>
         );
     }
-    // 3. View Button (Enabled for Mentions and standard links)
+    // 3. View Button (Generic)
     if (notification.link && notification.link !== '#') {
         return (
             <Link href={notification.link}>
@@ -117,7 +173,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             : 'opacity-70 hover:opacity-100'}
     `}>
         
-        {/* Avatar Area */}
         <div className="relative mt-1">
             {notification.sender_id === notification.receiver_id ? ( 
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
@@ -139,7 +194,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             </div>
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 min-w-0 pt-0.5">
             <div className="flex justify-between items-start gap-2">
                 <p className="text-xs text-foreground leading-snug">
@@ -159,7 +213,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 </span>
             </div>
             
-            {/* Footer Row */}
             <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
                     <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider bg-secondary/30 px-1.5 py-0.5 rounded-sm">
@@ -185,7 +238,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 </div>
             </div>
         </div>
-
     </div>
   );
 }
