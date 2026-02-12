@@ -41,24 +41,26 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // 1. Robust Slug Extraction
-        // Handles /project/slug or /project/slug/ or /project/slug?something
-        const pathParts = notification.link?.split('?')[0].split('/').filter(Boolean);
-        const slug = pathParts[pathParts.length - 1];
+        // 1. IMPROVED SLUG EXTRACTION
+        // This regex extracts the last part of a path before any query strings
+        // Works for: /project/slug, /project/slug/, /project/slug?view=raw
+        const match = notification.link?.match(/\/project\/([^\/\?]+)/);
+        const slug = match ? match[1] : null;
         
-        if (!slug) throw new Error("Invalid Project Link");
+        if (!slug) {
+            throw new Error("This invite uses an outdated protocol. Please ask the owner to re-invite you.");
+        }
 
-        // 2. Resolve Slug to ID
+        // 2. Resolve Slug to Project ID
         const { data: project, error: fetchError } = await supabase
             .from('projects')
             .select('id')
             .eq('slug', slug)
             .single();
 
-        if (fetchError || !project) throw new Error("Project Not Found");
+        if (fetchError || !project) throw new Error("Project Node not found in index.");
 
         // 3. Update Collaboration Status
-        // We target the specific project and the logged in user
         const { error: updateError } = await supabase
             .from('collaborations')
             .update({ status: 'accepted' })
@@ -67,15 +69,15 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
 
         if (updateError) throw updateError;
 
-        toast.success("Collaboration Initialized", { description: "Node added to project team." });
+        toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
         
-        // 4. Cleanup Notification
+        // 4. Mark Notification Read & Update UI State locally
         onRead(notification.id); 
         onUpdateState(notification.id, { is_read: true, message: "You accepted the collaboration invite." });
         
     } catch (err) {
-        console.error("❌ Collaboration Accept Error:", err);
-        toast.error("Handshake Failed", { description: err.message || "Database restricted the update." });
+        console.error("❌ Handshake Error:", err.message);
+        toast.error("Handshake Failed", { description: err.message });
     } finally {
         setProcessing(false);
     }
@@ -84,17 +86,18 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleRejectCollab = async () => {
     setProcessing(true);
     try {
-        const pathParts = notification.link?.split('?')[0].split('/').filter(Boolean);
-        const slug = pathParts[pathParts.length - 1];
+        const match = notification.link?.match(/\/project\/([^\/\?]+)/);
+        const slug = match ? match[1] : null;
 
-        const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
-
-        if (project) {
-            await supabase
-                .from('collaborations')
-                .delete()
-                .eq('project_id', project.id)
-                .eq('user_id', currentUserId);
+        if (slug) {
+            const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
+            if (project) {
+                await supabase
+                    .from('collaborations')
+                    .delete()
+                    .eq('project_id', project.id)
+                    .eq('user_id', currentUserId);
+            }
         }
 
         toast.info("Invite Terminated");
@@ -161,7 +164,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         );
     }
 
-    if (notification.link && notification.link !== '#') {
+    if (notification.link && notification.link !== '#' && notification.link !== '/profile?view=projects') {
         return (
             <Link href={notification.link}>
                 <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors">
