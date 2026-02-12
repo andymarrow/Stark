@@ -26,8 +26,8 @@ export default function ProjectCard({ project }) {
   const stars = project?.likes_count ?? project?.stats?.stars ?? 0;
   const views = project?.views ?? project?.stats?.views ?? 0;
   const qScore = project?.quality_score ?? project?.qualityScore ?? 0;
-  const contestName = project?.contestName; // Passed from ExplorePage
-  const contestSlug = project?.contestSlug; // Passed from ExplorePage
+  const contestName = project?.contestName; 
+  const contestSlug = project?.contestSlug; 
   
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
   const imageSrc = getSmartThumbnail(rawThumbnail);
@@ -37,7 +37,6 @@ export default function ProjectCard({ project }) {
   const authorUsername = project?.author?.username || "user";
   const authorAvatar = project?.author?.avatar_url || project?.author?.avatar;
 
-  // Now effectively cleans mentions too
   const cleanDescription = stripMarkdown(project?.description || "No description provided.");
 
   return (
@@ -77,11 +76,10 @@ export default function ProjectCard({ project }) {
 
           {/* INDICATORS SECTION */}
           <div className="absolute top-3 left-3 z-30 flex flex-col gap-2">
-              {/* Contest Badge - Shows if this was a contest submission */}
               {contestName && contestSlug && (
                  <Link 
                     href={`/contests/${contestSlug}`}
-                    onClick={(e) => e.stopPropagation()} // Critical: Prevents main card link from firing
+                    onClick={(e) => e.stopPropagation()} 
                     className="bg-yellow-500/90 text-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm backdrop-blur-sm pointer-events-auto hover:bg-yellow-400 transition-colors cursor-pointer"
                  >
                     <Trophy size={10} />
@@ -138,13 +136,14 @@ export default function ProjectCard({ project }) {
             )}
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-border border-dashed group-hover:border-accent/20 transition-colors relative z-20">
+          {/* FOOTER: Fixed truncation for long usernames */}
+          <div className="flex items-center justify-between pt-4 border-t border-border border-dashed group-hover:border-accent/20 transition-colors relative z-20 overflow-hidden">
             
             <Link 
                 href={`/profile/${authorUsername}`} 
-                className="flex items-center gap-2 pointer-events-auto hover:opacity-80 transition-opacity group/author"
+                className="flex items-center gap-2 pointer-events-auto hover:opacity-80 transition-opacity group/author min-w-0 flex-1 mr-2"
             >
-              <div className="w-5 h-5 relative overflow-hidden bg-secondary border border-transparent group-hover/author:border-accent flex items-center justify-center">
+              <div className="w-5 h-5 relative overflow-hidden bg-secondary border border-transparent group-hover/author:border-accent flex-shrink-0 flex items-center justify-center">
                 {authorAvatar ? (
                     <Image 
                         src={authorAvatar} 
@@ -159,12 +158,12 @@ export default function ProjectCard({ project }) {
                 )}
               </div>
               
-              <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+              <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors truncate">
                 @{authorUsername}
               </span>
             </Link>
 
-            <div className="flex items-center gap-3 text-muted-foreground font-mono text-[10px]">
+            <div className="flex items-center gap-3 text-muted-foreground font-mono text-[10px] flex-shrink-0">
               <div className="flex items-center gap-1">
                 <Star size={12} className="group-hover:text-accent transition-colors" />
                 <span>{formatNumber(stars)}</span>

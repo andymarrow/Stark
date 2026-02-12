@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Github, 
   Globe, 
@@ -16,7 +16,8 @@ import {
   ExternalLink,
   Award,
   Zap,
-  CheckCircle
+  CheckCircle,
+  Users // Added for the header icon
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -41,6 +42,10 @@ import { registerView } from "@/app/actions/viewAnalytics";
 
 export default function ProjectSidebar({ project }) {
   const { user } = useAuth();
+  
+  // --- COLLABORATOR STATE ---
+  const [collaborators, setCollaborators] = useState([]);
+
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   
@@ -61,6 +66,39 @@ export default function ProjectSidebar({ project }) {
 
   // Ref to ensure we don't count twice in React Strict Mode
   const hasCountedRef = useRef(false);
+
+  // --- 0. FETCH COLLABORATORS & STATUS ---
+  useEffect(() => {
+    const fetchTeam = async () => {
+        // We fetch directly from DB to get the 'status' (pending/accepted)
+        const { data, error } = await supabase
+            .from('collaborations')
+            .select(`
+                status, 
+                user:profiles!user_id(*)
+            `)
+            .eq('project_id', project.id);
+
+        if (!error && data) {
+            // Flatten the data so we have the user object + their status
+            const formatted = data.map(item => {
+                if (!item.user) return null;
+                return {
+                    ...item.user,
+                    collaborationStatus: item.status // 'pending' or 'accepted'
+                };
+            }).filter(Boolean);
+            
+            setCollaborators(formatted);
+        } else if (project.collaborators) {
+             // Fallback to props if DB fetch fails, assuming accepted
+             setCollaborators(project.collaborators.map(c => ({...c, collaborationStatus: 'accepted'})));
+        }
+    };
+
+    fetchTeam();
+  }, [project.id, project.collaborators]);
+
 
   // 1. Check if user liked this project on load
   useEffect(() => {
@@ -339,15 +377,38 @@ export default function ProjectSidebar({ project }) {
         )}
       </div>
 
-      {/* 3. Team Section */}
-      <div>
-        <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// CREATED_BY</h3>
-        <div className="flex flex-col gap-2">
-            <CreatorCard user={project.author} role="Owner" />
-            {project.collaborators && project.collaborators.map(collab => (
-                <CreatorCard key={collab.id} user={collab} role="Collaborator" />
-            ))}
-        </div>
+      {/* 3. Team Section (UPDATED) */}
+      <div className="space-y-6">
+        
+        {/* Creator */}
+        {project.author && (
+            <div>
+               <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest">// CREATED_BY</h3>
+               <CreatorCard user={project.author} role="Owner" />
+            </div>
+        )}
+
+        {/* Collaborators */}
+        {collaborators.length > 0 && (
+          <div>
+            <h3 className="text-xs font-mono text-muted-foreground uppercase mb-4 tracking-widest flex items-center gap-2">
+               // COLLABORATORS 
+               <span className="flex items-center gap-1 text-[9px] bg-secondary px-1.5 py-0.5 rounded-sm text-muted-foreground">
+                  <Users size={10} /> {collaborators.length}
+               </span>
+            </h3>
+            <div className="flex flex-col gap-2">
+                {collaborators.map((collab, index) => (
+                    <CreatorCard 
+                        key={collab.id || index} 
+                        user={collab} 
+                        role="Collaborator" 
+                        status={collab.collaborationStatus} // Pass status prop
+                    />
+                ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. Tech Stack Grid */}
@@ -461,23 +522,52 @@ function StatBox({ icon: Icon, label, value }) {
   );
 }
 
-function CreatorCard({ user, role }) {
+// --- UPDATED CREATOR CARD WITH STATUS INDICATORS ---
+function CreatorCard({ user, role, status }) {
+    if (!user) return null;
+    const displayName = user.name || user.full_name || user.username || "Anonymous";
+
+    // Status Logic
+    const isPending = status === 'pending';
+    const showStatus = role === 'Collaborator' && status;
+
     return (
         <Link 
           href={`/profile/${user.username}`}
           className="flex items-center gap-3 p-3 border border-border bg-background hover:border-accent hover:shadow-[4px_4px_0px_0px_rgba(var(--accent),0.1)] transition-all duration-300 group"
         >
           <div className="relative w-10 h-10 bg-secondary border border-transparent group-hover:border-accent/50 transition-colors shrink-0">
-            <Image src={getAvatar(user)} alt={user.name} fill className="object-cover" />
+            <Image src={getAvatar(user)} alt={displayName} fill className="object-cover" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-baseline">
-                <h4 className="text-sm font-bold truncate group-hover:text-accent transition-colors">{user.name}</h4>
-                <span className="text-[9px] font-mono text-muted-foreground uppercase">{role}</span>
+                <h4 className="text-sm font-bold truncate group-hover:text-accent transition-colors">{displayName}</h4>
+                <div className="flex items-center gap-2">
+                    {/* Role Label */}
+                    <span className="text-[9px] font-mono text-muted-foreground uppercase">{role}</span>
+                </div>
             </div>
-            <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+            
+            <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                
+                {/* STATUS INDICATOR (Visible for Collaborators) */}
+                {showStatus && (
+                    <div className="flex items-center gap-1.5" title={isPending ? "Invitation Pending" : "Active Collaborator"}>
+                        {isPending && <span className="text-[8px] font-mono text-amber-500 uppercase">PENDING</span>}
+                        <span 
+                            className={`
+                                w-2 h-2 rounded-full 
+                                ${isPending ? 'bg-amber-500 animate-pulse' : 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]'}
+                            `} 
+                        />
+                    </div>
+                )}
+            </div>
           </div>
-          {user.isForHire && (
+
+          {/* Hire Indicator (Only if not a pending collaborator to avoid clutter) */}
+          {user.isForHire && !isPending && (
             <div className="flex flex-col items-end gap-1">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Available for hire" />
             </div>
