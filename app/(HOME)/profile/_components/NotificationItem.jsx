@@ -5,7 +5,7 @@ import Image from "next/image";
 import { 
   Heart, UserPlus, MessageSquare, Info, ShieldAlert, Trophy, 
   GitCommit, Zap, Check, CheckCheck, ArrowRightLeft, Eye, 
-  ShieldCheck, AlertTriangle, FileCode, Handshake 
+  ShieldCheck, AlertTriangle, FileCode, Handshake, X 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -26,7 +26,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
           follower_id: currentUserId, 
           following_id: notification.sender_id 
       });
-      if (error && error.code !== '23505') throw error; // Ignore duplicate error
+      if (error && error.code !== '23505') throw error; 
       
       toast.success("Handshake Established");
       onUpdateState(notification.id, { is_read: true, message: "accepted your connection request." });
@@ -41,10 +41,54 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // This is complex without the specific collaboration_id in the notif payload.
-        // We'll stick to a "View" button that goes to the dashboard for now.
-        // OR: Update this logic if you store `metadata: { collaboration_id: '...' }` in notifications table.
-        toast.info("Redirecting to Project Config...");
+        // Extract project slug from link (e.g., /project/my-slug)
+        const slug = notification.link?.split('/').pop();
+        if (!slug) throw new Error("Invalid Link");
+
+        const { data: project } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('slug', slug)
+            .single();
+
+        if (!project) throw new Error("Target Missing");
+
+        const { error } = await supabase
+            .from('collaborations')
+            .update({ status: 'accepted' })
+            .eq('project_id', project.id)
+            .eq('user_id', currentUserId);
+
+        if (error) throw error;
+
+        toast.success("Collaboration Initialized");
+        onRead(notification.id);
+        onUpdateState(notification.id, { is_read: true, message: "Joined the project team successfully." });
+    } catch (err) {
+        toast.error("Handshake Failed");
+    } finally {
+        setProcessing(false);
+    }
+  };
+
+  const handleRejectCollab = async () => {
+    setProcessing(true);
+    try {
+        const slug = notification.link?.split('/').pop();
+        const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
+
+        if (project) {
+            await supabase
+                .from('collaborations')
+                .delete()
+                .eq('project_id', project.id)
+                .eq('user_id', currentUserId);
+        }
+
+        toast.info("Invite Terminated");
+        onRead(notification.id);
+    } catch (err) {
+        toast.error("Command Failed");
     } finally {
         setProcessing(false);
     }
@@ -54,8 +98,6 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
 
   const getIcon = () => {
     const props = { size: 14 };
-    
-    // THE FIX: Detect mentions within system signals
     const isMention = notification.type === 'system' && notification.message?.toLowerCase().includes('mentioned');
     if (isMention) return <FileCode {...props} className="text-accent" />;
 
@@ -75,8 +117,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   const getAction = () => {
-    // 1. Follow Back
-    if (notification.type === 'follow' && !isRead) {
+    if (isRead) return null;
+
+    if (notification.type === 'follow') {
         return (
             <Button 
                 onClick={handleFollowBack} disabled={processing}
@@ -86,17 +129,26 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             </Button>
         );
     }
-    // 2. Collab Invite (Go to Project)
+    
     if (notification.type === 'collab_invite') {
         return (
-            <Link href={notification.link || '#'}>
-                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-indigo-500/30 text-indigo-500 hover:bg-indigo-500 hover:text-white">
-                    Review Invite
+            <div className="flex gap-2">
+                <Button 
+                    onClick={handleAcceptCollab} disabled={processing}
+                    className="h-7 text-[10px] uppercase font-mono bg-accent hover:bg-red-700 text-white rounded-none"
+                >
+                    {processing ? <Loader2 size={10} className="animate-spin" /> : "Accept"}
                 </Button>
-            </Link>
+                <Button 
+                    onClick={handleRejectCollab} disabled={processing}
+                    variant="outline" className="h-7 text-[10px] uppercase font-mono border-border hover:bg-secondary text-muted-foreground hover:text-foreground rounded-none"
+                >
+                    <X size={12} className="mr-1" /> Decline
+                </Button>
+            </div>
         );
     }
-    // 3. View Button (Enabled for Mentions and standard links)
+
     if (notification.link && notification.link !== '#') {
         return (
             <Link href={notification.link}>
@@ -110,14 +162,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   return (
-    <div className={`
-        flex items-start gap-3 p-3 border border-border bg-background transition-all group relative
-        ${!isRead 
-            ? 'border-l-2 border-l-accent bg-accent/[0.02] shadow-[inset_0_0_10px_rgba(0,0,0,0.02)]' 
-            : 'opacity-70 hover:opacity-100'}
-    `}>
-        
-        {/* Avatar Area */}
+    <div className={`flex items-start gap-3 p-3 border border-border bg-background transition-all group relative ${!isRead ? 'border-l-2 border-l-accent bg-accent/[0.02]' : 'opacity-70 hover:opacity-100'}`}>
         <div className="relative mt-1">
             {notification.sender_id === notification.receiver_id ? ( 
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
@@ -125,67 +170,37 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 </div>
             ) : (
                 <Link href={`/profile/${notification.sender?.username}`} className="block relative w-8 h-8 border border-border bg-secondary overflow-hidden">
-                    <Image 
-                        src={getAvatar(notification.sender)} 
-                        alt="User" 
-                        fill 
-                        className="object-cover"
-                    />
+                    <Image src={getAvatar(notification.sender)} alt="User" fill className="object-cover" />
                 </Link>
             )}
-            
-            <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">
-                {getIcon()}
-            </div>
+            <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">{getIcon()}</div>
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 min-w-0 pt-0.5">
             <div className="flex justify-between items-start gap-2">
                 <p className="text-xs text-foreground leading-snug">
                     {notification.sender?.username && (
-                        <Link href={`/profile/${notification.sender.username}`}>
-                            <span className="font-bold mr-1 hover:text-accent cursor-pointer">
-                                @{notification.sender.username}
-                            </span>
-                        </Link>
+                        <Link href={`/profile/${notification.sender.username}`} className="font-bold mr-1 hover:text-accent">@{notification.sender.username}</Link>
                     )}
-                    <span className={isRead ? "text-muted-foreground" : "text-foreground"}>
-                        {notification.message}
-                    </span>
+                    <span className={isRead ? "text-muted-foreground" : "text-foreground"}>{notification.message}</span>
                 </p>
-                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
-                    {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">{new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             
-            {/* Footer Row */}
             <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-2">
                     <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider bg-secondary/30 px-1.5 py-0.5 rounded-sm">
                         {notification.type === 'system' && notification.message.includes('mentioned') ? 'Mention' : notification.type.replace('_', ' ')}
                     </span>
-                    {!isRead && (
-                        <span className="w-1 h-1 bg-accent rounded-full animate-ping" />
-                    )}
                 </div>
-                
                 <div className="flex items-center gap-2">
                     {getAction()}
-                    
                     {!isRead && (
-                        <button 
-                            onClick={() => onRead(notification.id)}
-                            className="text-zinc-400 hover:text-accent transition-colors p-1"
-                            title="Acknowledge Signal"
-                        >
-                            <Check size={14} />
-                        </button>
+                        <button onClick={() => onRead(notification.id)} className="text-zinc-400 hover:text-accent transition-colors p-1"><Check size={14} /></button>
                     )}
                 </div>
             </div>
         </div>
-
     </div>
   );
 }
