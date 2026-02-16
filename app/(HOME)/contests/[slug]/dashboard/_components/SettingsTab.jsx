@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { 
   AlertTriangle, Trash2, Lock, 
   LayoutTemplate, Image as ImageIcon, Calendar,
-  CheckCircle2, Info, Loader2, Save, Globe
+  CheckCircle2, Info, Loader2, Save, Globe , Award , BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
