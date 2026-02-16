@@ -61,7 +61,10 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 contest:contests(title, slug)
             )
           `)
-          .eq('status', 'published');
+          .eq('status', 'published')
+          // --- ISOLATION LOGIC ---
+          // Only show projects that are NOT marked as contest-exclusive
+          .eq('is_contest_entry', false);
 
         if (error) throw error;
 
@@ -103,18 +106,15 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
   }, []);
 
   const processedProjects = useMemo(() => {
-    // Matches @[display](id) OR @username
     const mentionPattern = /@\[?[a-zA-Z0-9_ -]+\]?\(?[a-zA-Z0-9_ -]+\)?/;
 
     let result = projects.filter(project => {
         const rawDesc = (project.description || "").toLowerCase();
         const rawTitle = (project.title || "").toLowerCase();
         
-        // --- THE MENTION GATE LOGIC ---
         const hasMentions = mentionPattern.test(project.description || "") || mentionPattern.test(project.title || "");
 
         if (activeMention === '__COMMUNITY__') {
-            // Logic: Show if project HAS a mention, but NOT for a featured user
             if (!hasMentions) return false;
             const mentionsCuratedUser = featuredUsernames.some(name => 
                 rawDesc.includes(`(${name.toLowerCase()})`) || rawDesc.includes(`@${name.toLowerCase()}`)
@@ -122,17 +122,14 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             if (mentionsCuratedUser) return false;
         } 
         else if (activeMention) {
-            // Show only this specific user's mentions
             const target = activeMention.toLowerCase();
             const isMatch = rawDesc.includes(`(${target})`) || rawDesc.includes(`@${target}`) || rawTitle.includes(`@${target}`);
             if (!isMatch) return false;
         } 
         else {
-            // Main Feed (activeMention is null): Hide ALL projects that have any mention
             if (hasMentions) return false;
         }
 
-        // --- EXISTING FILTERS ---
         if (filters.region && project.region !== filters.region) return false;
         if (filters.search) {
             const q = filters.search.toLowerCase();
@@ -182,7 +179,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
   return (
     <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-500">
         
-        {/* Sidebar */}
         <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto pr-2 scrollbar-hide">
             <div>
                 <div className="flex items-center justify-between mb-2">
@@ -206,7 +202,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             <FilterSheet filters={filters} setFilters={setFilters} />
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
             
             <ActiveFilters filters={filters} setFilters={setFilters} />
@@ -249,7 +244,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 )}
             </div>
 
-            {/* LOAD MORE BUTTON */}
             {!loading && (processedProjects.length > ( (currentPage - 1) * ITEMS_PER_PAGE + visibleCount )) && (
                 <div className="mt-8 flex justify-center">
                     <button 
@@ -262,7 +256,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 </div>
             )}
 
-            {/* PAGINATION */}
             {!loading && processedProjects.length > 0 && (
                 <div className="mt-12 border-t border-border border-dashed pt-8">
                     <Pagination 

@@ -39,7 +39,7 @@ export default function FeedContainer({ activeMention }) {
     if (isInitial) setLoading(true);
     else setFetchingMore(true);
     
-    // Pass activeMention to the server action
+    // Pass activeMention to the server action to filter the stream
     const { data, hasMore: more } = await getFeedContent({ 
         filter: activeTab, 
         page: pageNum,
@@ -66,7 +66,6 @@ export default function FeedContainer({ activeMention }) {
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
         const target = entries[0];
-        // Only trigger if intersecting AND we have more to load AND not already fetching
         if (target.isIntersecting && hasMore && !loading && !fetchingMore) {
             setPage(prev => {
                 const nextPage = prev + 1;
@@ -76,7 +75,7 @@ export default function FeedContainer({ activeMention }) {
         }
     }, {
         root: null,
-        rootMargin: "400px", // Increased margin for smoother infinite scroll
+        rootMargin: "400px", 
         threshold: 0.1
     });
 

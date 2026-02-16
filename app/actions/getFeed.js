@@ -1,15 +1,21 @@
 "use server";
 import { createClient } from "@/utils/supabase/server";
 
+/**
+ * GET_FEED_CONTENT
+ * Fetches combined stream of Projects and Changelogs.
+ * Enforces isolation of active contest entries.
+ */
 export async function getFeedContent({ 
   filter = "for_you", 
   page = 1, 
   limit = 10,
-  mention = null // New parameter
+  mention = null 
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Adjust fetch limits for merging/randomization strategies
   const fetchLimit = filter === "for_you" ? limit * 3 : limit;
   const from = (page - 1) * limit;
   const to = from + fetchLimit - 1;
@@ -29,7 +35,8 @@ export async function getFeedContent({
                 .from("projects")
                 .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
                 .eq("status", "published")
-                .eq("is_contest_entry", false)
+                // --- ISOLATION: Filter out hidden contest work ---
+                .eq("is_contest_entry", false) 
                 .overlaps("tags", topTags)
                 .order("quality_score", { ascending: false })
                 .limit(5);
@@ -42,22 +49,25 @@ export async function getFeedContent({
     if (filter === "network" && user) {
         const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", user.id);
         ownerIds = follows?.map(f => f.following_id) || [];
+        // If filtering by network but no follows found, return early
         if (ownerIds.length === 0) return { data: [], hasMore: false };
     }
 
-    // 1. Projects Query
+    // 1. PROJECTS QUERY
     let projectQuery = supabase
         .from("projects")
         .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
         .eq("status", "published")
-        .eq("is_contest_entry", false)
+        // --- ISOLATION: Filter out hidden contest work ---
+        .eq("is_contest_entry", false) 
         .order("created_at", { ascending: false })
         .range(from, to);
 
     // Apply Mention Filter to Projects
     if (mention) {
-        // Strict syntax check: looks for the (username) part of the TipTap mention markup
-        projectQuery = projectQuery.ilike('description', `%(${mention})%`);
+        const target = mention.toLowerCase();
+        // Searches for username pattern in description (TipTap format)
+        projectQuery = projectQuery.ilike('description', `%(${target})%`);
     }
 
     if (filter === "network") projectQuery = projectQuery.in("owner_id", ownerIds);
@@ -69,14 +79,13 @@ export async function getFeedContent({
 
     const { data: standardProjects } = await projectQuery;
     
-    // Deduplication (especially if Strategy A was used)
     if (standardProjects) {
         const existingIds = finalProjects.map(p => p.id);
         const newItems = standardProjects.filter(p => !existingIds.includes(p.id));
         finalProjects.push(...newItems);
     }
 
-    // 2. Changelogs Query
+    // 2. CHANGELOGS QUERY
     let logQuery = supabase
         .from("project_logs")
         .select(`
@@ -92,14 +101,16 @@ export async function getFeedContent({
             )
         `)
         .eq("project.status", "published")
-        .eq("project.is_contest_entry", false)
+        // --- ISOLATION: Ensure parent project isn't a hidden contest entry ---
+        .eq("project.is_contest_entry", false) 
         .order("created_at", { ascending: false })
         .range(from, to);
 
     // Apply Mention Filter to Changelogs
     if (mention) {
-        // Searches the text representation of the JSONB content field
-        logQuery = logQuery.ilike('content', `%(${mention})%`);
+        const target = mention.toLowerCase();
+        // Searches within the JSONB 'content' field for the username string
+        logQuery = logQuery.ilike('content', `%(${target})%`);
     }
 
     if (filter === "today") {
@@ -111,8 +122,9 @@ export async function getFeedContent({
     const { data: logsData } = await logQuery;
     finalLogs = logsData || [];
 
-    // --- FORMATTING ---
+    // --- FORMATTING & AUTHOR MAPPING ---
     
+    // Efficiently map authors for logs
     const logOwnerIds = [...new Set(finalLogs.map(l => l.project.owner_id))];
     let authorsMap = {};
     if (logOwnerIds.length > 0) {
@@ -124,6 +136,7 @@ export async function getFeedContent({
     }
 
     const formattedLogs = finalLogs.map(log => {
+        // Double check network filter for logs
         if (filter === "network" && !ownerIds.includes(log.project.owner_id)) return null;
         return {
             type: "changelog",
@@ -151,7 +164,8 @@ export async function getFeedContent({
         created_at: p.created_at,
         title: p.title,
         description: p.description,
-        media: p.images || [],
+        // Ensure thumbnail is always the first item in the media list
+        media: [...new Set([p.thumbnail_url, ...(p.images || [])])].filter(Boolean),
         likes: p.likes_count,
         views: p.views,
         slug: p.slug,
@@ -160,13 +174,15 @@ export async function getFeedContent({
         metadata: p.metadata
     }));
 
-    // Merge & Sort
+    // --- MERGE & SORT ---
     let combined = [...formattedProjects, ...formattedLogs];
 
-    // If filtering by mention, or today/network, always use date sorting
+    // Final Sort Logic
     if (filter === "for_you" && !mention) {
+        // Partial randomization for discovery feel
         combined = combined.sort(() => Math.random() - 0.5);
     } else {
+        // Chronological for Today, Network, and filtered Mentions
         combined = combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
@@ -178,7 +194,7 @@ export async function getFeedContent({
     };
 
   } catch (error) {
-    console.error("Feed Error:", error);
+    console.error("Feed System Error:", error);
     return { data: [], hasMore: false };
   }
 }

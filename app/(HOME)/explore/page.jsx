@@ -13,7 +13,7 @@ export default function ExplorePage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewMode, setViewMode] = useState("grid"); 
   const [activeMention, setActiveMention] = useState(null); 
-  const [featuredUsernames, setFeaturedUsernames] = useState([]); // Added state
+  const [featuredUsernames, setFeaturedUsernames] = useState([]);
 
   // 1. Persist view mode, Check Admin Status, and Fetch Usernames
   useEffect(() => {
