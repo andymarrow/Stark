@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { Loader2, Gavel } from "lucide-react";
+import { Loader2, Gavel, CheckCircle } from "lucide-react";
 
 // Sub Components
 import JudgeLogin from "./_components/JudgeLogin";
@@ -24,11 +24,13 @@ export default function JudgePortalPage({ params }) {
   // 1. Initial Load
   useEffect(() => {
     const fetchContest = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('contests')
         .select('*')
         .eq('slug', slug)
         .single();
+      
+      if (error) console.error("Contest Fetch Error:", error);
       setContest(data);
       setLoading(false);
     };
@@ -36,23 +38,44 @@ export default function JudgePortalPage({ params }) {
   }, [slug]);
 
   // 2. Verify Access Code
-  const handleVerify = async (code) => {
+  const handleVerify = async (inputCode) => {
+    if (!contest?.id) {
+        toast.error("System warming up. Try again in a second.");
+        return;
+    }
+
+    const cleanCode = inputCode.trim().toUpperCase(); // Remove spaces and force upper
     setVerifying(true);
+
+    console.log(`[Jury_Auth] Attempting login for Contest: ${contest.id} with Code: ${cleanCode}`);
+
     try {
         const { data, error } = await supabase
             .from('contest_judges')
             .select('*')
             .eq('contest_id', contest.id)
-            .eq('access_code', code)
-            .single();
+            .eq('access_code', cleanCode)
+            .maybeSingle(); // Use maybeSingle to handle no-results gracefully
 
-        if (error || !data) throw new Error("Invalid access code.");
+        if (error) throw error;
+
+        if (!data) {
+            console.warn("[Jury_Auth] No match found in database for this code.");
+            throw new Error("Invalid access code for this contest.");
+        }
 
         setJudge(data);
-        toast.success("Access Granted", { description: "Session encrypted." });
+        toast.success("Access Granted", { description: "Jury session established." });
+        
+        // Mark judge as active if they weren't already
+        if (data.status !== 'active') {
+            await supabase.from('contest_judges').update({ status: 'active', user_id: (await supabase.auth.getUser()).data.user?.id }).eq('id', data.id);
+        }
+
         fetchEntries(data.id);
     } catch (err) {
-        toast.error("Auth Failure", { description: err.message });
+        console.error("[Jury_Auth] Failure:", err.message);
+        toast.error("Authentication Failure", { description: err.message });
     } finally {
         setVerifying(false);
     }
@@ -70,9 +93,9 @@ export default function JudgePortalPage({ params }) {
         .select('*')
         .eq('judge_id', judgeId);
 
-    const formatted = submissions.map(s => ({
+    const formatted = (submissions || []).map(s => ({
         ...s,
-        existingScores: scores.find(sc => sc.project_id === s.project_id)?.scores || {}
+        existingScores: scores?.find(sc => sc.project_id === s.project_id)?.scores || {}
     }));
 
     setEntries(formatted);
@@ -109,14 +132,12 @@ export default function JudgePortalPage({ params }) {
     return <JudgeLogin contestTitle={contest?.title} onVerify={handleVerify} isVerifying={verifying} />;
   }
 
-  // 📊 Logic Update: Check completion based on manual metrics only
   const manualMetricNames = contest.metrics_config
     .filter(m => m.type === 'manual')
     .map(m => m.name);
 
   const progressCount = entries.filter(entry => {
     const keys = Object.keys(entry.existingScores || {});
-    // An entry is "done" if every manual metric has been given a score
     return manualMetricNames.every(name => keys.includes(name));
   }).length;
 
@@ -125,15 +146,13 @@ export default function JudgePortalPage({ params }) {
   return (
     <div className="min-h-screen bg-background pb-32 pt-10">
       <div className="container mx-auto px-4 max-w-5xl">
-        
-        {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12 border-b border-border pb-8">
             <div>
                 <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-3">
                     <Gavel size={28} className="text-accent" /> Judging Console
                 </h1>
                 <p className="text-xs font-mono text-muted-foreground uppercase mt-1">
-                    Protocol: {contest.title} // Session: {judge.email}
+                    Protocol: {contest.title} // Node: {judge.email}
                 </p>
             </div>
 
@@ -152,11 +171,7 @@ export default function JudgePortalPage({ params }) {
             </div>
         </div>
 
-        <JudgeGrid 
-            entries={entries} 
-            onSelectEntry={setSelectedEntry} 
-        />
-        
+        <JudgeGrid entries={entries} onSelectEntry={setSelectedEntry} />
       </div>
 
       <EvaluationModal 

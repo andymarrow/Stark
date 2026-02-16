@@ -7,6 +7,11 @@ import { Input } from "@/components/ui/input";
 export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
   const [code, setCode] = useState("");
 
+  const handleAction = () => {
+    // Trim the code right before sending to prevent whitespace errors
+    onVerify(code.trim());
+  };
+
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8 animate-in fade-in zoom-in-95">
@@ -16,7 +21,7 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
             </div>
             <h1 className="text-2xl font-black uppercase tracking-tight">Judge Access</h1>
             <p className="text-sm text-muted-foreground font-mono uppercase tracking-widest">
-                Protocol: {contestTitle}
+                Protocol: {contestTitle || 'Initializing...'}
             </p>
         </div>
 
@@ -31,6 +36,7 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
                         <Input 
                             value={code}
                             onChange={(e) => setCode(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => e.key === 'Enter' && code.length >= 4 && handleAction()}
                             placeholder="Enter Code (e.g. AB12XY)"
                             className="pl-10 h-12 rounded-none bg-background border-border focus:border-accent font-mono text-lg tracking-[0.3em]"
                         />
@@ -38,8 +44,8 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
                 </div>
 
                 <Button 
-                    onClick={() => onVerify(code)}
-                    disabled={isVerifying || code.length < 4}
+                    onClick={handleAction}
+                    disabled={isVerifying || code.trim().length < 4}
                     className="w-full h-12 bg-accent hover:bg-accent/90 text-white rounded-none font-mono uppercase tracking-widest text-xs"
                 >
                     {isVerifying ? <Loader2 className="animate-spin" /> : "Authenticate"}
@@ -47,7 +53,7 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
             </div>
         </div>
 
-        <p className="text-center text-[10px] font-mono text-zinc-600 uppercase">
+        <p className="text-center text-[10px] font-mono text-zinc-600 uppercase tracking-tighter">
             Encrypted Session // Jury_Internal_Use_Only
         </p>
       </div>
