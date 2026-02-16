@@ -21,7 +21,7 @@ export default function JudgePortalPage({ params }) {
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 1. Initial Load
+  // 1. Initial Load: Fetch Contest Info
   useEffect(() => {
     const fetchContest = async () => {
       const { data, error } = await supabase
@@ -30,7 +30,7 @@ export default function JudgePortalPage({ params }) {
         .eq('slug', slug)
         .single();
       
-      if (error) console.error("Contest Fetch Error:", error);
+      if (error) console.error(" [Jury_System] Fetch Error:", error);
       setContest(data);
       setLoading(false);
     };
@@ -40,42 +40,46 @@ export default function JudgePortalPage({ params }) {
   // 2. Verify Access Code
   const handleVerify = async (inputCode) => {
     if (!contest?.id) {
-        toast.error("System warming up. Try again in a second.");
+        toast.error("Protocol Syncing", { description: "Please wait a moment and try again." });
         return;
     }
 
-    const cleanCode = inputCode.trim().toUpperCase(); // Remove spaces and force upper
+    const cleanCode = inputCode.trim().toUpperCase(); 
     setVerifying(true);
 
-    console.log(`[Jury_Auth] Attempting login for Contest: ${contest.id} with Code: ${cleanCode}`);
+    console.log(`[Jury_Auth] Verifying code: ${cleanCode} for Contest: ${contest.id}`);
 
     try {
+        // We query the judge record. RLS must be set to 'true' for SELECT on this table.
         const { data, error } = await supabase
             .from('contest_judges')
             .select('*')
             .eq('contest_id', contest.id)
             .eq('access_code', cleanCode)
-            .maybeSingle(); // Use maybeSingle to handle no-results gracefully
+            .maybeSingle();
 
         if (error) throw error;
 
         if (!data) {
-            console.warn("[Jury_Auth] No match found in database for this code.");
+            console.warn("[Jury_Auth] No match found in registry.");
             throw new Error("Invalid access code for this contest.");
         }
 
+        // Success! Establish Session
         setJudge(data);
         toast.success("Access Granted", { description: "Jury session established." });
         
-        // Mark judge as active if they weren't already
-        if (data.status !== 'active') {
-            await supabase.from('contest_judges').update({ status: 'active', user_id: (await supabase.auth.getUser()).data.user?.id }).eq('id', data.id);
-        }
+        // 🔄 Sync Judge Status
+        // Try to link current user ID if they happen to be logged in
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase.from('contest_judges')
+            .update({ status: 'active', user_id: user?.id || null })
+            .eq('id', data.id);
 
         fetchEntries(data.id);
     } catch (err) {
-        console.error("[Jury_Auth] Failure:", err.message);
-        toast.error("Authentication Failure", { description: err.message });
+        console.error("[Jury_Auth] Protocol Failure:", err.message);
+        toast.error("Access Denied", { description: err.message });
     } finally {
         setVerifying(false);
     }
@@ -120,13 +124,13 @@ export default function JudgePortalPage({ params }) {
         setSelectedEntry(null);
         fetchEntries(judge.id);
     } catch (err) {
-        toast.error("Transmission Error");
+        toast.error("Sync Failure");
     } finally {
         setIsSaving(false);
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-accent" /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><Loader2 className="animate-spin text-accent" /></div>;
 
   if (!judge) {
     return <JudgeLogin contestTitle={contest?.title} onVerify={handleVerify} isVerifying={verifying} />;
@@ -146,13 +150,14 @@ export default function JudgePortalPage({ params }) {
   return (
     <div className="min-h-screen bg-background pb-32 pt-10">
       <div className="container mx-auto px-4 max-w-5xl">
+        
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12 border-b border-border pb-8">
             <div>
                 <h1 className="text-3xl font-black uppercase tracking-tight flex items-center gap-3">
                     <Gavel size={28} className="text-accent" /> Judging Console
                 </h1>
                 <p className="text-xs font-mono text-muted-foreground uppercase mt-1">
-                    Protocol: {contest.title} // Node: {judge.email}
+                    Node: {judge.email} // Sector: {contest.title}
                 </p>
             </div>
 
@@ -160,18 +165,19 @@ export default function JudgePortalPage({ params }) {
                 <div className="absolute top-0 left-0 h-full bg-accent/5 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
                 <div className="relative z-10">
                     <div className="flex justify-between text-[10px] font-mono uppercase mb-2">
-                        <span>Sync Progress</span>
+                        <span>Evaluation Progress</span>
                         <span>{Math.round(progressPercent)}%</span>
                     </div>
                     <div className="h-1 w-full bg-zinc-800">
                         <div className="h-full bg-accent transition-all duration-700 ease-out" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <p className="text-[10px] font-mono text-zinc-500 mt-2">{progressCount} of {entries.length} nodes verified</p>
+                    <p className="text-[10px] font-mono text-zinc-500 mt-2">{progressCount} of {entries.length} units verified</p>
                 </div>
             </div>
         </div>
 
         <JudgeGrid entries={entries} onSelectEntry={setSelectedEntry} />
+        
       </div>
 
       <EvaluationModal 
