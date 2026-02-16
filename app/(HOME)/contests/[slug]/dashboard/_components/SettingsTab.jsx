@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { 
   AlertTriangle, Trash2, Lock, 
   LayoutTemplate, Image as ImageIcon, Calendar,
-  CheckCircle2, Info, Loader2, Save, Globe , Award , BarChart3
+  CheckCircle2, Info, Loader2, Save, Globe, Award, BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +20,7 @@ import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor";
 
 /**
  * --- TIMEZONE UTILITIES ---
- * Prevents the "3-hour offset" bug by standardizing to UTC for DB
- * and Local for the HTML inputs.
+ * Fixes the "3-hour offset" bug by translating UTC <-> Local
  */
 const toLocalInputFormat = (isoString) => {
     if (!isoString) return "";
@@ -58,42 +57,46 @@ export default function SettingsTab({ contest }) {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
-  // --- MODERATION CONSTRAINTS ---
+  // --- SYSTEM CONSTRAINTS ---
   const [constraints, setConstraints] = useState({
     hasSubmissions: false,
     hasJudging: false,
     submissionCount: 0
   });
 
-  // Safe Extraction of TipTap Description
-  const initialDescription = typeof contest.description === 'object' ? contest.description : { type: 'markdown', text: contest.description || "" };
+  // 🛠 FIX: Correctly extract description text for the editor
+  const getInitialDescription = () => {
+    if (!contest.description) return "";
+    if (typeof contest.description === 'object') {
+        return contest.description.text || "";
+    }
+    return contest.description;
+  };
 
   // --- FORM STATE ---
   const [formData, setFormData] = useState({
     title: contest.title,
-    description: initialDescription, 
+    description: getInitialDescription(), 
     start_date: toLocalInputFormat(contest.start_date),
     submission_deadline: toLocalInputFormat(contest.submission_deadline),
     winner_announce_date: toLocalInputFormat(contest.winner_announce_date),
     prizes: contest.prizes || [],
     metrics: contest.metrics_config || [],
     
-    // MEDIA LOGIC: Using the NEW media_urls column
+    // MEDIA LOGIC: Separated from sponsors
     cover_preview: contest.cover_image, 
     cover_file: null, 
-    gallery_files: contest.media_urls || [], // <--- CORRECTED: Using dedicated assets column
+    gallery_files: contest.media_urls || [], // <--- Use new column
   });
 
-  // 1. Fetch System Constraints (Locking Logic)
+  // 1. Fetch Locking Constraints
   useEffect(() => {
     const checkConstraints = async () => {
-        // Count entries
         const { count: subCount } = await supabase
             .from('contest_submissions')
             .select('*', { count: 'exact', head: true })
             .eq('contest_id', contest.id);
 
-        // Count scores (Judging status)
         const { count: scoreCount } = await supabase
             .from('contest_scores')
             .select('*', { count: 'exact', head: true })
@@ -120,14 +123,13 @@ export default function SettingsTab({ contest }) {
 
   /**
    * --- CORE UPDATE LOGIC ---
-   * This function updates everything EXCEPT the sponsors column.
+   * Updates configuration while protecting the 'sponsors' column from data loss.
    */
   const handleUpdate = async () => {
     setIsSaving(true);
     try {
         let coverUrl = formData.cover_preview; 
 
-        // 1. Handle Cover Upload if changed
         if (formData.cover_file) {
             const fileExt = formData.cover_file.name.split('.').pop();
             const fileName = `contests/${contest.creator_id}/cover-${Date.now()}.${fileExt}`;
@@ -137,25 +139,24 @@ export default function SettingsTab({ contest }) {
             coverUrl = data.publicUrl;
         }
 
-        // 2. Commit to Database
-        // NOTICE: 'sponsors' is NOT included in this payload.
+        // 🛡️ SECURITY: We omit 'sponsors' from this update entirely.
         const { error } = await supabase
             .from('contests')
             .update({
                 title: formData.title,
-                description: formData.description,
+                description: { type: 'markdown', text: formData.description },
                 start_date: toUTCISOString(formData.start_date),
                 submission_deadline: toUTCISOString(formData.submission_deadline),
                 winner_announce_date: toUTCISOString(formData.winner_announce_date),
                 prizes: formData.prizes,
                 metrics_config: formData.metrics,
                 cover_image: coverUrl,
-                media_urls: formData.gallery_files // <--- CORRECTED: Saving gallery to its own home
+                media_urls: formData.gallery_files // Gallery goes here
             })
             .eq('id', contest.id);
 
         if (error) throw error;
-        toast.success("Configuration Synced", { description: "Global timestamps and assets updated." });
+        toast.success("Protocol Synced", { description: "Global timestamps and assets updated." });
         router.refresh();
 
     } catch (error) {
@@ -168,14 +169,14 @@ export default function SettingsTab({ contest }) {
 
   const handleDelete = async () => {
     if (constraints.hasSubmissions) {
-        toast.error("Action Blocked", { description: "Active nodes exist. Purge submissions first." });
+        toast.error("Access Blocked", { description: "Active nodes exist. Purge submissions first." });
         return;
     }
     if (!confirm("DANGER: This action will permanently erase this contest protocol. Proceed?")) return;
     
     const { error } = await supabase.from('contests').delete().eq('id', contest.id);
     if (!error) {
-        toast.success("Contest Nuked");
+        toast.success("Contest Deleted");
         router.push("/contests");
     }
   };
@@ -191,7 +192,7 @@ export default function SettingsTab({ contest }) {
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-2 max-w-5xl pb-32">
         
         {/* SECTION 1: IDENTITY & DESCRIPTION */}
-        <div className="border border-border bg-background p-6 space-y-8 relative overflow-hidden">
+        <div className="border border-border bg-background p-6 space-y-8 relative overflow-hidden shadow-sm">
             <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-bl-full pointer-events-none" />
             
             <div className="flex items-center gap-3 text-accent border-b border-border pb-4 mb-4">
@@ -226,7 +227,7 @@ export default function SettingsTab({ contest }) {
         </div>
 
         {/* SECTION 2: VISUAL ASSETS */}
-        <div className="border border-border bg-background p-6 space-y-6">
+        <div className="border border-border bg-background p-6 space-y-6 shadow-sm">
             <div className="flex items-center gap-3 text-accent border-b border-border pb-4 mb-4">
                 <ImageIcon size={20} />
                 <h3 className="font-bold text-base uppercase tracking-widest">Visual Assets</h3>
@@ -248,7 +249,7 @@ export default function SettingsTab({ contest }) {
                         data={{ files: formData.gallery_files, demo_link: null }}
                         updateData={handleGalleryUpdate}
                     />
-                    <p className="text-[9px] text-zinc-600 font-mono mt-2 uppercase tracking-tighter">
+                    <p className="text-[9px] text-zinc-600 font-mono mt-2 uppercase tracking-tighter italic">
                         // Video links or high-res static images supported.
                     </p>
                 </div>
@@ -256,7 +257,7 @@ export default function SettingsTab({ contest }) {
         </div>
 
         {/* SECTION 3: PRIZE LOGIC (LOCKED IF SUBMISSIONS EXIST) */}
-        <div className={`border border-border bg-background p-6 space-y-6 relative transition-all ${constraints.hasSubmissions ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+        <div className={`border border-border bg-background p-6 space-y-6 relative transition-all shadow-sm ${constraints.hasSubmissions ? 'opacity-60 grayscale-[0.5]' : ''}`}>
             <div className="flex items-center gap-3 text-accent border-b border-border pb-4 mb-4">
                 <Award className={constraints.hasSubmissions ? 'text-zinc-600' : 'text-accent'} size={20} />
                 <h3 className="font-bold text-base uppercase tracking-widest">Reward Distribution</h3>
@@ -278,7 +279,7 @@ export default function SettingsTab({ contest }) {
         </div>
 
         {/* SECTION 4: EVALUATION METRICS (LOCKED IF JUDGING BEGUN) */}
-        <div className={`border border-border bg-background p-6 space-y-6 relative transition-all ${constraints.hasJudging ? 'opacity-60 grayscale-[0.5]' : ''}`}>
+        <div className={`border border-border bg-background p-6 space-y-6 relative transition-all shadow-sm ${constraints.hasJudging ? 'opacity-60 grayscale-[0.5]' : ''}`}>
              <div className="flex items-center gap-3 text-accent border-b border-border pb-4 mb-4">
                 <BarChart3 className={constraints.hasJudging ? 'text-zinc-600' : 'text-accent'} size={20} />
                 <h3 className="font-bold text-base uppercase tracking-widest">Evaluation Logic</h3>
@@ -302,9 +303,9 @@ export default function SettingsTab({ contest }) {
         {/* --- GLOBAL ACTION BAR --- */}
         <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-zinc-950/80 backdrop-blur-md border-t border-border p-4 flex justify-between items-center z-50 px-8">
             <div className="hidden md:flex items-center gap-3 text-zinc-500 text-[10px] font-mono uppercase">
-                <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Connection: Active</div>
+                <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Node_Status: Active</div>
                 <div className="w-px h-3 bg-zinc-800" />
-                <span>ID: {contest.id.slice(0,8)}...</span>
+                <span>Reference_Hash: {contest.id.slice(0,8)}</span>
             </div>
             
             <div className="flex gap-4 w-full md:w-auto">
@@ -313,7 +314,7 @@ export default function SettingsTab({ contest }) {
                     onClick={() => router.refresh()} 
                     className="flex-1 md:flex-none h-11 rounded-none border-border hover:bg-secondary text-xs font-mono uppercase"
                 >
-                    Reset Changes
+                    Reset_Cache
                 </Button>
                 <Button 
                     onClick={handleUpdate} 
@@ -321,7 +322,7 @@ export default function SettingsTab({ contest }) {
                     className="flex-1 md:flex-none h-11 px-10 rounded-none bg-accent hover:bg-red-700 text-white uppercase font-mono font-bold text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all"
                 >
                     {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                    Commit Configuration
+                    Commit_Configuration
                 </Button>
             </div>
         </div>
@@ -339,13 +340,13 @@ export default function SettingsTab({ contest }) {
                 onClick={handleDelete} 
                 disabled={constraints.hasSubmissions}
                 variant="destructive" 
-                className="h-10 px-8 rounded-none text-[10px] font-mono font-bold uppercase bg-red-600 hover:bg-red-700 transition-all"
+                className="h-10 px-8 rounded-none text-[10px] font-mono font-bold uppercase bg-red-600 hover:bg-red-700 transition-all shadow-[4px_4px_0px_0px_rgba(153,27,27,1)] active:shadow-none"
             >
                 <Trash2 size={14} className="mr-2" /> Execute Deletion
             </Button>
             {constraints.hasSubmissions && (
                 <p className="text-[9px] text-red-400 font-mono mt-3 uppercase tracking-widest animate-pulse">
-                    Action Blocked: Submissions Detected in Buffer.
+                    Action Blocked: Active Entry Nodes Detected.
                 </p>
             )}
         </div>
