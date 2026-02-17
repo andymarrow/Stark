@@ -8,7 +8,7 @@ export async function sendJudgeInvite(email, contestTitle, contestSlug, accessCo
     const judgeUrl = `${process.env.NEXT_PUBLIC_APP_URL}/contests/${contestSlug}/judge`;
 
     const { data, error } = await resend.emails.send({
-      from: 'Stark <invites@stark.wip.et>', 
+      from: 'Stark <invites@stark.et>', 
       to: [email],
       subject: `Judge Access: ${contestTitle}`,
       html: `

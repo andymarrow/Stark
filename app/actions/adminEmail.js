@@ -6,7 +6,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function sendAdminEmail(toEmail, subject, message) {
   try {
     const { error } = await resend.emails.send({
-      from: 'Stark Admin <admin@stark.wip.et>',
+      from: 'Stark Admin <admin@stark.et>',
       to: [toEmail],
       subject: `[SYSTEM NOTICE] ${subject}`,
       html: `

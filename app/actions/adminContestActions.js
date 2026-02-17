@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 import { createClient } from "@/utils/supabase/server";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const SENDER_EMAIL = 'Stark Admin <admin@stark.wip.et>';
+const SENDER_EMAIL = 'Stark Admin <admin@stark.et>';
 
 export async function deleteContestAsAdmin(contestId, reason) {
   const supabase = await createClient();

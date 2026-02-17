@@ -6,7 +6,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function sendCollaboratorInvite(email, projectTitle, inviterName) {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'Stark <invites@stark.wip.et>',
+      from: 'Stark <invites@stark.et>',
       to: [email],
       subject: `Collaboration Invite: ${projectTitle}`,
       html: `
