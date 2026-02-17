@@ -16,23 +16,17 @@ export default function OverviewTab({ contest }) {
         const { count: subCount } = await supabase.from('contest_submissions').select('*', { count: 'exact', head: true }).eq('contest_id', contest.id);
         const { count: judgeCount } = await supabase.from('contest_judges').select('*', { count: 'exact', head: true }).eq('contest_id', contest.id);
         const { data: viewsData } = await supabase.from('contest_submissions').select('project:projects(views)').eq('contest_id', contest.id);
-        const totalViews = viewsData?.reduce((acc, curr) => acc + (curr.project?.views || 0), 0) || 0;
+        const totalViews = viewsData?.reduce((acc, curr) => acc + (Number(curr.project?.views) || 0), 0) || 0;
         setCounts({ entries: subCount || 0, judges: judgeCount || 0, views: totalViews });
         setLoading(false);
     };
     fetchCounts();
   }, [contest.id]);
 
-  const handlePublish = async () => {
-    const { error } = await supabase.from('contests').update({ status: 'open' }).eq('id', contest.id);
-    if (!error) { setStatus("open"); toast.success("Contest is Live!"); }
-  };
-
   const handleRevealWinners = async () => {
     setIsPublishing(true);
     try {
         // 1. Fetch Data
-        console.log(" [Reveal] Fetching submissions for contest:", contest.id);
         const { data: submissions, error: subError } = await supabase
             .from('contest_submissions')
             .select(`id, project_id, project:projects(id, likes_count, views)`)
@@ -47,34 +41,41 @@ export default function OverviewTab({ contest }) {
         
         if(scoreError) throw scoreError;
 
-        // 2. Calculate Logic (Standardized)
-        const maxLikes = Math.max(...(submissions || []).map(s => s.project.likes_count), 1);
-        const maxViews = Math.max(...(submissions || []).map(s => s.project.views), 1);
+        // 2. Constants for Normalization
+        const maxLikes = Math.max(...(submissions || []).map(s => Number(s.project.likes_count) || 0), 1);
+        const maxViews = Math.max(...(submissions || []).map(s => Number(s.project.views) || 0), 1);
 
+        // 3. Calculation Engine
         const rankedSubmissions = submissions.map(sub => {
-            const projectScores = rawScores.filter(s => s.project_id === sub.project_id);
+            const projectScores = (rawScores || []).filter(s => s.project_id === sub.project_id);
             const metricAverages = {};
             
             contest.metrics_config.forEach(metric => {
+                const weight = Number(metric.weight) || 0;
+                
                 if (metric.type === 'manual') {
                     const valid = projectScores.map(ps => ps.scores[metric.name]).filter(v => v != null);
-                    metricAverages[metric.name] = valid.length > 0 ? valid.reduce((a,b)=>a+b,0)/valid.length : 0;
+                    metricAverages[metric.name] = valid.length > 0 ? (valid.reduce((a,b) => a + b, 0) / valid.length) : 0;
                 } else if (metric.type === 'likes') {
-                    metricAverages[metric.name] = (sub.project.likes_count / maxLikes) * 10;
+                    metricAverages[metric.name] = ( (Number(sub.project.likes_count) || 0) / maxLikes ) * 10;
                 } else if (metric.type === 'views') {
-                    metricAverages[metric.name] = (sub.project.views / maxViews) * 10;
+                    metricAverages[metric.name] = ( (Number(sub.project.views) || 0) / maxViews ) * 10;
                 }
             });
 
             let total = 0;
-            contest.metrics_config.forEach(m => total += (metricAverages[m.name] || 0) * (m.weight / 100));
-            return { id: sub.id, total };
+            contest.metrics_config.forEach(m => {
+                const score = Number(metricAverages[m.name]) || 0;
+                const weightFactor = (Number(m.weight) || 0) / 100;
+                total += score * weightFactor;
+            });
+
+            return { id: sub.id, total: Number(total.toFixed(2)) };
         }).sort((a, b) => b.total - a.total);
 
-        // 3. Write to DB with Strict Error Tracking
-        console.log(" [Reveal] Starting DB Write for", rankedSubmissions.length, "entries...");
-        
+        // 4. Batch DB Write
         for (const [index, sub] of rankedSubmissions.entries()) {
+            console.log(`[Reveal] Updating Entry ${sub.id} with Score ${sub.total} at Rank ${index + 1}`);
             const { error: updateError } = await supabase
                 .from('contest_submissions')
                 .update({
@@ -84,25 +85,27 @@ export default function OverviewTab({ contest }) {
                 })
                 .eq('id', sub.id);
 
-            if (updateError) {
-                console.error(` [Reveal] Failed to update entry ${sub.id}:`, updateError);
-                throw new Error(`Database rejected update for rank ${index + 1}. Check RLS.`);
-            }
+            if (updateError) throw new Error(`Submission ${sub.id} failed: ${updateError.message}`);
         }
 
-        // 4. Reveal Globally
+        // 5. Reveal Globally
         const { error: finalError } = await supabase.from('contests').update({ winners_revealed: true }).eq('id', contest.id);
         if (finalError) throw finalError;
         
         setWinnersRevealed(true); 
-        toast.success("Hall of Fame Updated", { description: "Final scores and ranks are now locked in the ledger." });
+        toast.success("Hall of Fame Finalized");
 
     } catch (error) {
-        console.error(" [Reveal] Critical Error:", error);
+        console.error(" [Reveal] Fatal Error:", error);
         toast.error("Operation Failed", { description: error.message });
     } finally {
         setIsPublishing(false);
     }
+  };
+
+  const handlePublish = async () => {
+    const { error } = await supabase.from('contests').update({ status: 'open' }).eq('id', contest.id);
+    if (!error) { setStatus("open"); toast.success("Contest is Live!"); }
   };
 
   const now = new Date();
@@ -141,7 +144,7 @@ export default function OverviewTab({ contest }) {
             </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border shadow-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border">
             {[
                 { label: "Total Entries", value: counts.entries, icon: Layers },
                 { label: "Reach (Views)", value: counts.views, icon: Eye },
