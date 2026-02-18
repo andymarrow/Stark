@@ -108,13 +108,13 @@ export default function HallOfFame({ topEntries }) {
         </div>
 
         {/* Footer */}
-        <div className="p-2 bg-secondary/10 border-t border-border text-center">
+        {/* <div className="p-2 bg-secondary/10 border-t border-border text-center">
             <Link href="/explore?sort=popular">
                 <button className="text-[9px] font-mono uppercase text-muted-foreground hover:text-foreground flex items-center justify-center gap-1 w-full h-8 transition-colors">
                     Retrieve_Historical_Data <ChevronRight size={10} />
                 </button>
             </Link>
-        </div>
+        </div> */}
     </div>
   );
 }
