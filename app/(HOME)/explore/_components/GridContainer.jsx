@@ -62,14 +62,21 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             )
           `)
           .eq('status', 'published')
-          // --- ISOLATION LOGIC ---
-          // Only show projects that are NOT marked as contest-exclusive
+          // --- 🛡️ CRITICAL ISOLATION LOGIC ---
+          // This ensures hidden contest entries never hit the local state.
+          // Only projects that are standard (false) or were made public (false) show up.
           .eq('is_contest_entry', false);
 
         if (error) throw error;
 
         const formatted = (data || []).map(p => {
             const rawLocation = p.author?.location;
+            
+            /**
+             * 🏆 CONTEST GRADUATE LOGIC:
+             * Even if is_contest_entry is false (Public), we check if a 
+             * submission record exists to keep the "Trophy" badge alive.
+             */
             const contestData = p.contest_history?.[0]?.contest;
 
             return {
@@ -86,6 +93,7 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 created_at: p.created_at, 
                 region: getRegionFromLocation(rawLocation), 
                 forHire: p.author?.is_for_hire,
+                // Pass contest info to ProjectCard for the visual indicator
                 contestName: contestData?.title,
                 contestSlug: contestData?.slug,
                 author: {
@@ -179,6 +187,7 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
   return (
     <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-500">
         
+        {/* Sidebar */}
         <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto pr-2 scrollbar-hide">
             <div>
                 <div className="flex items-center justify-between mb-2">
@@ -202,6 +211,7 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             <FilterSheet filters={filters} setFilters={setFilters} />
         </div>
 
+        {/* Main Content Area */}
         <div className="flex-1 flex flex-col">
             
             <ActiveFilters filters={filters} setFilters={setFilters} />
@@ -244,6 +254,7 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 )}
             </div>
 
+            {/* LOAD MORE BUTTON */}
             {!loading && (processedProjects.length > ( (currentPage - 1) * ITEMS_PER_PAGE + visibleCount )) && (
                 <div className="mt-8 flex justify-center">
                     <button 
@@ -256,6 +267,7 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 </div>
             )}
 
+            {/* PAGINATION */}
             {!loading && processedProjects.length > 0 && (
                 <div className="mt-12 border-t border-border border-dashed pt-8">
                     <Pagination 
