@@ -15,7 +15,6 @@ import { registerView } from "@/app/actions/viewAnalytics";
 
 // --- STYLED RENDERERS ---
 const LinkRenderer = (props) => {
-    // Check if it's a mention link (we construct these in useMemo below)
     const isMention = props.children?.[0]?.startsWith?.('@');
     
     return (
@@ -50,23 +49,30 @@ export default function FeedItem({ item, onOpen }) {
 
   // --- 1. CONTENT PROCESSING LOGIC (FIXED) ---
   const processedContent = useMemo(() => {
-    let rawText = isChangelog ? (item.content?.text || item.title) : (item.description || "");
+    let rawText = "";
+    
+    if (isChangelog) {
+        rawText = typeof item.content === 'string' 
+            ? item.content 
+            : (item.content?.text || item.title);
+    } else {
+        rawText = item.description || "";
+    }
+
     if (!rawText) return "";
 
     // A. STRIP HTML SPANS & CONVERT TO MARKDOWN
     // This finds the TipTap/HTML mentions: <span ... data-id="user" ...>@user</span>
     // And converts them to: [@user](/profile/user)
     rawText = rawText.replace(
-        /<span[^>]*data-type="mention"[^>]*data-id="([^"]+)"[^>]*>@([^<]+)<\/span>/g, 
+        /<span[^>]*data-type=['"]mention['"][^>]*data-id=['"]([^'"]+)['"][^>]*>@([^<]+)<\/span>/g, 
         '[@$2](/profile/$1)'
     );
 
-    // B. Fallback: Clean any other leftover HTML span tags if the regex above didn't catch them
-    // (Optional, keeps UI clean)
+    // B. Fallback: Clean any other leftover HTML tags
     rawText = rawText.replace(/<[^>]+>/g, '');
 
-    // C. Fallback: Auto-link plain text mentions that aren't already links
-    // Finds @username and converts to link if not already inside []()
+    // C. Fallback: Auto-link plain text mentions
     rawText = rawText.replace(/(?<!\[)@([a-zA-Z0-9_]+)/g, '[@$1](/profile/$1)');
 
     return rawText;

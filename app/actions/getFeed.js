@@ -58,16 +58,16 @@ export async function getFeedContent({
         .from("projects")
         .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
         .eq("status", "published")
-        // --- ISOLATION: Filter out hidden contest work ---
-        .eq("is_contest_entry", false) 
-        .order("created_at", { ascending: false })
-        .range(from, to);
+        .eq("is_contest_entry", false);
 
-    // Apply Mention Filter to Projects
+    // --- MENTION FILTER LOGIC (FIXED) ---
     if (mention) {
-        const target = mention.toLowerCase();
-        // Searches for username pattern in description (TipTap format)
-        projectQuery = projectQuery.ilike('description', `%(${target})%`);
+        if (mention === '__COMMUNITY__') {
+            projectQuery = projectQuery.ilike('description', '%data-type="mention"%');
+        } else {
+            const target = mention.toLowerCase();
+            projectQuery = projectQuery.ilike('description', `%data-id="${target}"%`);
+        }
     }
 
     if (filter === "network") projectQuery = projectQuery.in("owner_id", ownerIds);
@@ -77,7 +77,7 @@ export async function getFeedContent({
         projectQuery = projectQuery.gte("created_at", yesterday.toISOString());
     }
 
-    const { data: standardProjects } = await projectQuery;
+    const { data: standardProjects } = await projectQuery.order("created_at", { ascending: false }).range(from, to);
     
     if (standardProjects) {
         const existingIds = finalProjects.map(p => p.id);
@@ -101,16 +101,16 @@ export async function getFeedContent({
             )
         `)
         .eq("project.status", "published")
-        // --- ISOLATION: Ensure parent project isn't a hidden contest entry ---
-        .eq("project.is_contest_entry", false) 
-        .order("created_at", { ascending: false })
-        .range(from, to);
+        .eq("project.is_contest_entry", false);
 
-    // Apply Mention Filter to Changelogs
+    // --- MENTION FILTER LOGIC FOR LOGS (FIXED) ---
     if (mention) {
-        const target = mention.toLowerCase();
-        // Searches within the JSONB 'content' field for the username string
-        logQuery = logQuery.ilike('content', `%(${target})%`);
+        if (mention === '__COMMUNITY__') {
+            logQuery = logQuery.ilike('content', '%data-type="mention"%');
+        } else {
+            const target = mention.toLowerCase();
+            logQuery = logQuery.ilike('content', `%data-id="${target}"%`);
+        }
     }
 
     if (filter === "today") {
@@ -119,12 +119,10 @@ export async function getFeedContent({
         logQuery = logQuery.gte("created_at", yesterday.toISOString());
     }
 
-    const { data: logsData } = await logQuery;
+    const { data: logsData } = await logQuery.order("created_at", { ascending: false }).range(from, to);
     finalLogs = logsData || [];
 
     // --- FORMATTING & AUTHOR MAPPING ---
-    
-    // Efficiently map authors for logs
     const logOwnerIds = [...new Set(finalLogs.map(l => l.project.owner_id))];
     let authorsMap = {};
     if (logOwnerIds.length > 0) {
@@ -136,7 +134,6 @@ export async function getFeedContent({
     }
 
     const formattedLogs = finalLogs.map(log => {
-        // Double check network filter for logs
         if (filter === "network" && !ownerIds.includes(log.project.owner_id)) return null;
         return {
             type: "changelog",
@@ -164,7 +161,6 @@ export async function getFeedContent({
         created_at: p.created_at,
         title: p.title,
         description: p.description,
-        // Ensure thumbnail is always the first item in the media list
         media: [...new Set([p.thumbnail_url, ...(p.images || [])])].filter(Boolean),
         likes: p.likes_count,
         views: p.views,
@@ -177,12 +173,9 @@ export async function getFeedContent({
     // --- MERGE & SORT ---
     let combined = [...formattedProjects, ...formattedLogs];
 
-    // Final Sort Logic
     if (filter === "for_you" && !mention) {
-        // Partial randomization for discovery feel
         combined = combined.sort(() => Math.random() - 0.5);
     } else {
-        // Chronological for Today, Network, and filtered Mentions
         combined = combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
@@ -190,7 +183,7 @@ export async function getFeedContent({
 
     return { 
         data: sliced,
-        hasMore: combined.length > limit 
+        hasMore: combined.length >= limit 
     };
 
   } catch (error) {
