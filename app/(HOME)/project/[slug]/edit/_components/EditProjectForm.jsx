@@ -47,6 +47,19 @@ const extractMentions = (text) => {
     return [...new Set(matches)];
 };
 
+// Helper: Slug Generator
+const generateSlug = (text) => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')     // Replace spaces with -
+    .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+    .replace(/\-\-+/g, '-')   // Replace multiple - with single -
+    .replace(/^-+/, '')       // Trim - from start of text
+    .replace(/-+$/, '');      // Trim - from end of text
+};
+
 export default function EditProjectForm({ project }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -230,11 +243,20 @@ export default function EditProjectForm({ project }) {
 
         const tagArray = formData.tagsInput.split(',').map(t => t.trim()).filter(Boolean);
 
-        // B. Update Project
+        // B. Generate new slug if title changed (FIXED)
+        let newSlug = project.slug;
+        if (formData.title !== project.title) {
+            const baseSlug = generateSlug(formData.title);
+            // Append random string to ensure uniqueness
+            newSlug = `${baseSlug}-${Math.floor(Math.random() * 10000)}`;
+        }
+
+        // C. Update Project
         const { error: projectError } = await supabase
             .from('projects')
             .update({
                 title: formData.title,
+                slug: newSlug, // <--- UPDATE SLUG
                 description: formData.description,
                 source_link: formData.source_link,
                 demo_link: formData.demo_link,
@@ -246,7 +268,7 @@ export default function EditProjectForm({ project }) {
 
         if (projectError) throw projectError;
 
-        // C. Process New Collaborators
+        // D. Process New Collaborators
         const newCollaborators = formData.collaborators.filter(c => c.isNew);
         if (newCollaborators.length > 0) {
             const collabRows = newCollaborators.map(c => ({
@@ -266,21 +288,16 @@ export default function EditProjectForm({ project }) {
             }
         }
 
-        // D. HANDLE MENTIONS IN DESCRIPTION (Updated Logic)
+        // E. HANDLE MENTIONS IN DESCRIPTION
         const mentionedUsernames = extractMentions(formData.description);
         
         if (mentionedUsernames.length > 0) {
-            // Fetch IDs
             const { data: usersData } = await supabase
                 .from('profiles')
                 .select('id, username')
                 .in('username', mentionedUsernames);
 
             if (usersData?.length > 0) {
-                // In edit mode, we ideally filter out users who already got notified for this project
-                // But a simple "User X mentioned you in Y" is usually acceptable on update if they are still mentioned.
-                // A better approach: Check if notification exists for (sender, receiver, type, link) recently.
-                // For simplicity here, we insert.
                 const notifications = usersData
                     .filter(u => u.id !== user.id) 
                     .map(u => ({
@@ -288,11 +305,9 @@ export default function EditProjectForm({ project }) {
                         sender_id: user.id,
                         type: 'mention_in_project', 
                         message: `mentioned you in the updated documentation for '${formData.title}'.`,
-                        link: `/project/${project.slug}`
+                        link: `/project/${newSlug}` // Updated link to new slug
                     }));
 
-                // Use UPSERT or check existence if you want to avoid spam on every edit
-                // Here we just insert.
                 if (notifications.length > 0) {
                     await supabase.from('notifications').insert(notifications);
                 }
@@ -300,7 +315,14 @@ export default function EditProjectForm({ project }) {
         }
 
         toast.success("Project Updated", { description: "Changes have been deployed." });
-        router.refresh(); 
+        
+        // F. Handle Redirect if slug changed
+        if (newSlug !== project.slug) {
+            router.push(`/project/${newSlug}`); 
+        } else {
+            router.refresh();
+        }
+
     } catch (error) {
         toast.error("Update Failed", { description: error.message });
     } finally {
