@@ -1,46 +1,53 @@
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import ProfileClient from "./_components/ProfileClient";
-import { supabase } from "@/lib/supabaseClient"; // Fallback for metadata
+import JsonLd from "@/components/JsonLd";
+import { supabase } from "@/lib/supabaseClient";
 
-/**
- * 1. DYNAMIC METADATA (The Intelligence Preview)
- * Generates the preview for Telegram/Social Media with real-time stats
- */
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
+
 export async function generateMetadata({ params }) {
   const { username } = await params;
 
   const { data: user } = await supabase
-    .from('profiles')
-    .select('full_name, bio, views')
-    .eq('username', username)
+    .from("profiles")
+    .select("full_name, bio, avatar_url")
+    .eq("username", username)
     .single();
 
-  if (!user) return { title: "Node Not Found | Stark" };
+  if (!user) return { title: "Profile Not Found | Stark" };
 
-  // Points to our API OG route
-  const ogUrl = `https://stark-01.vercel.app/api/og/profile?username=${username}&v=${Date.now()}`;
+  const canonicalUrl = `${BASE_URL}/profile/${username}`;
+  const ogUrl = `${BASE_URL}/api/og/profile?username=${encodeURIComponent(username)}`;
+  const displayName = user.full_name || username;
+  const title = `${displayName} (@${username}) | Creator profile | Stark`;
+  const description =
+    user.bio ||
+    `View ${displayName}'s profile on Stark – portfolio, projects, and bio.`;
 
   return {
-    title: `${user.full_name || username} (@${username}) | Stark`,
-    description: user.bio || `Explore the technical dossier of ${username} on the Stark Network.`,
+    title,
+    description,
+    alternates: { canonical: canonicalUrl },
     openGraph: {
-      title: `${user.full_name || username} // Stark`,
-      description: user.bio,
-      url: `https://stark-01.vercel.app/profile/${username}`,
+      title: `${displayName} | Stark`,
+      description: user.bio || `Creator profile on Stark.`,
+      url: canonicalUrl,
+      siteName: "Stark",
       images: [
         {
           url: ogUrl,
           width: 1200,
           height: 630,
-          alt: `${username}'s Dossier`,
+          alt: `${username}'s profile`,
         },
       ],
       type: "profile",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${user.full_name || username} // Stark`,
+      title: `${displayName} | Stark`,
+      description: user.bio || `Creator profile on Stark.`,
       images: [ogUrl],
     },
   };
@@ -119,8 +126,42 @@ export default async function ProfilePage({ params }) {
   const contestEntries = contestEntriesRes.data || [];
   const judgingHistory = judgingRes.data || [];
 
+  const profileUrl = `${BASE_URL}/profile/${username}`;
+  const sameAs = [];
+  const s = profileData.socials || {};
+  if (s.github) sameAs.push(s.github);
+  if (s.twitter) sameAs.push(s.twitter);
+  if (s.linkedin) sameAs.push(s.linkedin);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "ProfilePage",
+        mainEntity: {
+          "@type": "Person",
+          name: profileData.full_name || username,
+          url: profileUrl,
+          image: profileData.avatar_url,
+          description: (profileData.bio || "").substring(0, 500),
+          identifier: profileUrl,
+          ...(sameAs.length > 0 && { sameAs }),
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Creators", item: `${BASE_URL}/explore` },
+          { "@type": "ListItem", position: 3, name: profileData.full_name || username, item: profileUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background pt-8 pb-20">
+      <JsonLd data={jsonLd} strict />
         <ProfileClient 
             username={username}
             currentUser={currentUser}

@@ -4,13 +4,14 @@ import { supabase } from "@/lib/supabaseClient";
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 
-// Import components
 import ProjectGallery from "./_components/ProjectGallery";
 import ProjectSidebar from "./_components/ProjectSidebar";
 import ShareAction from "./_components/ShareAction";
 import ProjectContent from "./_components/ProjectContent";
+import JsonLd from "@/components/JsonLd";
 
-// ... (Keep generateMetadata function exactly as is) ...
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
+
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const { data: p } = await supabase
@@ -19,22 +20,28 @@ export async function generateMetadata({ params }) {
     .eq("slug", slug)
     .single();
   if (!p) return { title: "Project Not Found | Stark" };
-  const ogUrl = `https://stark-01.vercel.app/api/og/project?slug=${slug}&v=${Date.now()}`;
+  const canonicalUrl = `${BASE_URL}/project/${slug}`;
+  const ogUrl = `${BASE_URL}/api/og/project?slug=${encodeURIComponent(slug)}`;
+  const desc = p.description?.substring(0, 160) || "";
+  const entityDescription = desc
+    ? `${desc} View project on Stark.`
+    : `${p.title} – project on Stark. View source, demo, and details.`;
   return {
     title: `${p.title} | Stark`,
-    description: p.description?.substring(0, 160),
+    description: entityDescription,
+    alternates: { canonical: canonicalUrl },
     openGraph: {
       title: p.title,
-      description: p.description?.substring(0, 160),
-      url: `https://stark-01.vercel.app/project/${slug}`,
-      siteName: "Stark Network",
+      description: entityDescription,
+      url: canonicalUrl,
+      siteName: "Stark",
       images: [{ url: ogUrl, width: 1200, height: 630, alt: p.title }],
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title: p.title,
-      description: p.description?.substring(0, 160),
+      description: entityDescription,
       images: [ogUrl],
     },
   };
@@ -99,8 +106,43 @@ export default async function ProjectDetailPage({ params }) {
 
   const isOwner = user?.id === projectData.owner_id;
 
+  const profileUrl = `${BASE_URL}/profile/${project.author?.username || "user"}`;
+  const projectUrl = `${BASE_URL}/project/${slug}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CreativeWork",
+        name: project.title,
+        description: (projectData.description || "").substring(0, 500),
+        url: projectUrl,
+        image: project.thumbnail_url || project.images?.[0],
+        author: {
+          "@type": "Person",
+          name: project.author?.name || "Anonymous",
+          url: profileUrl,
+        },
+        ...(projectData.created_at && {
+          datePublished: projectData.created_at,
+        }),
+        ...(projectData.updated_at && {
+          dateModified: projectData.updated_at,
+        }),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Projects", item: `${BASE_URL}/explore` },
+          { "@type": "ListItem", position: 3, name: project.title, item: projectUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-10">
+      <JsonLd data={jsonLd} strict />
       {/* Navigation Breadcrumb */}
       <header className="border-b border-border/40 bg-background/50 backdrop-blur-sm sticky top-0 md:top-16 z-40">
         <div className="container mx-auto px-4 h-12 flex items-center justify-between text-xs font-mono text-muted-foreground">

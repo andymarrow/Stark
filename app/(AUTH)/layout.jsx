@@ -7,6 +7,7 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mo
 export const metadata = {
   title: "Access Control | Stark",
   description: "Authenticate to enter the network.",
+  robots: "noindex, nofollow",
 };
 
 export default function AuthLayout({ children }) {

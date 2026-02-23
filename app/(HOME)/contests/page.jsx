@@ -1,6 +1,15 @@
 import { createClient } from "@/utils/supabase/server";
 import ArenaClient from "./_components/ArenaClient";
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
+
+export const metadata = {
+  title: "Contests",
+  description:
+    "Design and dev contests on Stark. Compete, submit projects, and win.",
+  alternates: { canonical: `${BASE_URL}/contests` },
+};
+
 export default async function ContestsPage() {
   const supabase = await createClient();
 

@@ -14,10 +14,12 @@ const mono = JetBrains_Mono({
 });
 
 // --- SEO CONFIGURATION ---
+// Dynamic base URL so OG images and canonicals work on localhost, staging, and production (stark.et)
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://stark.et';
+
 export const metadata = {
-  // Replace with your actual domain when deployed
-  metadataBase: new URL('https://stark.network'), 
-  
+  metadataBase: new URL(siteUrl),
+
   title: {
     default: "Stark | The Creator Hub",
     template: "%s | Stark" // This allows child pages to have titles like "Profile | Stark"
@@ -43,7 +45,7 @@ export const metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://stark.network",
+    url: siteUrl,
     title: "Stark | Build. Share. Inspire.",
     description: "The open-source portfolio network for Developers, Designers, and Motion Creators.",
     siteName: "Stark",
