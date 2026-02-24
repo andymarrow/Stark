@@ -1,24 +1,39 @@
 import { createClient } from "@/utils/supabase/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import ContestClient from "./_components/ContestClient";
 import JsonLd from "@/components/JsonLd";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
+// --- HELPER: Safe Description Extraction ---
+// Handles both raw strings and TipTap JSON objects
+const getDescriptionText = (desc) => {
+  if (!desc) return "";
+  if (typeof desc === "object") {
+    return desc.text || ""; // Extract text from TipTap JSON
+  }
+  return String(desc); // Ensure it's a string
+};
+
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const supabase = await createClient();
+  
   const { data: c } = await supabase
     .from("contests")
     .select("title, description, cover_image, submission_deadline, created_at")
     .eq("slug", slug)
     .single();
+
   if (!c) return { title: "Contest Not Found | Stark" };
+
   const canonicalUrl = `${BASE_URL}/contests/${slug}`;
   const title = `${c.title} | Contest | Stark`;
-  const description =
-    (c.description || "").substring(0, 155) ||
-    `${c.title} – design contest on Stark. Submit your project, deadlines, and prizes.`;
+  
+  // FIX: Use helper to extract text safely
+  const rawDesc = getDescriptionText(c.description);
+  const description = rawDesc.substring(0, 155) || `${c.title} – design contest on Stark.`;
+
   return {
     title,
     description,
@@ -47,7 +62,6 @@ export default async function PublicContestPage({ params }) {
   const supabase = await createClient();
 
   // 1. FETCH CONTEST DATA
-  // Includes a join with the creator's profile
   const { data: contest, error } = await supabase
     .from('contests')
     .select(`
@@ -60,7 +74,6 @@ export default async function PublicContestPage({ params }) {
   if (error || !contest) return notFound();
 
   // 2. FETCH JUDGING PANEL
-  // Fetches judges and their public profiles to show on the Rules Tab
   const { data: judges } = await supabase
     .from('contest_judges')
     .select(`
@@ -75,11 +88,6 @@ export default async function PublicContestPage({ params }) {
   let userEntry = null;
 
   if (user) {
-    /**
-     * Logic: We check contest_submissions for this contest, 
-     * but we filter the joined 'project' by the owner_id (Current User).
-     * This tells us if the current visitor has already submitted to this event.
-     */
     const { data: submission } = await supabase
         .from('contest_submissions')
         .select('id, project:projects!inner(owner_id)')
@@ -90,18 +98,23 @@ export default async function PublicContestPage({ params }) {
     userEntry = submission;
   }
 
+  // --- JSON-LD GENERATION ---
   const contestUrl = `${BASE_URL}/contests/${slug}`;
   const creatorUsername = contest.creator?.username;
   const organizerUrl = creatorUsername
     ? `${BASE_URL}/profile/${creatorUsername}`
     : undefined;
+    
+  // FIX: Use helper here too
+  const rawDesc = getDescriptionText(contest.description);
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Event",
         name: contest.title,
-        description: (contest.description || "").substring(0, 500) || `${contest.title} – contest on Stark.`,
+        description: rawDesc.substring(0, 500) || `${contest.title} – contest on Stark.`,
         url: contestUrl,
         startDate: contest.created_at,
         endDate: contest.submission_deadline || undefined,
