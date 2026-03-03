@@ -314,21 +314,24 @@ export default function ProfileHeader({ user, currentUser }) {
                 
                 {/* Top Row: Name & Socials */}
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    <div>
-                        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground uppercase leading-none truncate">
+                    <div className="min-w-0 flex-1 md:max-w-[70%]">
+                        <h1 
+                            className="text-3xl md:text-4xl font-bold tracking-tight text-foreground uppercase leading-tight truncate"
+                            title={user.full_name || user.username}
+                        >
                             {user.full_name || user.username}
                         </h1>
                         <div className="flex items-center gap-3 mt-2">
-                            <p className="text-muted-foreground font-mono text-sm tracking-tighter">NODE_ID: @{user.username}</p>
+                            <p className="text-muted-foreground font-mono text-sm tracking-tighter truncate max-w-[200px]">NODE_ID: @{user.username}</p>
                             {isFollowing && followsMe && (
-                                <span className="text-[9px] bg-green-500/10 text-green-500 border border-green-500/30 px-1.5 font-mono flex items-center gap-1">
+                                <span className="text-[9px] bg-green-500/10 text-green-500 border border-green-500/30 px-1.5 font-mono flex items-center gap-1 shrink-0">
                                     <ShieldCheck size={10} /> MUTUAL_LINK
                                 </span>
                             )}
                         </div>
                     </div>
                     
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                         {user.socials?.github && <SocialButton icon={Github} href={user.socials.github} />}
                         {user.socials?.twitter && <SocialButton icon={Twitter} href={user.socials.twitter} />}
                         {user.socials?.linkedin && <SocialButton icon={Linkedin} href={user.socials.linkedin} />}
@@ -367,13 +370,6 @@ export default function ProfileHeader({ user, currentUser }) {
                             Honors & Protocols:
                         </span>
                         
-                        {/* 
-                           FIXES APPLIED HERE:
-                           1. Removed `group` from parent to stop mass-hover.
-                           2. Added `gap-4` for better spacing.
-                           3. Using `flex-wrap` for responsiveness.
-                           4. Wrapped in `<button>` with `z-50` for reliable clicking.
-                        */}
                         <div className="flex flex-wrap gap-4 items-center">
                             {topBadges.map((badge) => (
                                 <button 
@@ -400,12 +396,12 @@ export default function ProfileHeader({ user, currentUser }) {
             </div>
             
             {/* ACTION BUTTONS (Right Column on Desktop) */}
-            <div className="flex flex-row md:flex-col gap-3 w-full md:w-auto pt-4 md:pt-20">
+            <div className="flex flex-row md:flex-col gap-3 w-full md:w-36 pt-4 md:pt-20 shrink-0">
                  {!isOwner ? (
                     <>
                         <Button 
                             onClick={handleFollowToggle}
-                            className={`flex-1 md:w-36 h-10 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none
+                            className={`flex-1 md:w-full h-10 rounded-none font-mono text-xs uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none shrink-0
                             ${isFollowing 
                                 ? 'bg-secondary text-foreground hover:bg-red-600 hover:text-white' 
                                 : 'bg-foreground text-background hover:bg-accent hover:text-white'}`}
@@ -413,7 +409,7 @@ export default function ProfileHeader({ user, currentUser }) {
                             {isFollowing ? <><UserMinus size={14} className="mr-2" /> Disconnect</> : <><UserPlus size={14} className="mr-2" /> Connect</>}
                         </Button>
                         
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                             <Button 
                                 variant="outline" 
                                 onClick={handleMessageClick}
@@ -454,7 +450,7 @@ export default function ProfileHeader({ user, currentUser }) {
                         </div>
                     </>
                  ) : (
-                    <div className="flex md:flex-col gap-2 w-full md:w-36">
+                    <div className="flex md:flex-col gap-2 w-full md:w-36 shrink-0">
                         <Button 
                             onClick={() => router.push('/profile')} 
                             className="flex-1 h-10 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-none font-mono text-xs uppercase tracking-wider"
