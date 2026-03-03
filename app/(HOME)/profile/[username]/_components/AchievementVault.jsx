@@ -141,8 +141,8 @@ export default function AchievementVault({ userId, isOwner }) {
           </div>
       )}
 
-      {/* THE GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* THE GRID - MOBILE RESPONSIVE (1 col mobile, 2 col sm, 3 col md, 4 col lg) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700 mt-8">
         {achievements.map((item, idx) => {
           const isHidden = !item.is_public;
           const isPinned = item.is_pinned;

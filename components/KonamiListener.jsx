@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/app/_context/AuthContext";
 
 // Obfuscated Sequence (KeyCodes)
-// 38=Up, 40=Down, 37=Left, 39=Right, 66=b, 65=a
 const SEQUENCE = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
 
 export default function KonamiListener() {
