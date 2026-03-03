@@ -2,47 +2,43 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/app/_context/AuthContext";
 
-const KONAMI_CODE = [
-  "ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", 
-  "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", 
-  "b", "a"
-];
+// Obfuscated Sequence (KeyCodes)
+// 38=Up, 40=Down, 37=Left, 39=Right, 66=b, 65=a
+const SEQUENCE = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65];
 
 export default function KonamiListener() {
   const { user } = useAuth();
-  const [inputSequence, setInputSequence] = useState([]);
+  const [input, setInput] = useState([]);
 
   useEffect(() => {
     if (!user) return;
 
     const handleKeyDown = async (e) => {
-      // Create a new sequence array by adding the new key, and keeping only the last N keys
-      const newSequence = [...inputSequence, e.key].slice(-KONAMI_CODE.length);
-      setInputSequence(newSequence);
+      // Use keyCode instead of readable "key" strings
+      const newItem = e.keyCode;
+      
+      const nextInput = [...input, newItem].slice(-SEQUENCE.length);
+      setInput(nextInput);
 
-      // Check if sequence matches
-      if (newSequence.join(',').toLowerCase() === KONAMI_CODE.join(',').toLowerCase()) {
-        
-        // Code Matched! Trigger the API
+      // Check pattern
+      if (JSON.stringify(nextInput) === JSON.stringify(SEQUENCE)) {
         try {
             await fetch('/api/achievements/award', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ badgeId: 'konami_code' })
             });
-            // The BadgeListener we built earlier will automatically detect this DB change and show the modal!
+            // Reset after success
+            setInput([]);
         } catch (err) {
-            console.error(err);
+            console.error("Signal lost.");
         }
-        
-        // Reset sequence
-        setInputSequence([]);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inputSequence, user]);
+  }, [input, user]);
 
-  return null; // Invisible component
+  return null; 
 }
