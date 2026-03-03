@@ -45,6 +45,7 @@ export default function ProfileTabs({
   setViewMode,
   workCount = 0,
   savedCount = 0,
+  achievementCount = 0, // NEW PROP FOR VAULT
   sortOrder,
   setSortOrder,
   popularMetric,
@@ -72,6 +73,14 @@ export default function ProfileTabs({
             label="Submissions"
             count={workCount}
           />
+          {/* NEW VAULT TAB */}
+          <TabButton
+            active={activeTab === "achievements"}
+            onClick={() => setActiveTab("achievements")}
+            icon={Medal}
+            label="Vault"
+            count={achievementCount}
+          />
           <TabButton
             active={activeTab === "competitions"}
             onClick={() => setActiveTab("competitions")}
@@ -88,7 +97,8 @@ export default function ProfileTabs({
           />
         </div>
 
-        {activeTab !== "competitions" && (
+        {/* View Toggles (Hidden on Competitions & Achievements) */}
+        {activeTab !== "competitions" && activeTab !== "achievements" && (
           <div className="hidden md:flex items-center gap-1 pb-2">
             <ViewToggleButton
               active={viewMode === "grid"}
@@ -134,7 +144,8 @@ export default function ProfileTabs({
             icon={Gavel}
           />
         </div>
-      ) : (
+      ) : activeTab !== "achievements" ? (
+        // Standard Filters (Hidden on Achievements tab)
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-left-2">
           <div className="flex items-center gap-2 bg-secondary/10 p-1 border border-border w-fit">
             <FilterButton
@@ -192,7 +203,7 @@ export default function ProfileTabs({
             )}
           </AnimatePresence>
         </div>
-      )}
+      ) : null}
 
       {/* --- COMPETITIONS GRID CONTENT --- */}
       {activeTab === "competitions" && (
@@ -298,10 +309,7 @@ function ContestCard({ type, rank, contest, project, score }) {
   const isWinner = type === "winner";
   const isJudge = type === "judge";
 
-  // Handle Thumbnail Logic
-  // If it's a project entry, check project thumb. If judge, check contest cover.
-  const rawUrl =
-    project?.thumbnail_url || contest?.cover_image || "/placeholder.jpg";
+  const rawUrl = project?.thumbnail_url || contest?.cover_image || "/placeholder.jpg";
   const thumb = getThumbnail(rawUrl);
 
   return (

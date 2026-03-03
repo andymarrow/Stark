@@ -12,6 +12,7 @@ import TabsHeader from "./TabsHeader";
 import OverviewTab from "./OverviewTab";
 import ReportsTab from "./ReportsTab";
 import CommTab from "./CommTab";
+import ProtocolsTab from "./ProtocolsTab"; // Import the new Achievement management tab
 import ModalFooter from "./ModalFooter";
 
 export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
@@ -57,12 +58,6 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
         const { count: followingCount } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id);
 
         // 3. FETCH ALL REPORTS TARGETING THIS USER
-        // We fetch ALL reports, then filter them in JS to avoid complex joins in one go
-        // Logic:
-        // - Direct Profile Reports (target_user_id = user.id)
-        // - Project Reports (project.owner_id = user.id)
-        // - Comment Reports (comment.user_id = user.id)
-
         const { data: allReports } = await supabase
           .from('reports')
           .select(`
@@ -189,11 +184,14 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
                         <ReportsTab 
                             profileReports={profileReports} 
                             projectReports={projectReports} 
-                            commentReports={commentReports} // Passed new prop
+                            commentReports={commentReports} 
                             onTakedownProject={handleTakedownProject}
-                            onTakedownComment={handleTakedownComment} // Passed handler
+                            onTakedownComment={handleTakedownComment} 
                         />
                     )}
+
+                    {/* NEW: Achievement Protocol Management Tab */}
+                    {activeTab === 'protocols' && <ProtocolsTab user={user} />}
                     
                     {activeTab === 'comm' && <CommTab emailSubject={emailSubject} setEmailSubject={setEmailSubject} emailBody={emailBody} setEmailBody={setEmailBody} handleSendEmail={handleSendEmail} sendingEmail={sendingEmail} />}
                 </>

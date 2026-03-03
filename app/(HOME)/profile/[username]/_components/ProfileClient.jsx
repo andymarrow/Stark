@@ -9,27 +9,29 @@ import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
-// NEW: Network Registry Imports
+// NEW: Network Registry & Vault Imports
 import NetworkRegistry from "../../_components/NetworkRegistry";
+import AchievementVault from "./AchievementVault";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
 const ITEMS_PER_PAGE = 6;
 
-export default function ProfileClient({ 
-  initialProfile, 
-  initialWork, 
-  initialSaved, 
-  initialFollowerStats, 
-  contestEntries = [], 
-  judgingHistory = [], 
+export default function ProfileClient({
+  initialProfile,
+  initialWork,
+  initialSaved,
+  initialFollowerStats,
+  contestEntries = [],
+  judgingHistory = [],
+  achievementCount = 0, // Passed from server
   currentUser,
-  username 
+  username
 }) {
   // UI State
   const [activeTab, setActiveTab] = useState("work");
   const [viewMode, setViewMode] = useState("grid");
-  
+
   // --- NEW: CONNECTION STATES ---
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false);
   const [connectionType, setConnectionType] = useState("followers");
@@ -93,21 +95,21 @@ export default function ProfileClient({
   }, [activeTab, sortOrder, popularMetric]);
 
   const sortedProjects = useMemo(() => {
-    if (activeTab === 'competitions') return [];
+    if (activeTab === 'competitions' || activeTab === 'achievements') return [];
     let list = activeTab === "work" ? [...initialWork] : [...initialSaved];
     return list.sort((a, b) => {
-        if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
-        if (sortOrder === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
-        if (sortOrder === 'popular') {
-            if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
-            if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
-            if (popularMetric === 'hype') {
-                const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
-                const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
-                return scoreB - scoreA;
-            }
+      if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
+      if (sortOrder === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
+      if (sortOrder === 'popular') {
+        if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
+        if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
+        if (popularMetric === 'hype') {
+          const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
+          const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
+          return scoreB - scoreA;
         }
-        return 0;
+      }
+      return 0;
     });
   }, [initialWork, initialSaved, activeTab, sortOrder, popularMetric]);
 
@@ -132,7 +134,6 @@ export default function ProfileClient({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
           <div className="lg:col-span-2">
-              {/* Updated ProfileStats with Click Handler */}
               <ProfileStats stats={publicStats} onStatClick={fetchConnectionsList} />
           </div>
           <div className="lg:col-span-1">
@@ -147,6 +148,7 @@ export default function ProfileClient({
           setViewMode={setViewMode}
           workCount={initialWork.length}
           savedCount={initialSaved.length}
+          achievementCount={achievementCount}
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
           popularMetric={popularMetric}
@@ -155,6 +157,12 @@ export default function ProfileClient({
           judgingHistory={judgingHistory}
       />
 
+      {/* --- RENDER VAULT TAB --- */}
+      {activeTab === 'achievements' && (
+          <AchievementVault userId={initialProfile.id} isOwner={currentUser?.id === initialProfile.id} />
+      )}
+
+      {/* --- RENDER PROJECTS TABS --- */}
       {(activeTab === 'work' || activeTab === 'saved') && (
           currentProjects.length > 0 ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">

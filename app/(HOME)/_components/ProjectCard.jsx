@@ -8,10 +8,7 @@ import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils";
 function stripMarkdown(md) {
   if (!md) return "";
   return md
-    // 1. Strip Custom Mentions: @[Display](id) -> @Display
     .replace(/@\[([^\]]+)\]\([^\)]+\)/g, "@$1")
-    
-    // 2. Standard Markdown Stripping
     .replace(/#+\s/g, "") 
     .replace(/\*\*?|__?/g, "") 
     .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1") 
@@ -164,10 +161,27 @@ export default function ProjectCard({ project }) {
             </Link>
 
             <div className="flex items-center gap-3 text-muted-foreground font-mono text-[10px] flex-shrink-0">
-              <div className="flex items-center gap-1">
+              
+              {/* CLICK FRENZY LISTENER ADDED HERE */}
+              <div 
+                className="flex items-center gap-1 cursor-pointer pointer-events-auto"
+                onClick={async (e) => {
+                    e.preventDefault();
+                    window.starkClickCount = (window.starkClickCount || 0) + 1;
+                    if (window.starkClickCount === 100) {
+                         await fetch('/api/achievements/award', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ badgeId: 'click_frenzy' })
+                        });
+                        window.starkClickCount = 0; 
+                    }
+                }}
+              >
                 <Star size={12} className="group-hover:text-accent transition-colors" />
                 <span>{formatNumber(stars)}</span>
               </div>
+
               <div className="flex items-center gap-1">
                 <Eye size={12} />
                 <span>{formatNumber(views)}</span>

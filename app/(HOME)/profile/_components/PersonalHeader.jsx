@@ -14,7 +14,8 @@ import {
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
-  User as UserIcon
+  User as UserIcon,
+  ExternalLink // Added Icon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -327,7 +328,22 @@ export default function PersonalHeader({ user, onUpdate }) {
                                 <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/50 px-2 py-0.5 font-mono tracking-wider uppercase shrink-0">HIREABLE</span>
                             )}
                         </h1>
-                        <p className="text-muted-foreground font-mono text-sm">@{user?.username}</p>
+                        
+                        {/* USERNAME & PUBLIC PROFILE LINK */}
+                        <div className="flex items-center gap-2 mt-1">
+                            <p className="text-muted-foreground font-mono text-sm">@{user?.username}</p>
+                            
+                            {/* THE NEW BUTTON: Subtle, Clean, Integrated */}
+                            <Link 
+                                href={`/profile/${user?.username}`} 
+                                className="group flex items-center gap-1 text-[10px] font-mono text-accent bg-accent/5 px-1.5 py-0.5 rounded-sm hover:bg-accent hover:text-white transition-all duration-300"
+                                title="View Public Profile"
+                            >
+                                <span>PUBLIC_VIEW</span>
+                                <ExternalLink size={10} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                            </Link>
+                        </div>
+
                         <p className="mt-3 text-sm max-w-lg text-foreground/80 font-light leading-relaxed">{user?.bio || "No bio established."}</p>
                         <div className="flex flex-wrap gap-4 mt-4 text-xs text-muted-foreground font-mono">
                             <div className="flex items-center gap-1"><MapPin size={12}/> {user?.location || "Unknown"}</div>

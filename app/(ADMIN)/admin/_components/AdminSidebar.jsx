@@ -11,14 +11,16 @@ import {
   Terminal, 
   LogOut,
   Trophy,
-  Megaphone // Added Icon
+  Megaphone,
+  Medal // NEW ICON
 } from "lucide-react";
 import { useAuth } from "@/app/_context/AuthContext";
 
 const NAV_ITEMS = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin" },
   { label: "User Management", icon: Users, href: "/admin/users" },
-  { label: "Announcements", icon: Megaphone, href: "/admin/announcements" }, // Added Item
+  { label: "Achievements", icon: Medal, href: "/admin/achievements" }, // NEW ITEM
+  { label: "Announcements", icon: Megaphone, href: "/admin/announcements" },
   { label: "Contest Control", icon: Trophy, href: "/admin/contests" },
   { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation" },
   { label: "System Health", icon: Activity, href: "/admin/health" },
@@ -42,14 +44,12 @@ export default function AdminSidebar() {
     };
 
     fetchCount();
-
-    // Optional: Set up an interval to refresh count every minute
     const interval = setInterval(fetchCount, 60000);
     return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="flex flex-col h-full text-zinc-400">
+    <div className="flex flex-col h-full text-zinc-400 bg-black border-r border-white/10">
       
       {/* Brand */}
       <div className="h-16 flex items-center px-6 border-b border-white/10">
@@ -79,7 +79,6 @@ export default function AdminSidebar() {
                         <span>{item.label}</span>
                     </div>
                     
-                    {/* Dynamic Badge for Moderation */}
                     {item.href === "/admin/moderation" && pendingCount > 0 && (
                         <span className="text-[10px] bg-red-600 text-white px-1.5 py-0.5 font-bold">
                             {pendingCount}

@@ -45,9 +45,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
+// Import the Achievement Card Preview for the Mini-Rack
+import AchievementCardPreview from "@/app/(ADMIN)/admin/achievements/_components/AchievementCardPreview";
+import AchievementDetailModal from "@/app/(ADMIN)/admin/achievements/_components/AchievementDetailModal";
+
 export default function ProfileHeader({ user, currentUser }) {
   const router = useRouter();
-   // 1. DERIVED STATE: CHECK OWNERSHIP
+  
+  // 1. DERIVED STATE: CHECK OWNERSHIP
   const isOwner = currentUser?.id === user?.id;
   
   // Connection States
@@ -65,7 +70,32 @@ export default function ProfileHeader({ user, currentUser }) {
   const [reportReason, setReportReason] = useState("spam");
   const [reportDetails, setReportDetails] = useState("");
 
-  // 1. Check Connection Status (Handshake logic)
+  // Achievement States
+  const [topBadges, setTopBadges] = useState([]);
+  const [selectedBadge, setSelectedBadge] = useState(null);
+
+  // 1. Fetch Top Badges
+  useEffect(() => {
+    if (user?.id) {
+      const fetchBadges = async () => {
+        const { data, error } = await supabase
+          .from('user_achievements')
+          .select('*, achievement_types(*)') 
+          .eq('user_id', user.id)
+          .eq('is_public', true)
+          // NEW SORT ORDER: Pinned items float to the top
+          .order('is_pinned', { ascending: false })
+          .order('unlocked_at', { ascending: false })
+          .limit(5); 
+        
+        if (error) console.error("Header Badges Error:", error);
+        if (data) setTopBadges(data);
+      };
+      fetchBadges();
+    }
+  }, [user?.id]);
+
+  // 2. Check Connection Status (Handshake logic)
   useEffect(() => {
     if (currentUser && user?.id) {
       const checkConnection = async () => {
@@ -90,7 +120,7 @@ export default function ProfileHeader({ user, currentUser }) {
   }, [currentUser, user?.id]);
 
   /**
-   * 2. Handle Messaging (Find or Create Logic)
+   * 3. Handle Messaging (Find or Create Logic)
    */
   const handleMessageClick = async () => {
     if (!currentUser) return toast.error("Authentication Required");
@@ -104,7 +134,7 @@ export default function ProfileHeader({ user, currentUser }) {
     setIsInitializingChat(true);
 
     try {
-        // 1. Find existing conversations for current user
+        // Find existing conversations for current user
         const { data: myParticipations, error: partError } = await supabase
             .from('conversation_participants')
             .select('conversation_id')
@@ -115,7 +145,7 @@ export default function ProfileHeader({ user, currentUser }) {
         const myConvIds = (myParticipations || []).map(p => p.conversation_id);
         let existingRoomId = null;
 
-        // 2. Check if the target user is in any of those conversations
+        // Check if the target user is in any of those conversations
         if (myConvIds.length > 0) {
            const { data: commonRoom, error: roomError } = await supabase
               .from('conversation_participants')
@@ -132,7 +162,7 @@ export default function ProfileHeader({ user, currentUser }) {
         if (existingRoomId) {
             router.push(`/chat?id=${existingRoomId}`);
         } else {
-            // 3. Create a new conversation
+            // Create a new conversation
             const { data: newRoom, error: createError } = await supabase
                 .from('conversations')
                 .insert({ last_message: 'Encrypted handshake initiated.' })
@@ -141,7 +171,7 @@ export default function ProfileHeader({ user, currentUser }) {
 
             if (createError) throw createError;
 
-            // 4. Add both users to the participants list
+            // Add both users to the participants list
             const { error: joinError } = await supabase
                 .from('conversation_participants')
                 .insert([
@@ -161,7 +191,7 @@ export default function ProfileHeader({ user, currentUser }) {
     }
   };
 
-  // 3. Handle Follow Toggle
+  // 4. Handle Follow Toggle
   const handleFollowToggle = async () => {
     if (!currentUser) {
       toast.error("Authentication Required", { description: "Login to establish network links." });
@@ -185,7 +215,7 @@ export default function ProfileHeader({ user, currentUser }) {
     }
   };
 
-  // 4. Handle Report
+  // 5. Handle Report
   const handleReportSubmit = async () => {
     setIsSubmitting(true);
     try {
@@ -207,7 +237,7 @@ export default function ProfileHeader({ user, currentUser }) {
     }
   };
 
-  // 5. Handle Share
+  // 6. Handle Share
   const handleShareProfile = () => {
     if (typeof window !== "undefined") {
         navigator.clipboard.writeText(window.location.href);
@@ -218,14 +248,14 @@ export default function ProfileHeader({ user, currentUser }) {
   if (!user) return null;
 
   return (
-    <div className="w-full bg-background border border-border relative overflow-hidden group mb-6">
+    <div className="w-full bg-background border border-border relative overflow-hidden mb-6">
       
       {/* 
         ========================================
         1. CINEMATIC BANNER AREA
         ========================================
       */}
-      <div className="h-48 md:h-64 w-full relative bg-secondary/30 overflow-hidden">
+      <div className="h-48 md:h-64 w-full relative bg-secondary/30 overflow-hidden group">
         {user.banner_url ? (
             <Image 
                 src={user.banner_url} 
@@ -329,6 +359,44 @@ export default function ProfileHeader({ user, currentUser }) {
                         <span>Joined {new Date(user.created_at).getFullYear()}</span>
                     </div>
                 </div>
+
+                {/* THE MINI-RACK (Top Badges) */}
+                {topBadges.length > 0 && (
+                    <div className="pt-6 border-t border-border w-full flex flex-col gap-4 animate-in fade-in duration-700 relative z-20">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest hidden sm:block">
+                            Honors & Protocols:
+                        </span>
+                        
+                        {/* 
+                           FIXES APPLIED HERE:
+                           1. Removed `group` from parent to stop mass-hover.
+                           2. Added `gap-4` for better spacing.
+                           3. Using `flex-wrap` for responsiveness.
+                           4. Wrapped in `<button>` with `z-50` for reliable clicking.
+                        */}
+                        <div className="flex flex-wrap gap-4 items-center">
+                            {topBadges.map((badge) => (
+                                <button 
+                                    key={badge.id} 
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setSelectedBadge(badge);
+                                    }}
+                                    className="relative transition-transform duration-300 hover:scale-110 hover:z-30 focus:outline-none cursor-pointer"
+                                    title={badge.achievement_types?.name}
+                                >
+                                    <AchievementCardPreview 
+                                        badge={badge.achievement_types} 
+                                        size="sm" 
+                                        className="drop-shadow-md"
+                                    />
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
             
             {/* ACTION BUTTONS (Right Column on Desktop) */}
@@ -350,23 +418,18 @@ export default function ProfileHeader({ user, currentUser }) {
                                 variant="outline" 
                                 onClick={handleMessageClick}
                                 disabled={isInitializingChat}
-                                className="flex-1 h-10 rounded-none font-mono text-xs uppercase transition-all group
-                                          border border-zinc-200 dark:border-zinc-800 
-                                          text-zinc-700 dark:text-zinc-300
-                                          hover:border-red-600 hover:bg-red-600 hover:text-white"
+                                className="flex-1 h-10 rounded-none font-mono text-xs uppercase transition-all group border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-red-600 hover:bg-red-600 hover:text-white"
                             >
                                 {isInitializingChat ? (
                                     <Loader2 className="animate-spin" size={14} />
                                 ) : isFollowing && followsMe ? (
                                     <>
-                                        {/* Inherits parent hover:text-white automatically */}
                                         <MessageSquare size={14} className="mr-2" /> 
                                         Msg
                                     </>
                                 ) : (
                                     <>
-                                        {/* FIX: Changed group-hover:text-accent to group-hover:text-white/80 or inherit */}
-                                        <Lock size={14} className="mr-2   transition-colors" /> 
+                                        <Lock size={14} className="mr-2 transition-colors" /> 
                                         Msg
                                     </>
                                 )}
@@ -398,7 +461,6 @@ export default function ProfileHeader({ user, currentUser }) {
                         >
                             Edit Profile
                         </Button>
-                        {/* Share button for owner */}
                         <Button 
                             onClick={handleShareProfile}
                             className="flex-1 md:flex-none h-10 bg-transparent hover:bg-accent/10 text-foreground border border-border hover:border-accent rounded-none font-mono text-xs uppercase tracking-wider"
@@ -411,6 +473,14 @@ export default function ProfileHeader({ user, currentUser }) {
 
         </div>
       </div>
+
+      {/* --- ACHIEVEMENT DETAIL MODAL (THEMED & FIXED) --- */}
+      <AchievementDetailModal 
+            badge={selectedBadge?.achievement_types} 
+            unlockedAt={selectedBadge?.unlocked_at}
+            isOpen={!!selectedBadge} 
+            onClose={() => setSelectedBadge(null)} 
+        />
 
       {/* --- MESSAGE GATE MODAL --- */}
       <Dialog open={isMessageGateOpen} onOpenChange={setIsMessageGateOpen}>

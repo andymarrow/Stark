@@ -67,6 +67,9 @@ export default function ProjectSidebar({ project }) {
   // Ref to ensure we don't count twice in React Strict Mode
   const hasCountedRef = useRef(false);
 
+  // --- SELF-LOVE EASTER EGG COUNTER ---
+  const selfLoveRef = useRef(0);
+
   // --- 0. FETCH COLLABORATORS & STATUS ---
   useEffect(() => {
     const fetchTeam = async () => {
@@ -175,6 +178,24 @@ export default function ProjectSidebar({ project }) {
       toast.error("Authentication Required", { description: "Please login to star projects." });
       return;
     }
+
+    // --- START: SELF-LOVE EASTER EGG LOGIC ---
+    if (user.id === project.author.id) {
+        selfLoveRef.current += 1;
+        if (selfLoveRef.current === 10) {
+            try {
+                await fetch('/api/achievements/award', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ badgeId: 'self_love' })
+                });
+            } catch (err) {
+                console.error("Achievement trigger failed:", err);
+            }
+            selfLoveRef.current = 0; // Reset after attempt
+        }
+    }
+    // --- END: SELF-LOVE EASTER EGG LOGIC ---
 
     const previousLiked = isLiked;
     const previousCount = likesCount;

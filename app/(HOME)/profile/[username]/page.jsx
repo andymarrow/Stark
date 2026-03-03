@@ -73,8 +73,16 @@ export default async function ProfilePage({ params }) {
 
   if (profileError || !profileData) return notFound();
 
-  // C. Fetch Projects, Follower Stats AND Contest Data in Parallel
-  const [projectsRes, likedRes, followersCount, followingCount, contestEntriesRes, judgingRes] = await Promise.all([
+  // C. Fetch Projects, Follower Stats, Contest Data, AND Achievement Count in Parallel
+  const [
+    projectsRes, 
+    likedRes, 
+    followersCount, 
+    followingCount, 
+    contestEntriesRes, 
+    judgingRes, 
+    achievementsCountRes
+  ] = await Promise.all([
     // 1. Work Projects (Exclude Contest Entries from Main Feed)
     supabaseServer
       .from('projects')
@@ -118,7 +126,14 @@ export default async function ProfilePage({ params }) {
           id, status, created_at,
           contest:contests(id, title, slug, cover_image)
       `)
+      .eq('user_id', profileData.id),
+
+    // 7. Public Achievement Count
+    supabaseServer
+      .from('user_achievements')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', profileData.id)
+      .eq('is_public', true)
   ]);
 
   const workProjects = projectsRes.data || [];
@@ -168,9 +183,9 @@ export default async function ProfilePage({ params }) {
             initialProfile={profileData}
             initialWork={workProjects}
             initialSaved={likedProjects}
-            // New Props passed to Client
             contestEntries={contestEntries}
             judgingHistory={judgingHistory}
+            achievementCount={achievementsCountRes.count || 0}
             initialFollowerStats={{
                 followers: followersCount.count || 0,
                 following: followingCount.count || 0
