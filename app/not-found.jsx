@@ -84,7 +84,7 @@ export default function NotFound() {
             <Button 
                 variant="outline" 
                 onClick={() => window.location.reload()}
-                className="h-12 px-8 rounded-none border-border hover:border-accent hover:text-accent font-mono tracking-wider bg-transparent uppercase text-xs"
+                className="h-12 px-8 rounded-none border-border hover:border-accent hover:text-accent-foreground font-mono tracking-wider bg-transparent uppercase text-xs"
             >
                 <RefreshCcw size={14} className="mr-2" />
                 Reload System

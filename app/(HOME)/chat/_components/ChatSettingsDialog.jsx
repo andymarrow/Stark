@@ -97,9 +97,7 @@ export default function ChatSettingsDialog({ isOpen, onClose, user }) {
             <DialogTitle className="text-lg font-mono font-bold uppercase tracking-widest flex items-center gap-2">
               <Shield size={18} /> Secure_Config
             </DialogTitle>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-              <X size={18} />
-            </button>
+           
           </div>
         </div>
 
