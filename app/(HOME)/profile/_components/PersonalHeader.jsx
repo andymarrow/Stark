@@ -46,6 +46,8 @@ export default function PersonalHeader({ user, onUpdate }) {
   const fileInputRef = useRef(null);
   const bannerInputRef = useRef(null);
 
+  const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
   // Form State
   const [formData, setFormData] = useState({
     full_name: "",
@@ -84,40 +86,47 @@ export default function PersonalHeader({ user, onUpdate }) {
 
   // --- REAL-TIME USERNAME CHECKER ---
   const checkUsernameAvailability = useCallback(async (name) => {
-    const cleanName = name.toLowerCase().trim().replace(/\s+/g, '_');
-    
-    if (cleanName === user?.username) {
-        setUsernameStatus("idle");
-        setUsernameError("");
-        return;
-    }
+  const cleanName = name.toLowerCase().trim(); // Don't replace symbols yet, we want to detect them
+  
+  if (cleanName === user?.username) {
+      setUsernameStatus("idle");
+      setUsernameError("");
+      return;
+  }
 
-    if (cleanName.length < 3) {
-        setUsernameStatus("taken");
-        setUsernameError("Handle too short (min 3 chars)");
-        return;
-    }
+  // NEW: Immediate Regex Check
+  if (!USERNAME_REGEX.test(cleanName)) {
+      setUsernameStatus("taken");
+      setUsernameError("Only letters, numbers, underscores (_), and hyphens (-) allowed.");
+      return;
+  }
 
-    setUsernameStatus("checking");
+  if (cleanName.length < 3) {
+      setUsernameStatus("taken");
+      setUsernameError("Handle too short (min 3 chars)");
+      return;
+  }
 
-    try {
-        const { data } = await supabase
-            .from('profiles')
-            .select('username')
-            .eq('username', cleanName)
-            .maybeSingle();
+  setUsernameStatus("checking");
 
-        if (data) {
-            setUsernameStatus("taken");
-            setUsernameError("This handle is already claimed.");
-        } else {
-            setUsernameStatus("available");
-            setUsernameError("");
-        }
-    } catch (err) {
-        console.error(err);
-    }
-  }, [user?.username]);
+  try {
+      const { data } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('username', cleanName)
+          .maybeSingle();
+
+      if (data) {
+          setUsernameStatus("taken");
+          setUsernameError("This handle is already claimed.");
+      } else {
+          setUsernameStatus("available");
+          setUsernameError("");
+      }
+  } catch (err) {
+      console.error(err);
+  }
+}, [user?.username]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -209,42 +218,50 @@ export default function PersonalHeader({ user, onUpdate }) {
 
   // --- 3. SAVE PROFILE DATA ---
   const handleSave = async () => {
-    if (usernameStatus === "taken") {
-        toast.error("Invalid Handle", { description: "Please resolve handle conflict." });
-        return;
-    }
+  const cleanUsername = formData.username.toLowerCase().trim();
 
-    setIsSaving(true);
-    try {
-        const cleanUsername = formData.username.toLowerCase().trim().replace(/\s+/g, '_');
+  // FINAL GUARD: Block save if regex fails
+  if (!USERNAME_REGEX.test(cleanUsername)) {
+      toast.error("Invalid Handle", { 
+          description: "Please remove special characters like +, @, or spaces." 
+      });
+      return;
+  }
 
-        const { error } = await supabase
-            .from('profiles')
-            .update({
-                full_name: formData.full_name,
-                username: cleanUsername,
-                bio: formData.bio,
-                location: formData.location,
-                website: formData.website,
-                avatar_url: formData.avatar_url,
-                banner_url: formData.banner_url, 
-            })
-            .eq('id', user.id);
+  if (usernameStatus === "taken") {
+      toast.error("Invalid Handle", { description: "Please resolve handle conflict." });
+      return;
+  }
 
-        if (error) {
-            if (error.code === '23505') throw new Error("Username already exists.");
-            throw error;
-        }
+  setIsSaving(true);
+  try {
+      const { error } = await supabase
+          .from('profiles')
+          .update({
+              full_name: formData.full_name,
+              username: cleanUsername,
+              bio: formData.bio,
+              location: formData.location,
+              website: formData.website,
+              avatar_url: formData.avatar_url,
+              banner_url: formData.banner_url, 
+          })
+          .eq('id', user.id);
 
-        toast.success("Profile Updated");
-        setIsEditing(false);
-        if (onUpdate) onUpdate(); 
-    } catch (error) {
-        toast.error("Update Failed", { description: error.message });
-    } finally {
-        setIsSaving(false);
-    }
-  };
+      if (error) {
+          if (error.code === '23505') throw new Error("Username already exists.");
+          throw error;
+      }
+
+      toast.success("Profile Updated");
+      setIsEditing(false);
+      if (onUpdate) onUpdate(); 
+  } catch (error) {
+      toast.error("Update Failed", { description: error.message });
+  } finally {
+      setIsSaving(false);
+  }
+};
 
   const triggerFileInput = () => fileInputRef.current?.click();
   const triggerBannerInput = () => bannerInputRef.current?.click();
@@ -414,6 +431,8 @@ export default function PersonalHeader({ user, onUpdate }) {
                                 value={formData.username} 
                                 onChange={(e) => setFormData({...formData, username: e.target.value})}
                                 className="flex-1 bg-transparent border-none outline-none p-3 h-10 text-sm font-mono" 
+                                spellCheck="false"
+                                autoCapitalize="none"
                             />
                             <div className="pr-3">
                                 {usernameStatus === "available" && <CheckCircle2 size={14} className="text-green-500" />}
