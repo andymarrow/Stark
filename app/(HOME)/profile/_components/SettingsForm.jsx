@@ -168,7 +168,19 @@ export default function SettingsForm({ user, onUpdate }) {
     }
   };
 
+  const ensureAbsoluteUrl = (url) => {
+  if (!url) return "";
+  const trimmed = url.trim();
+  // If it already has a protocol, return it as is
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  // Otherwise, assume it's a web link and prepend https://
+  return `https://${trimmed}`;
+};
+
   const handleSave = async () => {
+    // 1. Validation Checks
     if (usernameStatus === "taken") {
         toast.error("Invalid Username", { description: "Please choose an available identity handle." });
         return;
@@ -176,8 +188,20 @@ export default function SettingsForm({ user, onUpdate }) {
 
     setIsSaving(true);
     try {
+        // 2. Prepare Data
         const cleanUsername = formData.username.toLowerCase().trim().replace(/\s+/g, '_');
+        
+        // CLEAN THE LINKS: Ensure they start with https://
+        const cleanedSocials = {
+            github: ensureAbsoluteUrl(formData.socials.github),
+            twitter: ensureAbsoluteUrl(formData.socials.twitter),
+            linkedin: ensureAbsoluteUrl(formData.socials.linkedin)
+        };
+        
+        // Clean the Portfolio Website too
+        const cleanedWebsite = ensureAbsoluteUrl(formData.website);
 
+        // 3. Database Update
         const { error } = await supabase
             .from('profiles')
             .update({
@@ -185,10 +209,10 @@ export default function SettingsForm({ user, onUpdate }) {
                 username: cleanUsername,
                 bio: formData.bio,
                 location: formData.location,
-                website: formData.website,
-                socials: formData.socials,
+                website: cleanedWebsite, // Saved as absolute URL
+                socials: cleanedSocials, // Saved as absolute URLs
                 is_for_hire: formData.is_for_hire,
-                settings: formData.settings, // Save JSONB Settings
+                settings: formData.settings,
             })
             .eq('id', user.id);
 
@@ -197,7 +221,16 @@ export default function SettingsForm({ user, onUpdate }) {
             throw error;
         }
 
+        // 4. Success Feedback
         toast.success("Settings Saved", { description: "Your configuration has been deployed." });
+        
+        // Update local state to reflect the cleaned URLs immediately
+        setFormData(prev => ({
+            ...prev,
+            website: cleanedWebsite,
+            socials: cleanedSocials
+        }));
+
         if (onUpdate) onUpdate();
 
     } catch (error) {
@@ -206,7 +239,7 @@ export default function SettingsForm({ user, onUpdate }) {
     } finally {
         setIsSaving(false);
     }
-  };
+};
 
   if (!mounted) return null;
 

@@ -74,6 +74,16 @@ export default function ProfileHeader({ user, currentUser }) {
   const [topBadges, setTopBadges] = useState([]);
   const [selectedBadge, setSelectedBadge] = useState(null);
 
+  const ensureAbsoluteUrl = (url) => {
+  if (!url) return "";
+  // If it already has a protocol, return it as is
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  // Otherwise, prepend https://
+  return `https://${url}`;
+};
+
   // 1. Fetch Top Badges
   useEffect(() => {
     if (user?.id) {
@@ -561,9 +571,11 @@ export default function ProfileHeader({ user, currentUser }) {
 }
 
 function SocialButton({ icon: Icon, href }) {
+  const absoluteHref = ensureAbsoluteUrl(href); // Use the helper here
+
   return (
     <a 
-      href={href} 
+      href={absoluteHref} 
       target="_blank" 
       rel="noopener noreferrer"
       className="w-8 h-8 flex items-center justify-center border border-border bg-background hover:border-accent hover:text-accent transition-all duration-200"
