@@ -49,6 +49,17 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import AchievementCardPreview from "@/app/(ADMIN)/admin/achievements/_components/AchievementCardPreview";
 import AchievementDetailModal from "@/app/(ADMIN)/admin/achievements/_components/AchievementDetailModal";
 
+ const ensureAbsoluteUrl = (url) => {
+  if (!url) return "";
+  // If it already has a protocol, return it as is
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  // Otherwise, prepend https://
+  return `https://${url}`;
+};
+
+
 export default function ProfileHeader({ user, currentUser }) {
   const router = useRouter();
   
@@ -74,16 +85,7 @@ export default function ProfileHeader({ user, currentUser }) {
   const [topBadges, setTopBadges] = useState([]);
   const [selectedBadge, setSelectedBadge] = useState(null);
 
-  const ensureAbsoluteUrl = (url) => {
-  if (!url) return "";
-  // If it already has a protocol, return it as is
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-  // Otherwise, prepend https://
-  return `https://${url}`;
-};
-
+ 
   // 1. Fetch Top Badges
   useEffect(() => {
     if (user?.id) {
