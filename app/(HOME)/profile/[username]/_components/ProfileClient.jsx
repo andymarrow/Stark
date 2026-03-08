@@ -9,9 +9,10 @@ import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
-// NEW: Network Registry & Vault Imports
+// NEW: Network Registry & Vault & Events Imports
 import NetworkRegistry from "../../_components/NetworkRegistry";
 import AchievementVault from "./AchievementVault";
+import EventsTabContent from "./EventsTabContent"; // <--- Added Import
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
@@ -24,7 +25,9 @@ export default function ProfileClient({
   initialFollowerStats,
   contestEntries = [],
   judgingHistory = [],
-  achievementCount = 0, // Passed from server
+  hostedEvents = [], // <--- New Prop
+  attendedEvents = [], // <--- New Prop
+  achievementCount = 0, 
   currentUser,
   username
 }) {
@@ -94,8 +97,13 @@ export default function ProfileClient({
     setCurrentPage(1);
   }, [activeTab, sortOrder, popularMetric]);
 
+  // Calculate Event Activity Count
+  const totalEventsActivity = hostedEvents.length + attendedEvents.length;
+
   const sortedProjects = useMemo(() => {
-    if (activeTab === 'competitions' || activeTab === 'achievements') return [];
+    // Exclude special tabs from this sorting logic
+    if (activeTab === 'competitions' || activeTab === 'achievements' || activeTab === 'events') return [];
+    
     let list = activeTab === "work" ? [...initialWork] : [...initialSaved];
     return list.sort((a, b) => {
       if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
@@ -149,6 +157,7 @@ export default function ProfileClient({
           workCount={initialWork.length}
           savedCount={initialSaved.length}
           achievementCount={achievementCount}
+          eventsCount={totalEventsActivity} // <--- Pass events count
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
           popularMetric={popularMetric}
@@ -160,6 +169,14 @@ export default function ProfileClient({
       {/* --- RENDER VAULT TAB --- */}
       {activeTab === 'achievements' && (
           <AchievementVault userId={initialProfile.id} isOwner={currentUser?.id === initialProfile.id} />
+      )}
+
+      {/* --- RENDER EVENTS TAB (NEW) --- */}
+      {activeTab === 'events' && (
+        <EventsTabContent 
+          hostedEvents={hostedEvents} 
+          attendedEvents={attendedEvents} 
+        />
       )}
 
       {/* --- RENDER PROJECTS TABS --- */}

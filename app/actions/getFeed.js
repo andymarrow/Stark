@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 /**
  * GET_FEED_CONTENT
  * Fetches combined stream of Projects and Changelogs.
- * Enforces isolation of active contest entries.
+ * Enforces isolation of active contest entries AND private event submissions.
  */
 export async function getFeedContent({ 
   filter = "for_you", 
@@ -15,7 +15,6 @@ export async function getFeedContent({
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Adjust fetch limits for merging/randomization strategies
   const fetchLimit = filter === "for_you" ? limit * 3 : limit;
   const from = (page - 1) * limit;
   const to = from + fetchLimit - 1;
@@ -24,7 +23,7 @@ export async function getFeedContent({
     let finalProjects = [];
     let finalLogs = [];
 
-    // --- STRATEGY A: PREFERENCE MIX (Only if NO specific mention is being filtered) ---
+    // --- STRATEGY A: PREFERENCE MIX ---
     if (filter === "for_you" && user && page === 1 && !mention) {
         const { data: profile } = await supabase.from("profiles").select("preferences").eq("id", user.id).single();
         const prefs = profile?.preferences || {};
@@ -33,9 +32,12 @@ export async function getFeedContent({
         if (topTags.length > 0) {
              const { data: preferred } = await supabase
                 .from("projects")
-                .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
+                .select(`
+                    *, 
+                    author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role),
+                    event_history:event_submissions!project_id(is_public)
+                `)
                 .eq("status", "published")
-                // --- ISOLATION: Filter out hidden contest work ---
                 .eq("is_contest_entry", false) 
                 .overlaps("tags", topTags)
                 .order("quality_score", { ascending: false })
@@ -49,25 +51,23 @@ export async function getFeedContent({
     if (filter === "network" && user) {
         const { data: follows } = await supabase.from("follows").select("following_id").eq("follower_id", user.id);
         ownerIds = follows?.map(f => f.following_id) || [];
-        // If filtering by network but no follows found, return early
         if (ownerIds.length === 0) return { data: [], hasMore: false };
     }
 
     // 1. PROJECTS QUERY
     let projectQuery = supabase
         .from("projects")
-        .select(`*, author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role)`)
+        .select(`
+            *, 
+            author:profiles!projects_owner_id_fkey(username, full_name, avatar_url, role),
+            event_history:event_submissions!project_id(is_public)
+        `)
         .eq("status", "published")
         .eq("is_contest_entry", false);
 
-    // --- MENTION FILTER LOGIC (FIXED) ---
     if (mention) {
-        if (mention === '__COMMUNITY__') {
-            projectQuery = projectQuery.ilike('description', '%data-type="mention"%');
-        } else {
-            const target = mention.toLowerCase();
-            projectQuery = projectQuery.ilike('description', `%data-id="${target}"%`);
-        }
+        if (mention === '__COMMUNITY__') projectQuery = projectQuery.ilike('description', '%data-type="mention"%');
+        else projectQuery = projectQuery.ilike('description', `%data-id="${mention.toLowerCase()}"%`);
     }
 
     if (filter === "network") projectQuery = projectQuery.in("owner_id", ownerIds);
@@ -85,32 +85,31 @@ export async function getFeedContent({
         finalProjects.push(...newItems);
     }
 
+    // --- FILTER: Remove Private Event Submissions from Projects ---
+    finalProjects = finalProjects.filter(p => {
+        if (p.event_history && p.event_history.length > 0) {
+            return p.event_history[0].is_public === true;
+        }
+        return true;
+    });
+
     // 2. CHANGELOGS QUERY
+    // We assume if a project is hidden, its changelogs should be hidden too.
     let logQuery = supabase
         .from("project_logs")
         .select(`
             *,
             project:projects!inner(
-                id,
-                slug, 
-                title, 
-                owner_id, 
-                status,
-                is_contest_entry,
-                views
+                id, slug, title, owner_id, status, is_contest_entry, views,
+                event_history:event_submissions(is_public)
             )
         `)
         .eq("project.status", "published")
         .eq("project.is_contest_entry", false);
 
-    // --- MENTION FILTER LOGIC FOR LOGS (FIXED) ---
     if (mention) {
-        if (mention === '__COMMUNITY__') {
-            logQuery = logQuery.ilike('content', '%data-type="mention"%');
-        } else {
-            const target = mention.toLowerCase();
-            logQuery = logQuery.ilike('content', `%data-id="${target}"%`);
-        }
+        if (mention === '__COMMUNITY__') logQuery = logQuery.ilike('content', '%data-type="mention"%');
+        else logQuery = logQuery.ilike('content', `%data-id="${mention.toLowerCase()}"%`);
     }
 
     if (filter === "today") {
@@ -120,9 +119,17 @@ export async function getFeedContent({
     }
 
     const { data: logsData } = await logQuery.order("created_at", { ascending: false }).range(from, to);
-    finalLogs = logsData || [];
+    
+    // --- FILTER: Remove Private Event Submissions from Logs ---
+    finalLogs = (logsData || []).filter(log => {
+        const p = log.project;
+        if (p.event_history && p.event_history.length > 0) {
+            return p.event_history[0].is_public === true;
+        }
+        return true;
+    });
 
-    // --- FORMATTING & AUTHOR MAPPING ---
+    // --- FORMATTING ---
     const logOwnerIds = [...new Set(finalLogs.map(l => l.project.owner_id))];
     let authorsMap = {};
     if (logOwnerIds.length > 0) {

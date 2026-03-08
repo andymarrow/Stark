@@ -15,6 +15,7 @@ import {
   Award,
   Gavel,
   Medal,
+  Calendar, // <--- Added Calendar Icon
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -45,7 +46,8 @@ export default function ProfileTabs({
   setViewMode,
   workCount = 0,
   savedCount = 0,
-  achievementCount = 0, // NEW PROP FOR VAULT
+  achievementCount = 0,
+  eventsCount = 0, // <--- New Prop
   sortOrder,
   setSortOrder,
   popularMetric,
@@ -73,7 +75,7 @@ export default function ProfileTabs({
             label="Submissions"
             count={workCount}
           />
-          {/* NEW VAULT TAB */}
+          
           <TabButton
             active={activeTab === "achievements"}
             onClick={() => setActiveTab("achievements")}
@@ -81,6 +83,17 @@ export default function ProfileTabs({
             label="Vault"
             count={achievementCount}
           />
+
+          {/* --- NEW EVENTS TAB --- */}
+          <TabButton
+            active={activeTab === "events"}
+            onClick={() => setActiveTab("events")}
+            icon={Calendar}
+            label="Events"
+            count={eventsCount}
+          />
+          {/* ---------------------- */}
+
           <TabButton
             active={activeTab === "competitions"}
             onClick={() => setActiveTab("competitions")}
@@ -97,8 +110,8 @@ export default function ProfileTabs({
           />
         </div>
 
-        {/* View Toggles (Hidden on Competitions & Achievements) */}
-        {activeTab !== "competitions" && activeTab !== "achievements" && (
+        {/* View Toggles (Hidden on Competitions, Achievements, AND Events) */}
+        {activeTab !== "competitions" && activeTab !== "achievements" && activeTab !== "events" && (
           <div className="hidden md:flex items-center gap-1 pb-2">
             <ViewToggleButton
               active={viewMode === "grid"}
@@ -144,8 +157,8 @@ export default function ProfileTabs({
             icon={Gavel}
           />
         </div>
-      ) : activeTab !== "achievements" ? (
-        // Standard Filters (Hidden on Achievements tab)
+      ) : activeTab === "work" || activeTab === "saved" ? (
+        // Standard Filters (Only for Work/Saved)
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-left-2">
           <div className="flex items-center gap-2 bg-secondary/10 p-1 border border-border w-fit">
             <FilterButton

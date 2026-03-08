@@ -53,10 +53,6 @@ export async function generateMetadata({ params }) {
   };
 }
 
-/**
- * 2. SERVER PAGE (Entry Point)
- * Fetches data on the server for speed and SEO
- */
 export default async function ProfilePage({ params }) {
   const { username } = await params;
   const supabaseServer = await createClient();
@@ -73,24 +69,26 @@ export default async function ProfilePage({ params }) {
 
   if (profileError || !profileData) return notFound();
 
-  // C. Fetch Projects, Follower Stats, Contest Data, AND Achievement Count in Parallel
+  // C. Fetch Projects, Follower Stats, Contest Data, Events in Parallel
   const [
-    projectsRes, 
-    likedRes, 
-    followersCount, 
-    followingCount, 
-    contestEntriesRes, 
-    judgingRes, 
-    achievementsCountRes
+    projectsRes,
+    likedRes,
+    followersCount,
+    followingCount,
+    contestEntriesRes,
+    judgingRes,
+    achievementsCountRes,
+    hostedEventsRes, // <--- NEW 1
+    attendedEventsRes // <--- NEW 2
   ] = await Promise.all([
-    // 1. Work Projects (Exclude Contest Entries from Main Feed)
+    // 1. Work Projects
     supabaseServer
       .from('projects')
       .select('*, author:profiles!owner_id(*)')
       .eq('owner_id', profileData.id)
       .eq('status', 'published')
       .eq('is_contest_entry', false),
-    
+
     // 2. Saved/Liked Projects
     supabaseServer
       .from('project_likes')
@@ -109,7 +107,7 @@ export default async function ProfilePage({ params }) {
       .select('*', { count: 'exact', head: true })
       .eq('follower_id', profileData.id),
 
-    // 5. Contest Entries (Where this user submitted)
+    // 5. Contest Entries
     supabaseServer
       .from('contest_submissions')
       .select(`
@@ -119,7 +117,7 @@ export default async function ProfilePage({ params }) {
       `)
       .eq('project.owner_id', profileData.id),
 
-    // 6. Judging History (Where this user was a judge)
+    // 6. Judging History
     supabaseServer
       .from('contest_judges')
       .select(`
@@ -128,18 +126,41 @@ export default async function ProfilePage({ params }) {
       `)
       .eq('user_id', profileData.id),
 
-    // 7. Public Achievement Count
+    // 7. Achievement Count
     supabaseServer
       .from('user_achievements')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', profileData.id)
-      .eq('is_public', true)
+      .eq('is_public', true),
+
+    // 8. Hosted Events (NEW)
+    supabaseServer
+      .from('events')
+      .select('*')
+      .eq('host_id', profileData.id)
+      .order('created_at', { ascending: false }),
+
+    // 9. Attended/Submitted Events (NEW)
+    // We join projects to ensure we only get submissions owned by this profile
+    supabaseServer
+      .from('event_submissions')
+      .select(`
+        id, status, submitted_at,
+        event:events(*),
+        project:projects!inner(*)
+      `)
+      .eq('project.owner_id', profileData.id)
+      .order('submitted_at', { ascending: false })
   ]);
 
   const workProjects = projectsRes.data || [];
   const likedProjects = likedRes.data?.map(item => item.projects).filter(Boolean) || [];
   const contestEntries = contestEntriesRes.data || [];
   const judgingHistory = judgingRes.data || [];
+  
+  // NEW DATA
+  const hostedEvents = hostedEventsRes.data || [];
+  const attendedEvents = attendedEventsRes.data || [];
 
   const profileUrl = `${BASE_URL}/profile/${username}`;
   const sameAs = [];
@@ -177,20 +198,25 @@ export default async function ProfilePage({ params }) {
   return (
     <div className="min-h-screen bg-background pt-8 pb-20">
       <JsonLd data={jsonLd} strict />
-        <ProfileClient 
-            username={username}
-            currentUser={currentUser}
-            initialProfile={profileData}
-            initialWork={workProjects}
-            initialSaved={likedProjects}
-            contestEntries={contestEntries}
-            judgingHistory={judgingHistory}
-            achievementCount={achievementsCountRes.count || 0}
-            initialFollowerStats={{
-                followers: followersCount.count || 0,
-                following: followingCount.count || 0
-            }}
-        />
+      <ProfileClient
+        username={username}
+        currentUser={currentUser}
+        initialProfile={profileData}
+        initialWork={workProjects}
+        initialSaved={likedProjects}
+        contestEntries={contestEntries}
+        judgingHistory={judgingHistory}
+        
+        // PASS NEW DATA PROPS
+        hostedEvents={hostedEvents}
+        attendedEvents={attendedEvents}
+        
+        achievementCount={achievementsCountRes.count || 0}
+        initialFollowerStats={{
+          followers: followersCount.count || 0,
+          following: followingCount.count || 0
+        }}
+      />
     </div>
   );
 }

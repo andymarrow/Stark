@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { 
   Settings, Grid, Bell, LogOut, Loader2, 
   Scale, Shield, Users, UserPlus, X, Search, ArrowUpRight,
-  Megaphone // Added for Announcements
+  Megaphone,Swords,Send, Calendar as CalendarIcon // Added Calendar Icon
 } from "lucide-react"; 
 
 // Components
@@ -22,6 +22,7 @@ import LoginRequiredState from "@/components/LoginRequiredState";
 import TermsView from "./_components/legal/TermsView";
 import PrivacyView from "./_components/legal/PrivacyView";
 import NetworkRegistry from "./_components/NetworkRegistry";
+import MyEventsManager from "./_components/MyEventsManager"; // Imported Manager
 
 // Shadcn UI
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -192,6 +193,21 @@ function ProfileContent() {
                             onClick={() => handleViewChange("projects")} 
                         />
 
+                        {/* NEW: MY EVENTS BUTTON */}
+                        <NavButton 
+                            icon={CalendarIcon} 
+                            label="My Hosted Events" 
+                            active={currentView === "events"} 
+                            onClick={() => handleViewChange("events")} 
+                        />
+
+                        <NavButton 
+                            icon={Swords} // Or Trophy / LayoutGrid
+                            label="Events Hub" 
+                            active={currentView === "myevents"} 
+                            onClick={() => router.push('/events')} 
+                        />
+
                         {/* NEW: Announcements Link in Sidebar */}
                         <NavButton 
                             icon={Megaphone} 
@@ -231,6 +247,11 @@ function ProfileContent() {
             <div className="lg:col-span-9">
                 <div className="bg-background min-h-[500px]">
                     {currentView === 'projects' && <MyProjectsManager user={user} onRefresh={fetchProfileAndStats} />}
+
+                    
+                    {/* NEW: Events View */}
+                     {currentView === 'events' && <MyEventsManager user={user} profile={profile} />} 
+                    
                     {currentView === 'settings' && <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />}
                     {currentView === 'notifications' && <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />}
                     {currentView === 'terms' && <TermsView />}

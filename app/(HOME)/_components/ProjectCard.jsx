@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck, Trophy } from "lucide-react"; 
+import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck, Trophy, Radio } from "lucide-react"; 
 import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
 // --- HELPER: STRIP MARKDOWN & MENTIONS ---
@@ -23,9 +23,16 @@ export default function ProjectCard({ project }) {
   const stars = project?.likes_count ?? project?.stats?.stars ?? 0;
   const views = project?.views ?? project?.stats?.views ?? 0;
   const qScore = project?.quality_score ?? project?.qualityScore ?? 0;
+  
+  // Contest Info
   const contestName = project?.contestName; 
   const contestSlug = project?.contestSlug; 
   
+  // Event Info (NEW PHASE 7)
+  const eventName = project?.eventName;
+  const eventId = project?.eventId;
+  const eventColor = project?.eventColor || "#DC2626"; // Default accent
+
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
   const imageSrc = getSmartThumbnail(rawThumbnail);
   const isVideo = isVideoUrl(rawThumbnail);
@@ -71,16 +78,31 @@ export default function ProjectCard({ project }) {
             </div>
           )}
 
-          {/* INDICATORS SECTION */}
-          <div className="absolute top-3 left-3 z-30 flex flex-col gap-2">
+          {/* INDICATORS SECTION (Stacked Top Left) */}
+          <div className="absolute top-3 left-3 z-30 flex flex-col gap-2 items-start pointer-events-none">
+              
+              {/* 1. Contest Badge */}
               {contestName && contestSlug && (
                  <Link 
                     href={`/contests/${contestSlug}`}
                     onClick={(e) => e.stopPropagation()} 
-                    className="bg-yellow-500/90 text-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm backdrop-blur-sm pointer-events-auto hover:bg-yellow-400 transition-colors cursor-pointer"
+                    className="bg-yellow-500/90 text-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm backdrop-blur-sm pointer-events-auto hover:bg-yellow-400 transition-colors cursor-pointer border border-yellow-600/20"
                  >
                     <Trophy size={10} />
                     <span className="truncate max-w-[120px]">{contestName}</span>
+                 </Link>
+              )}
+
+              {/* 2. Public Event Badge (NEW) */}
+              {eventName && eventId && (
+                 <Link 
+                    href={`/events/${eventId}`}
+                    onClick={(e) => e.stopPropagation()} 
+                    className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm backdrop-blur-sm pointer-events-auto transition-colors cursor-pointer text-white"
+                    style={{ backgroundColor: eventColor }} // Dynamic Host Color
+                 >
+                    <Radio size={10} className="animate-pulse" />
+                    <span className="truncate max-w-[120px]">{eventName}</span>
                  </Link>
               )}
           </div>

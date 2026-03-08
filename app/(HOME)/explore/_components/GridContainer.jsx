@@ -59,25 +59,39 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             ),
             contest_history:contest_submissions!project_id(
                 contest:contests(title, slug)
+            ),
+            event_history:event_submissions!project_id(
+                is_public,
+                event:events(id, title, is_public, accent_color)
             )
           `)
           .eq('status', 'published')
-          // --- 🛡️ CRITICAL ISOLATION LOGIC ---
-          // This ensures hidden contest entries never hit the local state.
-          // Only projects that are standard (false) or were made public (false) show up.
           .eq('is_contest_entry', false);
 
         if (error) throw error;
 
-        const formatted = (data || []).map(p => {
+        // --- FILTERING LOGIC: HIDE PRIVATE EVENT SUBMISSIONS ---
+        const visibleData = (data || []).filter(p => {
+            // If the project is part of an event (has history)
+            if (p.event_history && p.event_history.length > 0) {
+                // It MUST be marked public by the organizer to show up here
+                // p.event_history[0].is_public comes from the submission table
+                return p.event_history[0].is_public === true;
+            }
+            // If no event history, it's a regular public project, show it.
+            return true;
+        });
+
+        const formatted = visibleData.map(p => {
             const rawLocation = p.author?.location;
             
-            /**
-             * 🏆 CONTEST GRADUATE LOGIC:
-             * Even if is_contest_entry is false (Public), we check if a 
-             * submission record exists to keep the "Trophy" badge alive.
-             */
+            // 1. Contest Data
             const contestData = p.contest_history?.[0]?.contest;
+
+            // 2. Event Data
+            // Only attach event data if the Event itself is ALSO public (double check)
+            const submission = p.event_history?.[0];
+            const eventData = (submission && submission.event?.is_public) ? submission.event : null;
 
             return {
                 id: p.id,
@@ -93,9 +107,15 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 created_at: p.created_at, 
                 region: getRegionFromLocation(rawLocation), 
                 forHire: p.author?.is_for_hire,
-                // Pass contest info to ProjectCard for the visual indicator
+                
+                // Badges
                 contestName: contestData?.title,
                 contestSlug: contestData?.slug,
+                
+                eventName: eventData?.title,
+                eventId: eventData?.id,
+                eventColor: eventData?.accent_color,
+
                 author: {
                     name: p.author?.full_name || "Anonymous",
                     username: p.author?.username,
@@ -186,8 +206,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in duration-500">
-        
-        {/* Sidebar */}
         <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto pr-2 scrollbar-hide">
             <div>
                 <div className="flex items-center justify-between mb-2">
@@ -211,11 +229,8 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
             <FilterSheet filters={filters} setFilters={setFilters} />
         </div>
 
-        {/* Main Content Area */}
         <div className="flex-1 flex flex-col">
-            
             <ActiveFilters filters={filters} setFilters={setFilters} />
-
             <ExploreSortBar 
                 sortOrder={sortOrder} 
                 setSortOrder={setSortOrder}
@@ -254,7 +269,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 )}
             </div>
 
-            {/* LOAD MORE BUTTON */}
             {!loading && (processedProjects.length > ( (currentPage - 1) * ITEMS_PER_PAGE + visibleCount )) && (
                 <div className="mt-8 flex justify-center">
                     <button 
@@ -267,7 +281,6 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
                 </div>
             )}
 
-            {/* PAGINATION */}
             {!loading && processedProjects.length > 0 && (
                 <div className="mt-12 border-t border-border border-dashed pt-8">
                     <Pagination 

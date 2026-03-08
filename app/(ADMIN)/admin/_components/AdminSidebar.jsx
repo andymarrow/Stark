@@ -12,7 +12,8 @@ import {
   LogOut,
   Trophy,
   Megaphone,
-  Medal // NEW ICON
+  Medal ,
+  Swords
 } from "lucide-react";
 import { useAuth } from "@/app/_context/AuthContext";
 
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation" },
   { label: "System Health", icon: Activity, href: "/admin/health" },
   { label: "Audit Logs", icon: Terminal, href: "/admin/logs" },
+  { label: "Event Oversight", icon: Swords, href: "/admin/events" },
 ];
 
 export default function AdminSidebar() {
