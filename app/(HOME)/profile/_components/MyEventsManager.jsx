@@ -8,32 +8,59 @@ import CreateEventModal from "./CreateEventModal";
 import Link from "next/link";
 import Image from "next/image";
 
-// 1. Accept 'profile' prop
 export default function MyEventsManager({ user, profile }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
-
-  // 2. Update Permission Logic
-  // We check the DB Profile for 'admin' role or 'verified' status
-  const canCreate = profile?.role === 'admin' || profile?.is_verified; 
+  
+  const [canCreate, setCanCreate] = useState(false);
 
   const fetchEvents = async () => {
     setLoading(true);
     const { data } = await supabase
-        .from('events')
-        .select('*')
-        .eq('host_id', user.id)
-        .order('created_at', { ascending: false });
-    
+      .from('events')
+      .select('*')
+      .eq('host_id', user.id)
+      .order('created_at', { ascending: false });
+
     setEvents(data || []);
     setLoading(false);
   };
 
   useEffect(() => {
-    if (user) fetchEvents();
-  }, [user]);
+    if (!user) return;
+
+    const checkPermissions = async () => {
+      setLoading(true);
+      
+      // Check for Admin
+      if (profile?.role === 'admin') {
+          setCanCreate(true);
+          setLoading(false);
+          return;
+      }
+
+      // Query Achievements
+      const { data } = await supabase
+          .from('user_achievements')
+          .select('achievement_id')
+          .eq('user_id', user.id);
+
+      const hasBadge = data?.some(a => 
+          ['verified', 'verified_node', 'verified_creator'].includes(a.achievement_id)
+      );
+      
+      if (hasBadge) {
+          setCanCreate(true);
+      }
+      setLoading(false);
+    };
+
+    checkPermissions();
+    fetchEvents();
+    
+  }, [user, profile]); 
 
   const copyLink = (token) => {
     const link = `${window.location.origin}/events/join/${token}`;
@@ -45,29 +72,32 @@ export default function MyEventsManager({ user, profile }) {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-      
+
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-border pb-6">
-        <div>
-            <h2 className="text-xl font-bold uppercase tracking-tight">Hosted Protocols</h2>
-            <p className="text-xs font-mono text-muted-foreground mt-1">Manage your private showcases and hackathons.</p>
-        </div>
-        
-        <Button 
-            onClick={() => setIsModalOpen(true)}
-            disabled={!canCreate}
-            className="h-10 bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-            <Plus size={14} className="mr-2" /> Initialize Event
-        </Button>
+          <div>
+              <h2 className="text-xl font-bold uppercase tracking-tight">Hosted Protocols</h2>
+              <p className="text-xs font-mono text-muted-foreground mt-1">Manage your private showcases and hackathons.</p>
+          </div>
+
+          <Button 
+              onClick={() => setIsModalOpen(true)} 
+              disabled={!canCreate}
+              className="h-10 bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+              <Plus size={14} className="mr-2" /> Initialize Event
+          </Button>
       </div>
 
-      {!canCreate && (
+      {/* Warning Banner if Unverified */}
+      {!canCreate && !loading && (
         <div className="p-4 border border-yellow-500/20 bg-yellow-500/5 text-yellow-600 font-mono text-xs flex items-center justify-center gap-2">
-            <ShieldAlert size={14} />
+            <ShieldAlert size={14} /> 
             <span>ACCESS_DENIED: Verification Badge Required to Host Events.</span>
         </div>
       )}
 
+      {/* Event List */}
       {loading ? (
         <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-accent" /></div>
       ) : events.length === 0 ? (
@@ -79,6 +109,7 @@ export default function MyEventsManager({ user, profile }) {
             {events.map((event) => (
                 <div key={event.id} className="group border border-border bg-card hover:border-accent transition-all duration-300 flex flex-col md:flex-row">
                     
+                    {/* Visual/Image */}
                     <div className="relative w-full md:w-48 aspect-video md:aspect-auto bg-secondary border-b md:border-b-0 md:border-r border-border overflow-hidden">
                         {event.cover_image ? (
                             <Image src={event.cover_image} alt={event.title} fill className="object-cover grayscale group-hover:grayscale-0 transition-all" />
@@ -100,6 +131,7 @@ export default function MyEventsManager({ user, profile }) {
                         </div>
                     </div>
 
+                    {/* Details */}
                     <div className="flex-1 p-5 flex flex-col justify-between">
                         <div>
                             <h3 className="text-lg font-bold uppercase tracking-tight text-foreground group-hover:text-accent transition-colors">
@@ -112,7 +144,6 @@ export default function MyEventsManager({ user, profile }) {
                         </div>
 
                         <div className="flex items-center gap-3 mt-4 md:mt-0 pt-4 md:pt-0">
-                            {/* We will build this dashboard page next */}
                             <Link href={`/events/${event.id}/dashboard`} className="flex-1">
                                 <Button 
                                     className="w-full h-9 rounded-none bg-foreground text-background hover:bg-accent hover:text-white transition-all duration-200 font-mono text-[10px] uppercase tracking-widest shadow-sm"
@@ -137,10 +168,11 @@ export default function MyEventsManager({ user, profile }) {
       )}
 
       <CreateEventModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onCreated={fetchEvents} 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          onCreated={fetchEvents}
       />
+
     </div>
   );
 }

@@ -10,37 +10,40 @@ export async function createEvent(formData) {
     return { error: "Unauthorized access." };
   }
 
-  // 1. Verify Verification/Admin Status
+  // 1. Fetch entire profile to check for role or is_verified flags
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, is_for_hire") // Note: Adjust 'is_for_hire' if you have a specific 'is_verified' col
-    // If you don't have an 'is_verified' column yet, we rely on ROLE = 'admin'
+    .select("*")
     .eq("id", user.id)
     .single();
 
-  if (profileError) {
-      console.error("Profile Fetch Error:", profileError);
-      return { error: "Could not verify identity." };
-  }
+  if (profileError) return { error: "Could not verify identity." };
 
-  // DEBUG LOG (Check your server console to see what it prints)
-  console.log("Create Event Check - User Role:", profile?.role);
+  // 2. Fetch Achievements to check for badge
+  const { data: badge } = await supabase
+    .from("user_achievements")
+    .select("id")
+    .eq("user_id", user.id)
+    .in("achievement_id", ["verified", "verified_node", "verified_creator"]) 
+    .limit(1)
+    .maybeSingle();
 
-  // Strict Access Control: 
-  // 1. Admin Role
-  // 2. OR 'verified' role (if you use roles for that)
-  // 3. OR if you have a specific is_verified boolean column (add it to select above if so)
-  const isAllowed = profile?.role === 'admin' || profile?.role === 'verified'; 
-  
+  // 3. OMNI-CHECK: Allow if ANY of these conditions are true
+  const isAllowed = 
+    profile?.role === 'admin' || 
+    profile?.role === 'verified' || 
+    profile?.is_verified === true || 
+    !!badge;
+
   if (!isAllowed) {
-    return { error: `Access Denied. Current Role: ${profile?.role || 'None'}` };
+    return { error: "Access Denied. Verification badge required." };
   }
 
   try {
-    // 2. Generate Secure Token
+    // 4. Generate Secure Token
     const token = `ev_${crypto.randomBytes(16).toString("hex")}`;
 
-    // 3. Insert Event
+    // 5. Insert Event
     const { data: event, error: eventError } = await supabase
       .from("events")
       .insert({
@@ -50,7 +53,7 @@ export async function createEvent(formData) {
         cover_image: formData.cover_image,
         accent_color: formData.accent_color || "#FF0000",
         access_token: token,
-        is_public: false, 
+        is_public: false,
         allow_multiple: formData.allow_multiple,
         deadline: formData.deadline ? new Date(formData.deadline) : null,
       })
@@ -59,11 +62,11 @@ export async function createEvent(formData) {
 
     if (eventError) throw eventError;
 
-    // 4. Initialize Default File System
+    // 6. Initialize Default File System
     const defaultFolders = [
-      { event_id: event.id, name: "Inbox", is_public: false }, 
-      { event_id: event.id, name: "Accepted", is_public: false }, 
-      { event_id: event.id, name: "Rejected", is_public: false } 
+      { event_id: event.id, name: "Inbox", is_public: false },
+      { event_id: event.id, name: "Accepted", is_public: false },
+      { event_id: event.id, name: "Rejected", is_public: false }
     ];
 
     const { error: folderError } = await supabase
