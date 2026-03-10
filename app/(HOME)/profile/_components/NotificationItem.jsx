@@ -127,6 +127,8 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         case 'project_milestone': return <Zap {...props} className={isRead ? "text-zinc-600" : "text-purple-500"} />;
         case 'report_resolved': return <ShieldAlert {...props} className="text-orange-500" />;
         case 'content_takedown': return <AlertTriangle {...props} className="text-red-600" />;
+        case 'event_closed': return <AlertTriangle {...props} className="text-red-500" />;
+        case 'event_restored': return <ShieldCheck {...props} className="text-green-500" />;
         default: return <Info {...props} className="text-zinc-500" />;
     }
   };

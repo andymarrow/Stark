@@ -269,7 +269,7 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-secondary/5">
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-border shrink-0">
             <Link href="/profile" className="flex items-center gap-2 text-xs font-mono text-muted-foreground hover:text-foreground mb-4 transition-colors">
                 <ChevronLeft size={12} /> Back to Terminal
             </Link>
@@ -291,7 +291,8 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5 custom-scrollbar">
+        {/* FIX: Added min-h-0 to force scrolling inside this container without expanding the parent */}
+        <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-0.5 custom-scrollbar">
             <div className="px-2 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-widest mb-1 flex justify-between items-center">
                 Directory
                 <button onClick={() => handleOpenCreateFolder(null)} className="hover:text-accent"><Plus size={12}/></button>
@@ -313,8 +314,9 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
             ))}
         </div>
 
-        <div className="p-4 border-t border-border mt-auto">
-            <Button onClick={() => setIsSettingsOpen(true)} variant="outline" className="w-full h-8 text-[10px] font-mono uppercase rounded-none border-dashed">
+        {/* FIX: Added shrink-0 and bg-background to anchor it firmly at the bottom */}
+        <div className="p-4 border-t border-border shrink-0 bg-secondary/5">
+            <Button onClick={() => setIsSettingsOpen(true)} variant="outline" className="w-full h-8 text-[10px] font-mono uppercase rounded-none border-dashed bg-background hover:bg-secondary">
                 <Settings size={12} className="mr-2" /> Event Settings
             </Button>
         </div>
@@ -336,7 +338,7 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
             <div className="flex items-center gap-4">
                 <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
                     <SheetTrigger asChild><Button variant="ghost" size="icon" className="md:hidden"><Menu size={20} /></Button></SheetTrigger>
-                    <SheetContent side="left" className="p-0 w-72 border-r border-border rounded-none gap-0"><SidebarContent /></SheetContent>
+                    <SheetContent side="left" className="p-0 w-72 border-r border-border rounded-none gap-0 pb-20"><SidebarContent /></SheetContent>
                 </Sheet>
                 <h2 className="text-sm font-bold uppercase truncate max-w-[150px] md:max-w-none flex items-center gap-2">
                     {folders.find(f => f.id === currentFolderId)?.name || "Inbox"}
@@ -373,7 +375,7 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-secondary/5 custom-scrollbar">
             {currentSubmissions.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/50 rounded-lg">
+                <div className="min-h-[280px] flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-border/50 rounded-lg py-12">
                     <Inbox size={48} className="opacity-20 mb-4" />
                     <p className="text-xs font-mono uppercase tracking-widest">Directory Empty</p>
                 </div>

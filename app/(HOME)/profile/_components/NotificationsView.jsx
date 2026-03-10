@@ -52,8 +52,8 @@ export default function NotificationsView({ onNotificationRead }) {
         .range(from, to);
 
       if (filter === "unread") query = query.eq('is_read', false);
-      if (filter === "system") query = query.in('type', ['system', 'weekly_digest', 'report_resolved', 'content_takedown']);
-
+      if (filter === "system") query = query.in('type', ['system', 'event_closed', 'event_restored', 'content_takedown', 'report_resolved']);
+      
       const { data, error } = await query;
       if (error) throw error;
 
