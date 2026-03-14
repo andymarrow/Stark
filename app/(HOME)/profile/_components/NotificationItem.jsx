@@ -5,7 +5,7 @@ import Image from "next/image";
 import { 
   Heart, UserPlus, MessageSquare, Info, ShieldAlert, Trophy, 
   GitCommit, Zap, Check, CheckCheck, ArrowRightLeft, Eye, 
-  ShieldCheck, AlertTriangle, FileCode, Handshake, X 
+  ShieldCheck, AlertTriangle, FileCode, Handshake, X, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
@@ -120,6 +120,7 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         case 'like': return <Heart {...props} className={isRead ? "text-zinc-600" : "text-red-500 fill-red-500"} />;
         case 'follow': return <UserPlus {...props} className={isRead ? "text-zinc-600" : "text-blue-500"} />;
         case 'chat_request': return <MessageSquare {...props} className={isRead ? "text-zinc-600" : "text-emerald-500"} />;
+        case 'new_message': return <MessageCircle {...props} className={isRead ? "text-zinc-600" : "text-accent"} />;
         case 'request_accepted': return <ShieldCheck {...props} className="text-green-500" />;
         case 'changelog_update': return <GitCommit {...props} className={isRead ? "text-zinc-600" : "text-amber-500"} />;
         case 'collab_invite': return <Handshake {...props} className={isRead ? "text-zinc-600" : "text-indigo-500"} />;
@@ -134,9 +135,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   const getAction = () => {
-    if (isRead) return null;
-
-    if (notification.type === 'follow') {
+    // 1. Follow Logic: Only show "Connect Back" if it's unread. 
+    // Once read, we assume the user has either connected or dismissed the suggestion.
+    if (notification.type === 'follow' && !isRead) {
         return (
             <Button 
                 onClick={handleFollowBack} disabled={processing}
@@ -146,8 +147,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
             </Button>
         );
     }
-    
-    if (notification.type === 'collab_invite') {
+
+    // 2. Collaboration Logic: Only show binary choice (Accept/Decline) if unread.
+    if (notification.type === 'collab_invite' && !isRead) {
         return (
             <div className="flex gap-2">
                 <Button 
@@ -166,27 +168,43 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         );
     }
 
-    if (notification.type === 'weekly_digest') {
-            return (
-                <Link href="/profile/report">
-                    <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/30 text-accent hover:bg-accent hover:text-white rounded-none">
-                        Inspect Report
-                    </Button>
-                </Link>
-            );
-        }
-
-    if (notification.link && notification.link !== '#' && notification.link !== '/profile?view=projects') {
+    // 3. New Message Logic (Always show Chat button)
+    if (notification.type === 'new_message') {
         return (
             <Link href={notification.link}>
-                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors">
-                    <Eye size={14} className="text-muted-foreground hover:text-accent" />
+                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/40 text-accent hover:bg-accent hover:text-white rounded-none transition-all">
+                    Open_Secure_Chat
                 </Button>
             </Link>
         );
     }
+
+    // 4. Weekly Report: ALWAYS show this button, even if read. 
+    // Users often want to go back and check their stats.
+    if (notification.type === 'weekly_digest') {
+        return (
+            <Link href="/profile/report">
+                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/30 text-accent hover:bg-accent hover:text-white rounded-none transition-all">
+                    Inspect Report
+                </Button>
+            </Link>
+        );
+    }
+
+    // 5. Generic Links (Changelogs, Mentions, Likes): ALWAYS show the Eye icon.
+    // This fixes the issue in your screenshot where the link disappears.
+    if (notification.link && notification.link !== '#' && notification.link !== '/profile?view=projects') {
+        return (
+            <Link href={notification.link}>
+                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors">
+                    <Eye size={14} className={`${isRead ? 'text-zinc-600' : 'text-muted-foreground'} hover:text-accent`} />
+                </Button>
+            </Link>
+        );
+    }
+
     return null;
-  };
+};
 
   return (
     <div className={`
