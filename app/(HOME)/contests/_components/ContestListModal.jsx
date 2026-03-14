@@ -61,9 +61,6 @@ export default function ContestListModal({ isOpen, onClose, contests }) {
                     Global Archive // {filtered.length} Active Protocols
                 </p>
             </div>
-            <button onClick={onClose} className="p-2 text-muted-foreground hover:text-foreground transition-colors hover:bg-secondary">
-                <X size={24} />
-            </button>
         </div>
 
         {/* Filter Bar */}

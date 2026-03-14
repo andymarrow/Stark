@@ -10,12 +10,13 @@ import { useSearchParams } from "next/navigation";
 import LoginRequiredState from "@/components/LoginRequiredState";
 
 function ChatContent() {
-  const { user, loading: authLoading, onlineUsers } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const chatIdFromUrl = searchParams.get('id');
 
   const [selectedConvId, setSelectedConvId] = useState(chatIdFromUrl);
   const [conversations, setConversations] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState(new Set()); 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("PRIMARY"); 
   
@@ -48,6 +49,7 @@ function ChatContent() {
       const formatted = (data || []).map(item => {
         const conv = item.conversation;
         if (!conv) return null; 
+
         const otherParticipant = conv.participants.find(p => p.user_id !== user.id);
         const profile = otherParticipant?.profile;
         
@@ -67,10 +69,8 @@ function ChatContent() {
           lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
           name: displayName,
           avatar: conv.type === 'direct' ? profile?.avatar_url : conv.avatar_url,
-          
           lastSeen: profile?.last_seen_at, 
           otherUserId: profile?.id, 
-          
           isPublic: conv.is_public,
           ownerId: conv.owner_id,
           linkedGroupId: conv.linked_group_id
@@ -81,21 +81,39 @@ function ChatContent() {
 
       setConversations(formatted);
     } catch (err) {
-      console.error(err);
+      console.error("Signal Retrieval Error:", err);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
-  // --- 2. SELECTION ---
+  // --- 2. SELECTION & ACKNOWLEDGEMENT (FIXED) ---
   const handleSelectChat = (id) => {
     const targetId = typeof id === 'object' ? id.id : id;
     setSelectedConvId(id);
     currentChatRef.current = targetId;
 
     if (typeof id === 'string') {
-        setConversations(prev => prev.map(c => c.id === targetId ? { ...c, unreadCount: 0 } : c));
-        supabase.rpc('reset_unread_count', { p_conversation_id: targetId, p_user_id: user.id });
+        // 1. Optimistic UI clear to kill red bubble instantly
+        setConversations(prev => prev.map(c => 
+            c.id === targetId ? { ...c, unreadCount: 0 } : c
+        ));
+        
+        // 2. DIRECT DATABASE UPDATE (Replaces failing RPC)
+        // This forces the unread_count to 0 in the database reliably
+        supabase.from('conversation_participants')
+            .update({ unread_count: 0 })
+            .eq('conversation_id', targetId)
+            .eq('user_id', user.id)
+            .then(({error}) => { if(error) console.error("Unread Reset Error:", error) });
+
+        // 3. Mark messages as read so the sender gets double checkmarks
+        supabase.from('messages')
+            .update({ is_read: true })
+            .eq('conversation_id', targetId)
+            .neq('sender_id', user.id)
+            .eq('is_read', false)
+            .then();
     }
   };
 
@@ -103,11 +121,20 @@ function ChatContent() {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
 
-  // --- 3. DATA SYNC (Presence handled by AuthContext now) ---
+  // --- 3. REALTIME SYNC HUB ---
   useEffect(() => {
     if (user) {
       fetchConversations();
       
+      const presenceChannel = supabase.channel('stark-global-presence');
+
+      presenceChannel
+        .on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          setOnlineUsers(new Set(Object.keys(state)));
+        })
+        .subscribe();
+
       const dataChannel = supabase
         .channel('sidebar-sync-v13')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => fetchConversations(true))
@@ -117,25 +144,27 @@ function ChatContent() {
             table: 'conversation_participants', 
             filter: `user_id=eq.${user.id}` 
         }, (payload) => {
+            // If new unread arrives for the OPEN chat, auto-reset it directly
             if (payload.new.conversation_id === currentChatRef.current && payload.new.unread_count > 0) {
-                 supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
+                 supabase.from('conversation_participants').update({ unread_count: 0 }).eq('conversation_id', currentChatRef.current).eq('user_id', user.id).then();
                  return;
             }
             fetchConversations(true);
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
             if (payload.new.conversation_id === currentChatRef.current) {
-                supabase.rpc('reset_unread_count', { p_conversation_id: payload.new.conversation_id, p_user_id: user.id });
+                supabase.from('conversation_participants').update({ unread_count: 0 }).eq('conversation_id', currentChatRef.current).eq('user_id', user.id).then();
+                supabase.from('messages').update({ is_read: true }).eq('conversation_id', currentChatRef.current).neq('sender_id', user.id).eq('is_read', false).then();
             }
-            fetchConversations(true);
+            fetchConversations(true); 
         })
-        // Profile Listener: Updates Last Seen if someone goes offline
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => {
             fetchConversations(true);
         })
         .subscribe();
 
       return () => { 
+          supabase.removeChannel(presenceChannel); 
           supabase.removeChannel(dataChannel); 
       };
     }
@@ -163,7 +192,7 @@ function ChatContent() {
             onSelectChat={handleSelectChat}
             activeTab={activeTab}
             setActiveTab={setActiveTab}
-            onlineUsers={onlineUsers} // Passed from AuthContext
+            onlineUsers={onlineUsers} 
         />
       </div>
 

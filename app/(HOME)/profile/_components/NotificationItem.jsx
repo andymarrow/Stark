@@ -166,6 +166,16 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         );
     }
 
+    if (notification.type === 'weekly_digest') {
+            return (
+                <Link href="/profile/report">
+                    <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/30 text-accent hover:bg-accent hover:text-white rounded-none">
+                        Inspect Report
+                    </Button>
+                </Link>
+            );
+        }
+
     if (notification.link && notification.link !== '#' && notification.link !== '/profile?view=projects') {
         return (
             <Link href={notification.link}>
