@@ -15,9 +15,8 @@ import {
 } from "recharts";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import BadgeNode from "./_components/BadgeNode";
-import TransmissionItem from "./_components/TransmissionItem";
-import PerformanceScale from "./_components/PerformanceScale";
+import Image from "next/image";
+import { GitCommit, Trophy, ArrowRight, Clock } from "lucide-react";
 
 export default function WeeklyReportPage() {
   const { user } = useAuth();
@@ -171,7 +170,7 @@ export default function WeeklyReportPage() {
   if (loading) return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <Activity className="animate-spin text-accent" size={32} />
-        <span className="font-mono text-xs uppercase tracking-widest">Generating_Audit_Log...</span>
+        <span className="font-mono text-xs uppercase tracking-widest text-foreground">Generating_Audit_Log...</span>
     </div>
   );
 
@@ -181,7 +180,7 @@ export default function WeeklyReportPage() {
         
         {/* Navigation Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b border-border">
-            <button onClick={() => router.back()} className="p-2 hover:bg-secondary border border-border transition-colors">
+            <button onClick={() => router.back()} className="p-2 hover:bg-secondary border border-border transition-colors text-foreground">
                 <ArrowLeft size={18} />
             </button>
             <div className="flex items-center gap-2">
@@ -189,7 +188,7 @@ export default function WeeklyReportPage() {
                     variant="outline" 
                     onClick={handleRefresh}
                     disabled={isRefreshing}
-                    className="rounded-none border-border font-mono text-[10px] uppercase hover:bg-accent hover:text-white transition-colors"
+                    className="rounded-none border-border font-mono text-[10px] uppercase hover:bg-accent hover:text-white transition-colors text-foreground"
                 >
                     <RefreshCw size={14} className={`mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> 
                     {isRefreshing ? "Syncing..." : "Refresh"}
@@ -197,7 +196,7 @@ export default function WeeklyReportPage() {
                 <Button 
                     variant="outline" 
                     onClick={handleExportCSV}
-                    className="rounded-none border-border font-mono text-[10px] uppercase hover:bg-accent hover:text-white transition-colors"
+                    className="rounded-none border-border font-mono text-[10px] uppercase hover:bg-accent hover:text-white transition-colors text-foreground"
                 >
                     <Download size={14} className="mr-2" /> Export_CSV
                 </Button>
@@ -210,11 +209,11 @@ export default function WeeklyReportPage() {
                 <span className="text-accent font-mono text-[10px] tracking-[0.4em] uppercase mb-2 block">
                     Classification: System_Audit_Report
                 </span>
-                <h1 className="text-4xl font-black uppercase tracking-tighter italic">
+                <h1 className="text-4xl font-black uppercase tracking-tighter italic text-foreground">
                     Node_Performance <span className="text-muted-foreground/30 text-2xl font-light">v2.4</span>
                 </h1>
             </div>
-            <div className="text-left md:text-right font-mono">
+            <div className="text-left md:text-right font-mono text-foreground">
                 <p className="text-[10px] text-muted-foreground uppercase">Timestamp</p>
                 <p className="text-xs">{new Date().toLocaleString()}</p>
             </div>
@@ -249,7 +248,7 @@ export default function WeeklyReportPage() {
         {/* 2. Sector Standing & Peak Asset */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* Sector Standing (Phase 4) */}
-            <div className="p-8 border border-border bg-black relative">
+            <div className="p-8 border border-border bg-background relative">
                 <PerformanceScale percentile={reportData?.percentile || 0} />
             </div>
 
@@ -257,7 +256,7 @@ export default function WeeklyReportPage() {
             <div className="p-8 border border-border bg-secondary/5 flex flex-col justify-between group overflow-hidden relative">
                 <div>
                     <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-4 block">Peak_Performance_Asset</span>
-                    <h4 className="text-2xl font-bold uppercase tracking-tighter mb-1">
+                    <h4 className="text-2xl font-bold uppercase tracking-tighter mb-1 text-foreground">
                         {reportData?.top_asset?.title || topProject?.title || "Awaiting_Data"}
                     </h4>
                     <div className="flex gap-4 mt-2">
@@ -285,11 +284,11 @@ export default function WeeklyReportPage() {
             <div className="lg:col-span-4 p-8 border border-border bg-secondary/5 flex flex-col justify-between relative overflow-hidden">
                 <div>
                     <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.3em] mb-2 block">Clearance_Level</span>
-                    <div className="text-6xl font-black italic">{reportData?.clearance_level || 0}</div>
+                    <div className="text-6xl font-black italic text-foreground">{reportData?.clearance_level || 0}</div>
                 </div>
 
                 <div className="mt-8 space-y-2">
-                    <div className="flex justify-between text-[10px] font-mono uppercase">
+                    <div className="flex justify-between text-[10px] font-mono uppercase text-foreground">
                         <span>Next_Tier_Progress</span>
                         <span>{Math.min(100, ((reportData?.clearance_level || 0) / 10) * 100).toFixed(0)}%</span>
                     </div>
@@ -325,24 +324,24 @@ export default function WeeklyReportPage() {
         </div>
 
         {/* 4. Transmission Log Stream */}
-        <div className="border border-border bg-black relative mb-12">
+        <div className="border border-border bg-background relative mb-12">
                 {/* Header: Clear and Descriptive */}
                 <div className="p-6 border-b border-border bg-secondary/5 flex justify-between items-center">
                     <div>
-                        <h3 className="text-sm font-bold uppercase tracking-tight flex items-center gap-2">
+                        <h3 className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-foreground">
                             <Activity size={16} className="text-accent" /> Weekly Activity Timeline
                         </h3>
                         <p className="text-[10px] text-muted-foreground font-mono uppercase mt-1">
                             Tracking all major deployments and updates for this cycle
                         </p>
                     </div>
-                    <span className="text-[10px] font-mono bg-secondary px-2 py-1 border border-border">
-                        {reportData.stream.length} TOTAL_ACTIONS
+                    <span className="text-[10px] font-mono bg-secondary px-2 py-1 border border-border text-foreground">
+                        {reportData?.stream?.length || 0} TOTAL_ACTIONS
                     </span>
                 </div>
 
                 <div className="p-6">
-                    {reportData.stream.length > 0 ? (
+                    {reportData?.stream?.length > 0 ? (
                         <div className="flex flex-col">
                             {reportData.stream.map((event, i) => (
                                 <TransmissionItem key={i} event={event} />
@@ -351,7 +350,7 @@ export default function WeeklyReportPage() {
                     ) : (
                         /* Empty State: Descriptive and Encouraging */
                         <div className="py-16 text-center border border-dashed border-border bg-secondary/5 flex flex-col items-center gap-4">
-                            <div className="p-3 bg-background border border-border rounded-full opacity-20">
+                            <div className="p-3 bg-background border border-border rounded-full opacity-20 text-foreground">
                                 <Rocket size={24} />
                             </div>
                             <div className="space-y-1">
@@ -379,11 +378,11 @@ export default function WeeklyReportPage() {
             </div>
 
         {/* 5. Visualizations (Traffic Chart) */}
-        <div className="bg-black border border-border overflow-hidden">
+        <div className="bg-background border border-border overflow-hidden">
             {/* Header with Human-Readable Context */}
             <div className="p-6 border-b border-border bg-secondary/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h3 className="text-sm font-bold uppercase tracking-tight flex items-center gap-2">
+                    <h3 className="text-sm font-bold uppercase tracking-tight flex items-center gap-2 text-foreground">
                         <Activity size={16} className="text-accent" /> Weekly Traffic Overview
                     </h3>
                     <p className="text-[10px] text-muted-foreground font-mono uppercase mt-1">
@@ -394,11 +393,11 @@ export default function WeeklyReportPage() {
                 {/* Quick Insights Legend */}
                 <div className="flex gap-6">
                     <div className="flex flex-col">
-                        <span className="text-[8px] font-mono text-zinc-500 uppercase">Avg_Daily</span>
+                        <span className="text-[8px] font-mono text-muted-foreground uppercase">Avg_Daily</span>
                         <span className="text-xs font-bold text-foreground">185 Views</span>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[8px] font-mono text-zinc-500 uppercase">Peak_Day</span>
+                        <span className="text-[8px] font-mono text-muted-foreground uppercase">Peak_Day</span>
                         <span className="text-xs font-bold text-accent">Thursday</span>
                     </div>
                 </div>
@@ -408,7 +407,7 @@ export default function WeeklyReportPage() {
             <div className="p-6 h-[350px] w-full relative">
                 {/* Subtle Background Grid/Reference Label */}
                 <div className="absolute top-10 right-10 opacity-10 pointer-events-none select-none">
-                    <span className="text-4xl font-black font-mono">ENGAGEMENT_DATA</span>
+                    <span className="text-4xl font-black font-mono text-foreground">ENGAGEMENT_DATA</span>
                 </div>
 
                 <ResponsiveContainer width="100%" height="100%">
@@ -420,11 +419,11 @@ export default function WeeklyReportPage() {
                             </linearGradient>
                         </defs>
                         
-                        <CartesianGrid strokeDasharray="3 3" stroke="#222" vertical={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         
                         <XAxis 
                             dataKey="day" 
-                            stroke="#444" 
+                            stroke="hsl(var(--muted-foreground))" 
                             fontSize={10} 
                             tickLine={false} 
                             axisLine={false} 
@@ -432,14 +431,14 @@ export default function WeeklyReportPage() {
                         />
                         
                         <YAxis 
-                            stroke="#444" 
+                            stroke="hsl(var(--muted-foreground))" 
                             fontSize={10} 
                             tickLine={false} 
                             axisLine={false} 
                         />
                         
                         <Tooltip 
-                            cursor={{ stroke: '#333', strokeWidth: 1 }}
+                            cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
                             content={<CustomChartTooltip />} 
                         />
                         
@@ -475,10 +474,10 @@ function GrowthStat({ label, value, growth, icon: Icon, subText, positiveSubtext
             </div>
             
             <div>
-                <div className="text-4xl font-bold font-mono tracking-tighter mb-2">{value}</div>
+                <div className="text-4xl font-bold font-mono tracking-tighter mb-2 text-foreground">{value}</div>
                 <div className="flex items-center gap-2 mt-1">
                     {isNeutral && (
-                        <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-500 uppercase">
+                        <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground uppercase">
                             <Minus size={12} /> {subText || "No Change"}
                         </div>
                     )}
@@ -501,13 +500,13 @@ function GrowthStat({ label, value, growth, icon: Icon, subText, positiveSubtext
 function CustomChartTooltip({ active, payload, label }) {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-black border border-border p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-background border border-border p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                 <div className="flex items-center gap-2 mb-2 border-b border-border pb-1">
                     <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-                    <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">{label} Insight</p>
+                    <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{label} Insight</p>
                 </div>
                 <div className="space-y-1">
-                    <p className="text-sm font-bold text-white">
+                    <p className="text-sm font-bold text-foreground">
                         {payload[0].value} <span className="text-muted-foreground font-light ml-1">Total Views</span>
                     </p>
                     <p className="text-[9px] font-mono text-accent uppercase">
@@ -518,4 +517,128 @@ function CustomChartTooltip({ active, payload, label }) {
         );
     }
     return null;
+}
+
+function BadgeNode({ badge, isNew }) {
+  // Switched hardcoded defaults to standard Tailwind dynamic variables
+  const style = badge.style || {
+    glow_color: "shadow-sm",
+    border_color: "border-border",
+    bg_gradient: "from-secondary/40 to-background"
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={`relative w-full p-4 border ${style.border_color} bg-gradient-to-br ${style.bg_gradient} ${style.glow_color} overflow-hidden group`}
+    >
+      {isNew && (
+        <div className="absolute top-0 right-0 bg-accent text-white text-[8px] font-mono px-2 py-0.5 uppercase tracking-tighter z-10">
+          New_Access
+        </div>
+      )}
+
+      <div className="flex items-center gap-4 relative z-10">
+        <div className="w-12 h-12 relative flex-shrink-0 grayscale group-hover:grayscale-0 transition-all duration-500">
+          <Image src={badge.image} alt={badge.name} fill className="object-contain" />
+        </div>
+        
+        <div className="min-w-0">
+          <h4 className="text-sm font-bold uppercase tracking-tight truncate text-foreground">{badge.name}</h4>
+          <p className="text-[10px] font-mono text-muted-foreground uppercase">{badge.rarity}_Protocol</p>
+        </div>
+      </div>
+
+      {/* Decorative corner - lowered opacity and mapped to theme */}
+      <div className="absolute -bottom-1 -right-1 opacity-20">
+        <ShieldCheck size={40} className="text-muted-foreground/30" />
+      </div>
+    </motion.div>
+  );
+}
+
+function PerformanceScale({ percentile }) {
+  const visualPos = 100 - percentile;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-end">
+        <div className="space-y-1">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block">Sector_Standing</span>
+            <h4 className="text-xl font-bold uppercase italic text-foreground">
+                {percentile <= 5 ? "ELITE_NODE" : percentile <= 20 ? "HIGH_VELOCITY" : "ACTIVE_OPERATOR"}
+            </h4>
+        </div>
+        <div className="text-right">
+            <span className="text-2xl font-black text-accent">{visualPos.toFixed(0)}%</span>
+            <span className="text-[10px] font-mono text-muted-foreground block uppercase">RANK_PROXIMITY</span>
+        </div>
+      </div>
+
+      <div className="relative h-12 border border-border bg-secondary/5 overflow-hidden flex items-center px-4">
+        {/* Dynamic Track grid adapting to theme border var */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,transparent_98%,hsl(var(--border))_98%)] bg-[size:10%_100%] pointer-events-none" />
+        
+        {/* The Slider background mapped to theme */}
+        <div className="w-full h-1 bg-secondary relative">
+            <motion.div 
+                initial={{ left: 0 }}
+                animate={{ left: `${visualPos}%` }}
+                transition={{ duration: 1.5, ease: "easeOut" }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-accent border-2 border-background shadow-[0_0_15px_rgba(255,0,0,0.5)] rotate-45"
+            />
+            {/* Average Marker */}
+            <div className="absolute left-1/2 top-4 -translate-x-1/2 flex flex-col items-center">
+                <div className="w-px h-2 bg-muted-foreground" />
+                <span className="text-[8px] font-mono text-muted-foreground uppercase">SYS_AVG</span>
+            </div>
+        </div>
+      </div>
+      
+      <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+         Analysis: Your node velocity is currently higher than <span className="text-foreground font-bold">{visualPos.toFixed(0)}%</span> of active creators in the network.
+      </p>
+    </div>
+  );
+}
+
+const TYPE_CONFIG = {
+    deployment: { icon: Rocket, color: "text-blue-500", label: "New Project Launched" },
+    patch: { icon: GitCommit, color: "text-accent", label: "Project Updated" },
+    arena: { icon: Trophy, color: "text-yellow-500", label: "Contest Joined" },
+};
+
+function TransmissionItem({ event }) {
+  const config = TYPE_CONFIG[event.type] || TYPE_CONFIG.patch;
+  const Icon = config.icon;
+
+  return (
+    <div className="flex items-start gap-4 py-5 border-b border-border/50 last:border-0 group">
+      {/* Icon with a simpler background */}
+      <div className={`mt-1 p-2 bg-secondary/20 border border-border ${config.color} flex-shrink-0 transition-all`}>
+        <Icon size={16} />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+            <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${config.color}`}>
+                {config.label}
+            </span>
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                <Clock size={10} /> {new Date(event.created_at).toLocaleDateString()}
+            </span>
+        </div>
+        
+        {/* Descriptive Text */}
+        <h4 className="text-sm font-medium text-foreground group-hover:text-accent transition-colors truncate">
+            {event.label}
+        </h4>
+      </div>
+
+      <div className="hidden md:flex items-center opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+        <ArrowRight size={14} className="text-accent" />
+      </div>
+    </div>
+  );
 }
