@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   Inbox, ChevronLeft, Settings, Plus, Search, LayoutGrid, List, 
   MoreHorizontal, CheckCircle2, XCircle, Star, X, Menu, CheckSquare,
-  Eye, EyeOff, ExternalLink, ArrowUpDown
+  Eye, EyeOff, ExternalLink, ArrowUpDown, RefreshCw // Added RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { bulkMoveSubmissions } from "@/app/actions/bulkMoveSubmissions"; 
 import { toggleFeatured } from "@/app/actions/toggleFeatured";
 import { toggleSubmissionPublic } from "@/app/actions/toggleSubmissionPublic";
+import { getEventDashboard } from "@/app/actions/getEventDashboard"; // Added to fetch fresh data
 import { supabase } from "@/lib/supabaseClient";
 import Image from "next/image";
 import { 
@@ -55,6 +56,7 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState("grid");
   const [sortBy, setSortBy] = useState("newest"); // 'newest', 'oldest', 'featured'
+  const [isRefreshing, setIsRefreshing] = useState(false); // NEW STATE
 
   // Selection & Drag State
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -119,6 +121,20 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
 
 
   // --- HANDLERS ---
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const res = await getEventDashboard(event.id);
+    if (res.success) {
+        setEvent(res.data.event);
+        setFolders(res.data.folders);
+        setSubmissions(res.data.submissions);
+        toast.success("Ledger Synchronized", { description: "New submissions and changes pulled." });
+    } else {
+        toast.error("Sync Failed", { description: res.error });
+    }
+    setIsRefreshing(false);
+  };
 
   const handleEventUpdate = (updatedEvent) => {
     setEvent(updatedEvent);
@@ -291,7 +307,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
             </div>
         </div>
 
-        {/* FIX: Added min-h-0 to force scrolling inside this container without expanding the parent */}
         <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-0.5 custom-scrollbar">
             <div className="px-2 py-2 text-[9px] font-mono text-muted-foreground uppercase tracking-widest mb-1 flex justify-between items-center">
                 Directory
@@ -314,7 +329,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
             ))}
         </div>
 
-        {/* FIX: Added shrink-0 and bg-background to anchor it firmly at the bottom */}
         <div className="p-4 border-t border-border shrink-0 bg-secondary/5">
             <Button onClick={() => setIsSettingsOpen(true)} variant="outline" className="w-full h-8 text-[10px] font-mono uppercase rounded-none border-dashed bg-background hover:bg-secondary">
                 <Settings size={12} className="mr-2" /> Event Settings
@@ -349,7 +363,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
 
             <div className="flex items-center gap-3">
                 
-                {/* SORTING DROPDOWN (NEW) */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-1 text-[10px] font-mono uppercase text-muted-foreground hover:text-foreground mr-2">
@@ -368,6 +381,18 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
                     <input className="h-8 w-48 bg-secondary/10 border border-border pl-8 text-xs font-mono focus:border-accent outline-none transition-colors" placeholder="Search..." />
                 </div>
                 <div className="h-4 w-px bg-border mx-1 hidden md:block" />
+
+                {/* NEW REFRESH BUTTON */}
+                <button 
+                    onClick={handleRefresh} 
+                    disabled={isRefreshing} 
+                    title="Refresh Ledger"
+                    className="p-1.5 transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                    <RefreshCw size={14} className={isRefreshing ? "animate-spin text-accent" : ""} />
+                </button>
+                <div className="h-4 w-px bg-border mx-1 hidden md:block" />
+
                 <button onClick={() => setViewMode('grid')} className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'text-accent' : 'text-muted-foreground'}`}><LayoutGrid size={14}/></button>
                 <button onClick={() => setViewMode('list')} className={`p-1.5 transition-colors ${viewMode === 'list' ? 'text-accent' : 'text-muted-foreground'}`}><List size={14}/></button>
             </div>
@@ -391,7 +416,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
                                 onDragStart={(e) => handleDragStart(e, sub.id)}
                                 onClick={(e) => { 
                                     e.stopPropagation(); 
-                                    // Use metaKey for multi-select, otherwise single select
                                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
                                         handleSelection(e, sub.id);
                                     } else {
@@ -415,7 +439,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
                                 <div className={viewMode === 'grid' ? "flex-1 relative bg-secondary overflow-hidden" : "w-12 h-12 relative bg-secondary flex-shrink-0"}>
                                     {thumb ? <Image src={thumb} alt="t" fill className="object-cover transition-transform duration-500 group-hover:scale-105" /> : <div className="w-full h-full flex items-center justify-center text-muted-foreground/20 font-bold uppercase text-[9px]">Empty</div>}
                                     
-                                    {/* VISIBILITY TOGGLE */}
                                     <button 
                                         onClick={(e) => handleTogglePublic(e, sub)} 
                                         className={`absolute top-2 left-2 p-1 rounded-full backdrop-blur-md transition-all z-20 ${sub.is_public ? 'bg-green-500 text-white' : 'bg-black/50 text-white/50 hover:text-white'}`}
@@ -424,7 +447,6 @@ export default function EventDashboardClient({ initialEvent, initialFolders, ini
                                         {sub.is_public ? <Eye size={10} /> : <EyeOff size={10} />}
                                     </button>
 
-                                    {/* FEATURE TOGGLE */}
                                     <button onClick={(e) => handleToggleFeature(e, sub)} className={`absolute top-2 right-2 p-1 rounded-full backdrop-blur-md transition-all z-20 ${sub.is_featured ? 'bg-yellow-500 text-black' : 'bg-black/50 text-white/50 hover:text-yellow-400 opacity-0 group-hover:opacity-100'}`}><Star size={10} fill={sub.is_featured ? "currentColor" : "none"} /></button>
                                 </div>
 

@@ -4,13 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { 
   X, ExternalLink, Globe, Save, Loader2, 
-  Star, MessageSquare, Eye, Edit3,
-  FileText, Radio, ShieldCheck, History,
-  Terminal, CheckCircle2, ChevronRight
+  Star, MessageSquare, Eye, Edit3, EyeOff,
+  FileText, Radio, ShieldCheck, Terminal,
+  Calendar, Zap, Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Sheet, SheetContent, SheetClose } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -19,6 +19,25 @@ import { updateSubmissionNote } from "@/app/actions/updateSubmissionNote";
 import { toggleFeatured } from "@/app/actions/toggleFeatured";
 import { toggleSubmissionPublic } from "@/app/actions/toggleSubmissionPublic";
 import ProjectChatTerminal from "@/app/(HOME)/project/[slug]/_components/ProjectChatTerminal";
+import ProjectComments from "@/app/(HOME)/project/[slug]/_components/ProjectComments";
+
+// Helper for YouTube Embeds
+const getEmbedUrl = (url) => {
+    if (!url) return null;
+    let videoId = "";
+    if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1];
+    else if (url.includes("v=")) videoId = url.split("v=")[1].split("&")[0];
+    else if (url.includes("embed/")) videoId = url.split("embed/")[1];
+    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
+};
+
+// Helper: Ensure URLs have http:// so they don't break Next.js routing
+const ensureAbsoluteUrl = (url) => {
+  if (!url) return "";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  return `https://${trimmed}`;
+};
 
 export default function SubmissionInspector({ submission, isOpen, onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState("details");
@@ -38,6 +57,8 @@ export default function SubmissionInspector({ submission, isOpen, onClose, onUpd
 
   const project = submission.project;
   const isVideo = project.thumbnail_url?.includes("youtube") || project.thumbnail_url?.includes("youtu.be");
+  const embedUrl = isVideo ? getEmbedUrl(project.thumbnail_url) : null;
+  const liveLink = ensureAbsoluteUrl(project.demo_link);
 
   // --- ACTIONS ---
 
@@ -123,12 +144,16 @@ export default function SubmissionInspector({ submission, isOpen, onClose, onUpd
                         <ScrollArea className="flex-1">
                             {/* Visual Preview Section */}
                             <div className="w-full aspect-video bg-black relative border-b border-border group">
-                                <Image 
-                                    src={project.thumbnail_url || "/placeholder.jpg"} 
-                                    alt={project.title} 
-                                    fill 
-                                    className="object-contain opacity-80 group-hover:opacity-100 transition-opacity" 
-                                />
+                                {isVideo && embedUrl ? (
+                                    <iframe src={embedUrl} className="w-full h-full" allowFullScreen />
+                                ) : (
+                                    <Image 
+                                        src={project.thumbnail_url || "/placeholder.jpg"} 
+                                        alt={project.title} 
+                                        fill 
+                                        className="object-contain opacity-80 group-hover:opacity-100 transition-opacity" 
+                                    />
+                                )}
                                 <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                      <Link href={`/project/${project.slug}`} target="_blank">
                                         <Button size="sm" className="rounded-none h-8 bg-black/60 backdrop-blur-md border border-white/20 text-white font-mono text-[9px] uppercase">
@@ -139,27 +164,101 @@ export default function SubmissionInspector({ submission, isOpen, onClose, onUpd
                             </div>
 
                             <div className="p-8 space-y-10">
-                                {/* Title & Author Block */}
-                                <div className="flex justify-between items-start">
-                                    <div className="space-y-1">
-                                        <h2 className="text-3xl font-black uppercase tracking-tighter text-foreground">{project.title}</h2>
-                                        <Link href={`/profile/${project.author.username}`} target="_blank" className="flex items-center gap-2 group w-fit">
-                                            <div className="relative w-5 h-5 border border-border overflow-hidden">
-                                                <Image src={project.author.avatar_url || "/placeholder.jpg"} alt="av" fill className="object-cover" />
-                                            </div>
-                                            <span className="text-[11px] font-mono text-muted-foreground group-hover:text-accent transition-colors">@{project.author.username}</span>
-                                        </Link>
+                                
+                                {/* A. Metadata Row (Views, Stars, Date) */}
+                                <div className="grid grid-cols-3 gap-2 py-4 border-y border-border border-dashed text-center">
+                                    <div className="flex flex-col gap-1">
+                                        <Star size={14} className="mx-auto text-accent fill-accent" />
+                                        <span className="text-lg font-bold font-mono leading-none">{project.likes_count || 0}</span>
+                                        <span className="text-[8px] font-mono text-muted-foreground uppercase tracking-widest">Stars</span>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <Link href={project.demo_link || "#"} target="_blank">
-                                            <Button disabled={!project.demo_link} size="sm" className="h-9 rounded-none bg-foreground text-background hover:bg-accent hover:text-white font-mono text-[10px] uppercase transition-all">
-                                                Live_Deployment <Globe size={12} className="ml-2" />
-                                            </Button>
-                                        </Link>
+                                    <div className="flex flex-col gap-1 border-l border-border">
+                                        <Eye size={14} className="mx-auto text-muted-foreground" />
+                                        <span className="text-lg font-bold font-mono leading-none">{project.views || 0}</span>
+                                        <span className="text-[8px] font-mono text-muted-foreground uppercase tracking-widest">Views</span>
+                                    </div>
+                                    <div className="flex flex-col gap-1 border-l border-border">
+                                        <Calendar size={14} className="mx-auto text-muted-foreground" />
+                                        <span className="text-sm font-bold font-mono leading-none mt-1">{new Date(project.created_at).toLocaleDateString()}</span>
+                                        <span className="text-[8px] font-mono text-muted-foreground uppercase tracking-widest">Created</span>
                                     </div>
                                 </div>
 
-                                {/* Internal Mission Log Overhaul */}
+                                {/* B. Title & Actions Block */}
+                                <div className="flex justify-between items-start">
+                                    <div className="space-y-1 max-w-[65%]">
+                                        <h2 className="text-3xl font-black uppercase tracking-tighter text-foreground leading-none">{project.title}</h2>
+                                        
+                                        {/* Toolkit Tags */}
+                                        {project.tags && project.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 mt-2 pt-2">
+                                                {project.tags.map((tag, i) => (
+                                                    <span key={i} className="text-[9px] font-mono border border-border px-1.5 py-0.5 uppercase bg-secondary/10">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex flex-col items-end gap-2">
+                                        {liveLink ? (
+                                            <a href={liveLink} target="_blank" rel="noopener noreferrer" className="w-full">
+                                                <Button size="sm" className="w-full h-9 rounded-none bg-foreground text-background hover:bg-accent hover:text-white font-mono text-[10px] uppercase transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none">
+                                                    Live_Deployment <Globe size={12} className="ml-2" />
+                                                </Button>
+                                            </a>
+                                        ) : (
+                                            <Button disabled size="sm" className="h-9 rounded-none font-mono text-[10px] uppercase opacity-50 cursor-not-allowed">
+                                                No Demo Link
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* C. Description (FIXED: Re-added Description) */}
+                                <div className="space-y-2">
+                                    <h3 className="text-[10px] font-mono uppercase text-muted-foreground tracking-[0.2em]">Project_Description</h3>
+                                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm text-foreground/80 leading-relaxed font-light bg-secondary/5 border border-border p-4">
+                                        <p>{project.description || "// No description provided."}</p>
+                                    </div>
+                                </div>
+
+                                {/* D. Personnel (Author & Team) */}
+                                <div className="p-4 bg-secondary/5 border border-border flex flex-col md:flex-row gap-4 justify-between">
+                                    <div className="space-y-2">
+                                        <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest block">Owner / Lead</span>
+                                        <Link href={`/profile/${project.author.username}`} target="_blank" className="flex items-center gap-2 group w-fit">
+                                            <div className="relative w-8 h-8 border border-border overflow-hidden">
+                                                <Image src={project.author.avatar_url || "/placeholder.jpg"} alt="av" fill className="object-cover" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold uppercase group-hover:text-accent transition-colors truncate max-w-[150px]">{project.author.full_name || project.author.username}</p>
+                                                <p className="text-[9px] font-mono text-muted-foreground">@{project.author.username}</p>
+                                            </div>
+                                        </Link>
+                                    </div>
+                                    
+                                    {project.collaborators && project.collaborators.length > 0 && (
+                                        <div className="space-y-2 pl-0 md:pl-4 border-t md:border-t-0 md:border-l border-dashed border-border pt-2 md:pt-0">
+                                            <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                                                <Users size={10} /> Collaborators ({project.collaborators.length})
+                                            </span>
+                                            <div className="flex -space-x-2">
+                                                {project.collaborators.map((c, i) => c.user && (
+                                                    <Link key={i} href={`/profile/${c.user.username}`} target="_blank" title={`@${c.user.username}`}>
+                                                        <div className="relative w-8 h-8 rounded-full border-2 border-background overflow-hidden hover:-translate-y-1 transition-transform">
+                                                            <Image src={c.user.avatar_url || "/placeholder.jpg"} alt="collab" fill className="object-cover" />
+                                                        </div>
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* E. Internal Mission Log Overhaul */}
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between border-b border-border pb-2">
                                         <h3 className="text-[10px] font-mono uppercase text-muted-foreground tracking-[0.3em] flex items-center gap-2">
@@ -216,15 +315,21 @@ export default function SubmissionInspector({ submission, isOpen, onClose, onUpd
                                         <span>Protocol: Internal_Review_v4</span>
                                     </div>
                                 </div>
+                                
+                                {/* F. Public Community Feedback Embed */}
+                                <div className="pt-8 border-t border-border">
+                                    <ProjectComments projectId={project.id} />
+                                </div>
+
                             </div>
                         </ScrollArea>
 
                         {/* Status Gating Console (Sticky Bottom) */}
-                        <div className="border-t border-border bg-card p-6 space-y-4 shadow-[0_-10px_30px_rgba(0,0,0,0.3)]">
+                        <div className="border-t border-border bg-card p-6 space-y-4 shadow-[0_-10px_30px_rgba(0,0,0,0.3)] shrink-0">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="flex items-center justify-between p-3 border border-border bg-background/50">
                                     <div className="flex items-center gap-3">
-                                        <Eye size={16} className={submission.is_public ? "text-green-500" : "text-muted-foreground"} />
+                                        {submission.is_public ? <Eye size={16} className="text-green-500" /> : <EyeOff size={16} className="text-muted-foreground" />}
                                         <span className="text-[10px] font-mono font-bold uppercase">Visibility</span>
                                     </div>
                                     <Switch checked={submission.is_public} onCheckedChange={handleTogglePublic} className="data-[state=checked]:bg-green-500 scale-75" />

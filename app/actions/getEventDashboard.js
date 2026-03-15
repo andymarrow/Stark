@@ -8,7 +8,7 @@ export async function getEventDashboard(eventId) {
   if (!user) return { success: false, error: "Unauthorized" };
 
   try {
-    // 1. Fetch Event and Check Identity
+    // 1. Fetch Event
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select("*")
@@ -17,7 +17,6 @@ export async function getEventDashboard(eventId) {
 
     if (eventError || !event) throw new Error("Event not found.");
 
-    // SENIOR LOGIC: Allow if user is Host OR Admin
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
     const isHost = event.host_id === user.id;
@@ -31,14 +30,19 @@ export async function getEventDashboard(eventId) {
       .eq("event_id", eventId)
       .order('created_at', { ascending: true });
 
-    // 3. Fetch Submissions (Including is_public flag)
+    // 3. Fetch Submissions (UPGRADED PAYLOAD)
+    // Added tags, created_at, likes_count, views, and collaborators
     const { data: submissions, error: subError } = await supabase
       .from("event_submissions")
       .select(`
         id, status, is_featured, internal_notes, folder_id, submitted_at, is_public,
         project:projects(
-            id, title, slug, thumbnail_url, description,
-            author:profiles!projects_owner_id_fkey(username, avatar_url)
+            id, title, slug, thumbnail_url, description, tags, created_at, likes_count, views,
+            author:profiles!projects_owner_id_fkey(username, avatar_url, full_name),
+            collaborators:collaborations(
+                status,
+                user:profiles!user_id(username, avatar_url)
+            )
         )
       `)
       .eq("event_id", eventId)
@@ -51,8 +55,7 @@ export async function getEventDashboard(eventId) {
       data: {
         event,
         folders: folders || [],
-        submissions: submissions || [],
-        asAdmin: isAdmin && !isHost // Pass a flag to UI to show "Admin Mode"
+        submissions: submissions || []
       }
     };
   } catch (error) {
