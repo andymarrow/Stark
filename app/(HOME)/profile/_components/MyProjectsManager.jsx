@@ -5,7 +5,7 @@ import {
   MoreHorizontal, Eye, Star, Edit3, Trash2,
   ExternalLink, Search, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, BarChart3, Plus, Trophy, Globe, Lock, ShieldCheck,
-  Send, ArrowRight, CheckCircle2, XCircle, Clock, EyeOff
+  Send, ArrowRight, CheckCircle2, XCircle, Clock, EyeOff, UploadCloud // ADDED UploadCloud
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,9 +19,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 
-// Server Actions
+// Server Actions & Modals
 import { toggleSubmissionPublic } from "@/app/actions/toggleSubmissionPublic";
 import { withdrawSubmission } from "@/app/actions/submissionManagement";
+import SubmitToEventModal from "./SubmitToEventModal"; // NEW IMPORT
 
 const ITEMS_PER_PAGE = 5;
 
@@ -50,14 +51,17 @@ export default function MyProjectsManager({ user, onRefresh }) {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // NEW: State for Uplink Modal
+  const [projectToUplink, setProjectToUplink] = useState(null);
+
   useEffect(() => {
-    if (!itemToDelete) {
+    if (!itemToDelete && !projectToUplink) {
       setTimeout(() => {
         document.body.style.pointerEvents = "auto";
         document.body.style.overflow = "auto";
       }, 100);
     }
-  }, [itemToDelete]);
+  }, [itemToDelete, projectToUplink]);
 
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -321,6 +325,7 @@ export default function MyProjectsManager({ user, onRefresh }) {
                                 isContestTab={activeTab === 'contest'}
                                 onDeleteRequest={setItemToDelete}
                                 onTogglePublic={handleToggleProjectPublic}
+                                onUplinkRequest={setProjectToUplink} // NEW: Pass the uplink handler
                             />
                         );
                     }
@@ -363,13 +368,25 @@ export default function MyProjectsManager({ user, onRefresh }) {
             </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* UPLINK MODAL (For submitting existing projects to events) */}
+      <SubmitToEventModal 
+        isOpen={!!projectToUplink} 
+        onClose={() => setProjectToUplink(null)} 
+        project={projectToUplink} 
+        onComplete={() => {
+            setProjectToUplink(null);
+            fetchData(); // Refresh to update view (e.g. switch to event submissions tab if desired)
+            if (onRefresh) onRefresh();
+        }}
+      />
     </div>
   );
 }
 
 // --- ROW COMPONENTS ---
 
-function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) {
+function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic, onUplinkRequest }) {
     const router = useRouter();
     const submission = project.contest_submissions?.[0];
     const contestData = submission?.contest;
@@ -418,6 +435,15 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic }) 
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-xl min-w-[150px] z-[50]">
+                        
+                        {/* NEW: Submit to Event Option */}
+                        <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); onUplinkRequest(project); }} 
+                            className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors"
+                        >
+                            <UploadCloud size={12} className="mr-2" /> Submit to Event
+                        </DropdownMenuItem>
+
                         <DropdownMenuItem asChild className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-secondary">
                             <Link href={`/project/${project.slug}/edit`} onClick={(e) => e.stopPropagation()}><Edit3 size={12} className="mr-2" /> Edit</Link>
                         </DropdownMenuItem>
@@ -479,12 +505,12 @@ function ContestRow({ contest, onDeleteRequest }) {
     )
 }
 
-// --- SUBMISSION ROW (FIXED RLS NULL BEHAVIOR & REMOVED NOTES) ---
+// --- SUBMISSION ROW ---
 function SubmissionRow({ submission, onTogglePublic, onWithdraw }) {
     const { project, event, status } = submission;
     const router = useRouter();
 
-    // SAFE FALLBACKS: If RLS blocks reading the event, event will be null.
+    // SAFE FALLBACKS
     const isEventPublic = event?.is_public || false;
     const eventTitle = event?.title || "Classified/Private Event";
     
@@ -544,35 +570,33 @@ function SubmissionRow({ submission, onTogglePublic, onWithdraw }) {
                     </DropdownMenuTrigger>
                    <DropdownMenuContent align="end" className="rounded-none border border-border bg-background shadow-lg min-w-[160px] z-[50] p-1">
     
-    {/* Only show View Event if event exists and is public */}
-    {isEventPublic && event?.id && (
-         <DropdownMenuItem asChild className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors">
-            <Link href={`/events/${event.id}`} target="_blank" className="flex items-center w-full">
-                <ExternalLink size={12} className="mr-2" /> View Event
-            </Link>
-        </DropdownMenuItem>
-    )}
+                        {isEventPublic && event?.id && (
+                             <DropdownMenuItem asChild className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors">
+                                <Link href={`/events/${event.id}`} target="_blank" className="flex items-center w-full">
+                                    <ExternalLink size={12} className="mr-2" /> View Event
+                                </Link>
+                            </DropdownMenuItem>
+                        )}
 
-    <DropdownMenuItem 
-        onClick={() => onTogglePublic(submission)} 
-        className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors"
-    >
-        {submission.is_public ? <><EyeOff size={12} className="mr-2" /> Make Private</> : <><Eye size={12} className="mr-2" /> Make Public</>}
-    </DropdownMenuItem>
+                        <DropdownMenuItem 
+                            onClick={() => onTogglePublic(submission)} 
+                            className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors"
+                        >
+                            {submission.is_public ? <><EyeOff size={12} className="mr-2" /> Make Private</> : <><Eye size={12} className="mr-2" /> Make Public</>}
+                        </DropdownMenuItem>
 
-    <DropdownMenuSeparator className="bg-border my-1" />
-    
-    <DropdownMenuItem 
-        onClick={() => onWithdraw(submission)} 
-        className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-600 dark:text-red-500 focus:bg-red-600 focus:text-white transition-colors"
-    >
-        <Trash2 size={12} className="mr-2" /> Withdraw
-    </DropdownMenuItem>
-    
-</DropdownMenuContent>
+                        <DropdownMenuSeparator className="bg-border my-1" />
+                        
+                        <DropdownMenuItem 
+                            onClick={() => onWithdraw(submission)} 
+                            className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-600 dark:text-red-500 focus:bg-red-600 focus:text-white transition-colors"
+                        >
+                            <Trash2 size={12} className="mr-2" /> Withdraw
+                        </DropdownMenuItem>
+                        
+                    </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-
         </div>
     );
 }

@@ -312,11 +312,15 @@ export default function CreateContestPage() {
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <label className="text-[10px] font-mono uppercase text-muted-foreground">Allow Teams?</label>
+                            
                             <Switch 
                                 checked={formData.team_allowed} 
                                 onCheckedChange={(c) => setFormData({...formData, team_allowed: c})} 
                             />
                         </div>
+
+                        <div className="h-px bg-border border-t border-dashed" />
+
                         <div className="space-y-1">
                             <label className="text-[10px] font-mono uppercase text-muted-foreground">Participant Limit</label>
                             <Input 

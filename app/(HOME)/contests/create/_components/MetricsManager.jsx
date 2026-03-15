@@ -81,7 +81,7 @@ export default function MetricsManager({ metrics, onChange }) {
             </button>
           </div>
         ))}
-        <Button onClick={addMetric} variant="ghost" className="w-full h-8 text-[10px] border border-dashed border-border uppercase hover:bg-secondary/10">
+        <Button onClick={addMetric} variant="ghost" className="text-zinc-500 hover:text-red-500 w-full h-8 text-[10px] border border-dashed border-border uppercase hover:bg-secondary/10">
             + Add Criteria
         </Button>
       </div>
