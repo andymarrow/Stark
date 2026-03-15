@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation"; 
 import { supabase } from "@/lib/supabaseClient"; 
 import { COUNTRIES } from "@/constants/options";
+import Link from "next/link";
 
 const FILTERS = {
   TECH: ["React", "Next.js", "TypeScript", "Python", "Rust", "Go", "Figma"],
@@ -135,7 +136,12 @@ export default function Hero() {
             <p className="mt-8 text-lg md:text-xl text-muted-foreground font-light max-w-3xl mx-auto leading-relaxed">
                The definitive portfolio network for <span className="text-foreground font-medium">Developers, Designers, and Motion Creators</span>. 
                <br className="hidden md:block" />
-               Stop searching for inspiration in static images. <span className="border-b border-accent/50 text-foreground">See the source.</span>
+               Stop searching for inspiration in static images. 
+               <Link href="https://github.com/andymarrow/Stark.git" className="ml-1 inline-block" target="_blank">
+                <span className="border-b border-accent/50 text-foreground">
+                See the source.
+                </span>
+               </Link>
             </p>
         </motion.div>
 
