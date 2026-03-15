@@ -108,9 +108,6 @@ export default function SubmissionInspector({ submission, isOpen, onClose, onUpd
                     {submission.status}
                 </div>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-secondary rounded-sm transition-colors text-muted-foreground">
-                <X size={18} />
-            </button>
         </div>
 
         {/* 2. SUB-NAVIGATION TABS */}
