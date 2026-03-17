@@ -148,13 +148,23 @@ function CreateForm() {
     setIsSubmitting(true);
 
     try {
+      
       const processedImages = await Promise.all(formData.files.map(async (url) => {
         if (url.startsWith('blob:')) {
           const rawEntry = formData.rawFiles.find(r => r.preview === url);
           if (rawEntry && rawEntry.file) {
             const fileExt = rawEntry.file.name.split('.').pop();
-            const fileName = `projects/${user.id}/${Date.now()}.${fileExt}`;
-            const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, rawEntry.file);
+            
+            // FIX: Add a random string to prevent same-millisecond collisions
+            const randomId = Math.random().toString(36).substring(7);
+            const fileName = `projects/${user.id}/${Date.now()}-${randomId}.${fileExt}`;
+            
+            const { error: uploadError } = await supabase.storage
+              .from('project-assets')
+              .upload(fileName, rawEntry.file, {
+                upsert: true // FIX: Tell Supabase to overwrite if it exists instead of crashing
+              });
+              
             if (uploadError) throw uploadError;
             const { data } = supabase.storage.from('project-assets').getPublicUrl(fileName);
             return data.publicUrl;

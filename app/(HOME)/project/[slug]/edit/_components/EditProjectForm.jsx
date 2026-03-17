@@ -231,7 +231,11 @@ export default function EditProjectForm({ project }) {
                     const fileExt = rawEntry.file.name.split('.').pop();
                     const fileName = `projects/${user.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
                     
-                    const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, rawEntry.file);
+                    const { error: uploadError } = await supabase.storage
+                    .from('project-assets')
+                    .upload(fileName, rawEntry.file, {
+                        upsert: true // Allow overwriting to prevent "Resource exists" error
+                    });
                     if (uploadError) throw uploadError;
 
                     const { data: { publicUrl } } = supabase.storage.from('project-assets').getPublicUrl(fileName);
