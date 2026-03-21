@@ -127,9 +127,21 @@ export default function MyBlogsManager({ user, profile }) {
                 </div>
             </div>
             
-            <div className="flex gap-2">
-                <Link href="/blog/write">
-                    <Button className="bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase h-10 px-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all">
+            {/* RESPONSIVE BUTTON CONTAINER: Stacks on mobile, Side-by-side on tablet+ */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                <Link href="/blog" className="w-full sm:w-auto">
+                    <Button 
+                        variant="outline" 
+                        className="w-full border-border hover:bg-secondary text-foreground rounded-none font-mono text-xs uppercase h-10 px-6 transition-all"
+                    >
+                        <ExternalLink size={14} className="mr-2" /> Blog Feed
+                    </Button>
+                </Link>
+
+                <Link href="/blog/write" className="w-full sm:w-auto">
+                    <Button 
+                        className="w-full bg-accent hover:bg-accent/90 text-white rounded-none font-mono text-xs uppercase h-10 px-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
+                    >
                         <Edit3 size={14} className="mr-2" /> New Blog
                     </Button>
                 </Link>
