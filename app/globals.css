@@ -109,6 +109,73 @@
   opacity: 0.1;
 }
 
+/* --- STARK SYNTAX HIGHLIGHTING THEME --- */
+.hljs-comment,
+.hljs-quote {
+  color: #71717a; /* zinc-500 */
+  font-style: italic;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula {
+  color: #ef4444; /* STARK RED (Accent) */
+  font-weight: bold;
+}
+
+.hljs-section,
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst {
+  color: #ef4444;
+}
+
+.hljs-literal {
+  color: #3b82f6; /* Blue */
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta-string {
+  color: #22c55e; /* Green for strings */
+}
+
+.hljs-built_in,
+.hljs-class .hljs-title {
+  color: #eab308; /* Yellow */
+}
+
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-type,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-number {
+  color: #a855f7; /* Purple */
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-meta,
+.hljs-selector-id,
+.hljs-title {
+  color: #38bdf8; /* Light Blue */
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
 /* Ensure the text selection is the brand color */
 ::selection {
   background-color: var(--accent);

@@ -94,9 +94,11 @@ export default function EventsTabContent({ hostedEvents, attendedEvents }) {
 
 // --- SUB-COMPONENT: HOST CARD (Private/Public Logic) ---
 function HostEventCard({ event }) {
-  const isPublic = event.is_public;
+  // DEFENSIVE PROGRAMMING: Ensure event exists
+  if (!event) return null;
+
+  const isPublic = event.is_public === true;
   
-  // Wrapper is a Link if public, div if private
   const Wrapper = isPublic ? Link : 'div';
   const wrapperProps = isPublic ? { href: `/events/${event.id}`, target: "_blank" } : {};
   
@@ -107,7 +109,7 @@ function HostEventCard({ event }) {
       {...wrapperProps}
       className={`
         group relative w-full aspect-[4/3] overflow-hidden border bg-secondary/5
-        transition-all duration-300
+        transition-all duration-300 block
         ${isPublic 
           ? 'border-border hover:border-accent cursor-pointer hover:shadow-2xl hover:shadow-accent/10' 
           : 'border-border/50 opacity-80 cursor-not-allowed grayscale-[0.5]'}
@@ -117,7 +119,7 @@ function HostEventCard({ event }) {
       {coverImage ? (
         <Image 
           src={coverImage} 
-          alt={event.title} 
+          alt={event.title || "Event"} 
           fill 
           className={`object-cover transition-transform duration-700 ${isPublic ? 'group-hover:scale-110' : ''}`}
         />
@@ -146,10 +148,10 @@ function HostEventCard({ event }) {
 
         {/* Bottom Info */}
         <div>
-          <h4 className="text-white font-bold text-lg leading-tight mb-1 line-clamp-2">{event.title}</h4>
+          <h4 className="text-white font-bold text-lg leading-tight mb-1 line-clamp-2">{event.title || "Untitled Protocol"}</h4>
           <div className="flex items-center gap-2 text-white/50 text-[10px] font-mono uppercase">
              <Calendar size={10} />
-             <span>{new Date(event.created_at).toLocaleDateString()}</span>
+             <span>{event.created_at ? new Date(event.created_at).toLocaleDateString() : "Unknown Date"}</span>
              {!isPublic && <span className="text-red-400 ml-auto flex items-center gap-1"><Lock size={8}/> Private Access Only</span>}
           </div>
         </div>
@@ -169,37 +171,42 @@ function HostEventCard({ event }) {
 
 // --- SUB-COMPONENT: SUBMISSION CARD (The Creative Arrow) ---
 function SubmissionEventCard({ submission }) {
-  const { project, event, status } = submission;
+  if (!submission) return null;
+
+  // 🛡️ EXTREME DEFENSIVE PROGRAMMING
+  // Fallback to empty objects if RLS blocks them to prevent undefined/null crashes
+  const project = submission.project || {};
+  const event = submission.event || {};
+  const status = submission.status || 'pending';
+
   const statusConfig = getStatusConfig(status);
   const StatusIcon = statusConfig.icon;
 
-  const isEventPublic = event.is_public;
+  const isEventPublic = event.is_public === true;
+  const eventId = event.id;
   
-  // FIX: Apply smart thumbnail logic here
   const projectThumb = getSmartThumbnail(project.thumbnail_url);
+  const projectTitle = project.title || "Restricted Project";
+  const projectSlug = project.slug;
 
   return (
     <div className="w-full h-auto md:h-32 border border-border bg-background flex flex-col md:flex-row items-stretch overflow-hidden group hover:border-foreground/30 transition-colors">
       
       {/* LEFT: PROJECT (Source) */}
-      <Link href={`/project/${project.slug}`} className="relative w-full md:w-64 shrink-0 bg-secondary border-b md:border-b-0 md:border-r border-border group/project overflow-hidden h-32 md:h-auto">
-        {projectThumb ? (
-            <Image src={projectThumb} alt={project.title} fill className="object-cover transition-transform duration-500 group-hover/project:scale-105" />
-        ) : (
-            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-800 font-mono text-xs">NO_IMAGE</div>
-        )}
-        <div className="absolute inset-0 bg-black/60 flex flex-col justify-end p-3">
-            <span className="text-[9px] font-mono text-white/60 uppercase mb-0.5">Source Project</span>
-            <h4 className="text-white text-xs font-bold truncate group-hover/project:text-accent transition-colors">{project.title}</h4>
+      {projectSlug ? (
+        <Link href={`/project/${projectSlug}`} className="relative w-full md:w-64 shrink-0 bg-secondary border-b md:border-b-0 md:border-r border-border group/project overflow-hidden h-32 md:h-auto block">
+          <ProjectLeftContent thumb={projectThumb} title={projectTitle} />
+        </Link>
+      ) : (
+        <div className="relative w-full md:w-64 shrink-0 bg-secondary border-b md:border-b-0 md:border-r border-border overflow-hidden h-32 md:h-auto opacity-50 grayscale cursor-not-allowed">
+          <ProjectLeftContent thumb={projectThumb} title="Classified Node" />
         </div>
-      </Link>
+      )}
 
       {/* CENTER: THE CONNECTION (Creative Arrow) */}
       <div className="flex-1 relative flex items-center justify-center px-4 py-4 md:py-0 bg-gradient-to-r from-background via-secondary/10 to-background">
-        {/* The Line */}
         <div className="absolute left-0 right-0 top-1/2 h-px bg-border group-hover:bg-border/80 transition-colors hidden md:block" />
         
-        {/* The Badge (Floats on line) */}
         <div className={`
             relative z-10 flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-[10px] uppercase tracking-wider shadow-sm backdrop-blur-md bg-background
             ${statusConfig.color} ${statusConfig.border}
@@ -208,7 +215,6 @@ function SubmissionEventCard({ submission }) {
             <span>{statusConfig.label}</span>
         </div>
 
-        {/* Animated Chevron (Decoration) */}
         <motion.div 
             className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground/20 hidden md:block"
             animate={{ x: [0, 5, 0] }}
@@ -219,12 +225,11 @@ function SubmissionEventCard({ submission }) {
       </div>
 
       {/* RIGHT: EVENT (Destination) */}
-      {/* If event is public, wrap in Link, else div */}
-      {isEventPublic ? (
+      {isEventPublic && eventId ? (
         <Link 
-            href={`/events/${event.id}`} 
+            href={`/events/${eventId}`} 
             target="_blank"
-            className="relative w-full md:w-64 shrink-0 bg-secondary border-t md:border-t-0 md:border-l border-border group/event overflow-hidden h-32 md:h-auto cursor-pointer"
+            className="relative w-full md:w-64 shrink-0 bg-secondary border-t md:border-t-0 md:border-l border-border group/event overflow-hidden h-32 md:h-auto cursor-pointer block"
         >
             <EventRightContent event={event} isPublic={true} />
         </Link>
@@ -238,14 +243,32 @@ function SubmissionEventCard({ submission }) {
   );
 }
 
-// Helper for the Right side content to avoid code duplication
+// Helper for the Left Side (Project) to keep JSX clean
+function ProjectLeftContent({ thumb, title }) {
+    return (
+        <>
+            {thumb ? (
+                <Image src={thumb} alt={title} fill className="object-cover transition-transform duration-500 group-hover/project:scale-105" />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-800 font-mono text-xs">NO_IMAGE</div>
+            )}
+            <div className="absolute inset-0 bg-black/60 flex flex-col justify-end p-3">
+                <span className="text-[9px] font-mono text-white/60 uppercase mb-0.5">Source Project</span>
+                <h4 className="text-white text-xs font-bold truncate group-hover/project:text-accent transition-colors">{title}</h4>
+            </div>
+        </>
+    );
+}
+
+// Helper for the Right side (Event) to avoid code duplication
 function EventRightContent({ event, isPublic }) {
-    const coverImage = getSmartThumbnail(event.cover_image);
+    const coverImage = getSmartThumbnail(event?.cover_image);
+    const eventTitle = event?.title || "Classified Sector";
 
     return (
         <>
             {coverImage ? (
-                <Image src={coverImage} alt={event.title} fill className="object-cover transition-transform duration-500 group-hover/event:scale-105" />
+                <Image src={coverImage} alt={eventTitle} fill className="object-cover transition-transform duration-500 group-hover/event:scale-105" />
             ) : (
                 <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-zinc-800 font-mono text-xs">EVENT_COVER</div>
             )}
@@ -257,7 +280,7 @@ function EventRightContent({ event, isPublic }) {
                         <span className="text-[9px] font-mono text-red-400 flex items-center gap-1 uppercase"><Lock size={8}/> Private</span>
                     )}
                 </div>
-                <h4 className="text-white text-xs font-bold truncate group-hover/event:underline decoration-white/30 underline-offset-4">{event.title}</h4>
+                <h4 className="text-white text-xs font-bold truncate group-hover/event:underline decoration-white/30 underline-offset-4">{eventTitle}</h4>
             </div>
         </>
     );

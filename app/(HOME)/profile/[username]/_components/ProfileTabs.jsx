@@ -15,7 +15,8 @@ import {
   Award,
   Gavel,
   Medal,
-  Calendar, // <--- Added Calendar Icon
+  Calendar, 
+  Terminal // <--- NEW: Icon for Intelligence Reports
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -47,7 +48,8 @@ export default function ProfileTabs({
   workCount = 0,
   savedCount = 0,
   achievementCount = 0,
-  eventsCount = 0, // <--- New Prop
+  eventsCount = 0, 
+  blogCount = 0, // <--- NEW: Blog count prop
   sortOrder,
   setSortOrder,
   popularMetric,
@@ -63,6 +65,9 @@ export default function ProfileTabs({
   );
   const totalContestActivity = contestEntries.length + judgingHistory.length;
 
+  // Determine if the current tab should show the view toggles and filters
+  const showFilters = activeTab === "work" || activeTab === "saved" || activeTab === "blogs";
+
   return (
     <div className="flex flex-col gap-6 mb-8">
       {/* TOP ROW: Main Sections */}
@@ -76,6 +81,16 @@ export default function ProfileTabs({
             count={workCount}
           />
           
+          {/* --- NEW INTELLIGENCE REPORTS TAB --- */}
+          <TabButton
+            active={activeTab === "blogs"}
+            onClick={() => setActiveTab("blogs")}
+            icon={Terminal}
+            label="Blogs"
+            count={blogCount}
+          />
+          {/* ---------------------- */}
+
           <TabButton
             active={activeTab === "achievements"}
             onClick={() => setActiveTab("achievements")}
@@ -84,7 +99,6 @@ export default function ProfileTabs({
             count={achievementCount}
           />
 
-          {/* --- NEW EVENTS TAB --- */}
           <TabButton
             active={activeTab === "events"}
             onClick={() => setActiveTab("events")}
@@ -92,7 +106,6 @@ export default function ProfileTabs({
             label="Events"
             count={eventsCount}
           />
-          {/* ---------------------- */}
 
           <TabButton
             active={activeTab === "competitions"}
@@ -110,8 +123,8 @@ export default function ProfileTabs({
           />
         </div>
 
-        {/* View Toggles (Hidden on Competitions, Achievements, AND Events) */}
-        {activeTab !== "competitions" && activeTab !== "achievements" && activeTab !== "events" && (
+        {/* View Toggles */}
+        {showFilters && (
           <div className="hidden md:flex items-center gap-1 pb-2">
             <ViewToggleButton
               active={viewMode === "grid"}
@@ -157,8 +170,8 @@ export default function ProfileTabs({
             icon={Gavel}
           />
         </div>
-      ) : activeTab === "work" || activeTab === "saved" ? (
-        // Standard Filters (Only for Work/Saved)
+      ) : showFilters ? (
+        // Standard Filters (For Work, Saved, and Blogs)
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-left-2">
           <div className="flex items-center gap-2 bg-secondary/10 p-1 border border-border w-fit">
             <FilterButton

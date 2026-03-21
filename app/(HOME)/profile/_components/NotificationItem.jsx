@@ -1,24 +1,30 @@
+// app/(HOME)/profile/_components/NotificationItem.jsx
 "use client";
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { 
   Heart, UserPlus, MessageSquare, Info, ShieldAlert, Trophy, 
-  GitCommit, Zap, Check, CheckCheck, ArrowRightLeft, Eye, 
-  ShieldCheck, AlertTriangle, FileCode, Handshake, X, MessageCircle
+  GitCommit, Zap, Check, ArrowRightLeft, Eye, 
+  ShieldCheck, AlertTriangle, FileCode, Handshake, X, MessageCircle,
+  FileText, Rocket, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { getAvatar } from "@/constants/assets";
 
 export default function NotificationItem({ notification, onRead, onUpdateState, currentUserId }) {
   const [processing, setProcessing] = useState(false);
   const isRead = notification.is_read;
 
-  // --- ACTIONS ---
+  // --- SMART NOTIFICATION PARSING ---
+  const isProjectMention = notification.type === 'system' && notification.message?.toLowerCase().includes('mentioned');
+  const isBlogMention = notification.type === 'comment_mention';
+  const isBlogBroadcast = notification.type === 'system' && notification.message?.toLowerCase().includes('intelligence report');
+  const isBlogComment = notification.type === 'new_message' && notification.link?.includes('/blog/');
 
+  // --- ACTIONS ---
   const handleFollowBack = async () => {
     setProcessing(true);
     try {
@@ -41,42 +47,20 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const handleAcceptCollab = async () => {
     setProcessing(true);
     try {
-        // 1. IMPROVED SLUG EXTRACTION
-        // This regex extracts the last part of a path before any query strings
-        // Works for: /project/slug, /project/slug/, /project/slug?view=raw
         const match = notification.link?.match(/\/project\/([^\/\?]+)/);
         const slug = match ? match[1] : null;
-        
-        if (!slug) {
-            throw new Error("This invite uses an outdated protocol. Please ask the owner to re-invite you.");
-        }
+        if (!slug) throw new Error("Outdated protocol invite.");
 
-        // 2. Resolve Slug to Project ID
-        const { data: project, error: fetchError } = await supabase
-            .from('projects')
-            .select('id')
-            .eq('slug', slug)
-            .single();
+        const { data: project, error: fetchError } = await supabase.from('projects').select('id').eq('slug', slug).single();
+        if (fetchError || !project) throw new Error("Project Node not found.");
 
-        if (fetchError || !project) throw new Error("Project Node not found in index.");
-
-        // 3. Update Collaboration Status
-        const { error: updateError } = await supabase
-            .from('collaborations')
-            .update({ status: 'accepted' })
-            .eq('project_id', project.id)
-            .eq('user_id', currentUserId);
-
+        const { error: updateError } = await supabase.from('collaborations').update({ status: 'accepted' }).eq('project_id', project.id).eq('user_id', currentUserId);
         if (updateError) throw updateError;
 
         toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
-        
-        // 4. Mark Notification Read & Update UI State locally
         onRead(notification.id); 
         onUpdateState(notification.id, { is_read: true, message: "You accepted the collaboration invite." });
-        
     } catch (err) {
-        console.error("❌ Handshake Error:", err.message);
         toast.error("Handshake Failed", { description: err.message });
     } finally {
         setProcessing(false);
@@ -92,14 +76,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         if (slug) {
             const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
             if (project) {
-                await supabase
-                    .from('collaborations')
-                    .delete()
-                    .eq('project_id', project.id)
-                    .eq('user_id', currentUserId);
+                await supabase.from('collaborations').delete().eq('project_id', project.id).eq('user_id', currentUserId);
             }
         }
-
         toast.info("Invite Terminated");
         onRead(notification.id);
     } catch (err) {
@@ -110,17 +89,19 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   };
 
   // --- RENDER HELPERS ---
-
   const getIcon = () => {
     const props = { size: 14 };
-    const isMention = notification.type === 'system' && notification.message?.toLowerCase().includes('mentioned');
-    if (isMention) return <FileCode {...props} className="text-accent" />;
+
+    if (isProjectMention || isBlogMention) return <FileCode {...props} className="text-accent" />;
+    if (isBlogBroadcast) return <Rocket {...props} className="text-purple-500" />;
 
     switch(notification.type) {
         case 'like': return <Heart {...props} className={isRead ? "text-zinc-600" : "text-red-500 fill-red-500"} />;
         case 'follow': return <UserPlus {...props} className={isRead ? "text-zinc-600" : "text-blue-500"} />;
         case 'chat_request': return <MessageSquare {...props} className={isRead ? "text-zinc-600" : "text-emerald-500"} />;
-        case 'new_message': return <MessageCircle {...props} className={isRead ? "text-zinc-600" : "text-accent"} />;
+        case 'new_message': return isBlogComment 
+            ? <MessageSquare {...props} className={isRead ? "text-zinc-600" : "text-accent"} /> 
+            : <MessageCircle {...props} className={isRead ? "text-zinc-600" : "text-accent"} />;
         case 'request_accepted': return <ShieldCheck {...props} className="text-green-500" />;
         case 'changelog_update': return <GitCommit {...props} className={isRead ? "text-zinc-600" : "text-amber-500"} />;
         case 'collab_invite': return <Handshake {...props} className={isRead ? "text-zinc-600" : "text-indigo-500"} />;
@@ -134,53 +115,72 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     }
   };
 
+  const getBadgeLabel = () => {
+    if (isProjectMention) return "Project Mention";
+    if (isBlogMention) return "Report Mention";
+    if (isBlogBroadcast) return "Network Broadcast";
+    if (isBlogComment) return "Report Signal";
+    return notification.type.replace('_', ' ');
+  };
+
   const getAction = () => {
-    // 1. Follow Logic: Only show "Connect Back" if it's unread. 
-    // Once read, we assume the user has either connected or dismissed the suggestion.
+    // Connect Back
     if (notification.type === 'follow' && !isRead) {
         return (
-            <Button 
-                onClick={handleFollowBack} disabled={processing}
-                variant="outline" className="h-7 text-[10px] uppercase font-mono border-blue-500/30 text-blue-500 hover:bg-blue-500 hover:text-white"
-            >
+            <Button onClick={handleFollowBack} disabled={processing} variant="outline" className="h-7 text-[10px] uppercase font-mono border-blue-500/30 text-blue-500 hover:bg-blue-500 hover:text-white rounded-none">
                 {processing ? <Loader2 size={10} className="animate-spin" /> : "Connect Back"}
             </Button>
         );
     }
 
-    // 2. Collaboration Logic: Only show binary choice (Accept/Decline) if unread.
+    // Collab Binary
     if (notification.type === 'collab_invite' && !isRead) {
         return (
             <div className="flex gap-2">
-                <Button 
-                    onClick={handleAcceptCollab} disabled={processing}
-                    className="h-7 text-[10px] uppercase font-mono bg-accent hover:bg-red-700 text-white rounded-none"
-                >
+                <Button onClick={handleAcceptCollab} disabled={processing} className="h-7 text-[10px] uppercase font-mono bg-accent hover:bg-red-700 text-white rounded-none">
                     {processing ? <Loader2 size={10} className="animate-spin" /> : "Accept"}
                 </Button>
-                <Button 
-                    onClick={handleRejectCollab} disabled={processing}
-                    variant="outline" className="h-7 text-[10px] uppercase font-mono border-border hover:bg-secondary text-muted-foreground hover:text-foreground rounded-none"
-                >
+                <Button onClick={handleRejectCollab} disabled={processing} variant="outline" className="h-7 text-[10px] uppercase font-mono border-border hover:bg-secondary text-muted-foreground hover:text-foreground rounded-none">
                     <X size={12} className="mr-1" /> Decline
                 </Button>
             </div>
         );
     }
 
-    // 3. New Message Logic (Always show Chat button)
+    // Chat vs Blog Comment
     if (notification.type === 'new_message') {
         return (
             <Link href={notification.link}>
                 <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/40 text-accent hover:bg-accent hover:text-white rounded-none transition-all">
-                    Open_Secure_Chat
+                    {isBlogComment ? "View_Signal" : "Open_Secure_Chat"}
                 </Button>
             </Link>
         );
     }
 
-    // 4. Weekly Report: ALWAYS show this button, even if read. 
-    // Users often want to go back and check their stats.
+    // Mentions
+    if (isProjectMention || isBlogMention) {
+        return (
+            <Link href={notification.link}>
+                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-accent/40 text-accent hover:bg-accent hover:text-white rounded-none transition-all">
+                    Inspect_Target
+                </Button>
+            </Link>
+        );
+    }
+
+    // Broadcast
+    if (isBlogBroadcast) {
+        return (
+            <Link href={notification.link}>
+                <Button variant="outline" className="h-7 text-[10px] uppercase font-mono border-purple-500/40 text-purple-500 hover:bg-purple-600 hover:text-white rounded-none transition-all">
+                    Read_Report
+                </Button>
+            </Link>
+        );
+    }
+
+    // Weekly Report
     if (notification.type === 'weekly_digest') {
         return (
             <Link href="/profile/report">
@@ -191,12 +191,11 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         );
     }
 
-    // 5. Generic Links (Changelogs, Mentions, Likes): ALWAYS show the Eye icon.
-    // This fixes the issue in your screenshot where the link disappears.
+    // Fallback View Link
     if (notification.link && notification.link !== '#' && notification.link !== '/profile?view=projects') {
         return (
             <Link href={notification.link}>
-                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors">
+                <Button variant="ghost" className="h-7 w-7 p-0 border border-transparent hover:border-border transition-colors rounded-none">
                     <Eye size={14} className={`${isRead ? 'text-zinc-600' : 'text-muted-foreground'} hover:text-accent`} />
                 </Button>
             </Link>
@@ -204,28 +203,23 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     }
 
     return null;
-};
+  };
 
   return (
     <div className={`
-        flex items-start gap-3 p-3 border border-border bg-background transition-all group relative
+        flex items-start gap-3 p-4 border border-border bg-background transition-all group relative
         ${!isRead 
             ? 'border-l-2 border-l-accent bg-accent/[0.02] shadow-[inset_0_0_10px_rgba(0,0,0,0.02)]' 
             : 'opacity-70 hover:opacity-100'}
     `}>
-        <div className="relative mt-1">
+        <div className="relative mt-1 shrink-0">
             {notification.sender_id === notification.receiver_id ? ( 
                 <div className="w-8 h-8 bg-zinc-900 border border-zinc-800 flex items-center justify-center">
                     <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
                 </div>
             ) : (
                 <Link href={`/profile/${notification.sender?.username}`} className="block relative w-8 h-8 border border-border bg-secondary overflow-hidden">
-                    <Image 
-                        src={getAvatar(notification.sender)} 
-                        alt="User" 
-                        fill 
-                        className="object-cover"
-                    />
+                    <Image src={getAvatar(notification.sender)} alt="User" fill className="object-cover" />
                 </Link>
             )}
             <div className="absolute -bottom-1 -right-1 bg-background p-0.5 border border-border rounded-full">
@@ -235,10 +229,10 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
 
         <div className="flex-1 min-w-0 pt-0.5">
             <div className="flex justify-between items-start gap-2">
-                <p className="text-xs text-foreground leading-snug">
+                <p className="text-xs text-foreground leading-snug break-words">
                     {notification.sender?.username && (
                         <Link href={`/profile/${notification.sender.username}`}>
-                            <span className="font-bold mr-1 hover:text-accent cursor-pointer">
+                            <span className="font-bold mr-1 hover:text-accent cursor-pointer transition-colors">
                                 @{notification.sender.username}
                             </span>
                         </Link>
@@ -247,19 +241,19 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                         {notification.message}
                     </span>
                 </p>
-                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
+                <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap mt-0.5 shrink-0">
                     {new Date(notification.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
             </div>
             
-            <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider bg-secondary/30 px-1.5 py-0.5 rounded-sm">
-                        {notification.type === 'system' && notification.message.includes('mentioned') ? 'Mention' : notification.type.replace('_', ' ')}
+                    <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest bg-secondary/30 px-1.5 py-0.5 border border-border/50">
+                        {getBadgeLabel()}
                     </span>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                     {getAction()}
                     {!isRead && (
                         <button 

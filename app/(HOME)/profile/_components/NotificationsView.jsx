@@ -1,11 +1,7 @@
+// app/(HOME)/profile/_components/NotificationsView.jsx
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import { 
-  Loader2, 
-  CheckCheck,
-  Bell,
-  Inbox
-} from "lucide-react";
+import { Loader2, CheckCheck, Bell, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
@@ -23,7 +19,6 @@ export default function NotificationsView({ onNotificationRead }) {
   
   const isLoadingRef = useRef(false);
 
-  // --- 1. DATA FETCHING (Stabilized) ---
   const fetchNotifications = useCallback(async (isLoadMore = false) => {
     if (!user || isLoadingRef.current) return;
     
@@ -31,22 +26,15 @@ export default function NotificationsView({ onNotificationRead }) {
       isLoadingRef.current = true;
       if (!isLoadMore) setLoading(true);
       
-      // Use functional state to get the latest length without making it a dependency
       let currentCount = 0;
-      setNotifications(prev => {
-          currentCount = isLoadMore ? prev.length : 0;
-          return prev;
-      });
+      setNotifications(prev => { currentCount = isLoadMore ? prev.length : 0; return prev; });
 
       const from = currentCount;
       const to = from + PAGE_SIZE - 1;
 
       let query = supabase
         .from('notifications')
-        .select(`
-          *,
-          sender:profiles!notifications_sender_id_fkey(id, username, avatar_url, full_name)
-        `)
+        .select(`*, sender:profiles!notifications_sender_id_fkey(id, username, avatar_url, full_name)`)
         .eq('receiver_id', user.id)
         .order('created_at', { ascending: false })
         .range(from, to);
@@ -67,39 +55,26 @@ export default function NotificationsView({ onNotificationRead }) {
 
       setHasMore(data.length === PAGE_SIZE);
     } catch (error) {
-      console.error("Fetch Error:", error);
       toast.error("COMM_LINK_FAILURE");
     } finally {
       setLoading(false);
       isLoadingRef.current = false;
     }
-  }, [user, filter]); // REMOVED notifications.length from here
+  }, [user, filter]); 
 
-  // Realtime Subscription
   useEffect(() => {
     if (!user) return;
-    
     const channel = supabase
       .channel(`notifs-${user.id}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'notifications',
-        filter: `receiver_id=eq.${user.id}`
-      }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${user.id}` }, () => {
         fetchNotifications(false); 
         toast.info("New Signal Received");
-      })
-      .subscribe();
-
+      }).subscribe();
     return () => { supabase.removeChannel(channel) };
   }, [user, fetchNotifications]);
 
-  // Initial Fetch
   useEffect(() => {
-    setNotifications([]);
-    setHasMore(false);
-    fetchNotifications(false);
+    setNotifications([]); setHasMore(false); fetchNotifications(false);
   }, [filter, fetchNotifications]);
 
   const handleMarkAsSeen = async (id) => {
@@ -125,8 +100,8 @@ export default function NotificationsView({ onNotificationRead }) {
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500 pb-10">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
             <div>
-                <h2 className="text-xl font-bold tracking-tight uppercase tracking-widest flex items-center gap-2">
-                    <Inbox size={20} /> Signal_Inbox
+                <h2 className="text-xl font-bold uppercase tracking-widest flex items-center gap-2">
+                    <Inbox size={20} className="text-accent" /> Signal_Inbox
                 </h2>
                 <p className="text-[10px] font-mono text-muted-foreground mt-1 uppercase pl-7">
                     Unread: {notifications.filter(n => !n.is_read).length} // Sync_Active
@@ -138,7 +113,7 @@ export default function NotificationsView({ onNotificationRead }) {
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
-                        className={`px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest border transition-all ${filter === f ? "bg-accent text-white border-accent shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "bg-background border-border text-muted-foreground hover:text-foreground"}`}
+                        className={`px-4 py-1.5 text-[10px] font-mono uppercase tracking-widest border transition-all ${filter === f ? "bg-accent text-white border-accent shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" : "bg-background border-border text-muted-foreground hover:text-foreground hover:bg-secondary/10"}`}
                     >
                         {f}
                     </button>
@@ -154,9 +129,9 @@ export default function NotificationsView({ onNotificationRead }) {
             )}
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
             {loading && notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 gap-3 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-40 gap-3 text-muted-foreground border border-border bg-secondary/5">
                     <Loader2 size={24} className="animate-spin text-accent" />
                     <span className="text-xs font-mono uppercase tracking-widest">Decrypting_Signals...</span>
                 </div>
@@ -171,16 +146,16 @@ export default function NotificationsView({ onNotificationRead }) {
                     />
                 ))
             ) : (
-                <div className="h-40 border border-dashed border-border flex flex-col items-center justify-center text-muted-foreground gap-2">
+                <div className="h-40 border border-dashed border-border bg-secondary/5 flex flex-col items-center justify-center text-muted-foreground gap-3">
                     <Bell size={24} className="opacity-20" />
-                    <span className="text-xs font-mono uppercase tracking-[0.3em] opacity-50">No_Signal_Detected</span>
+                    <span className="text-[10px] font-mono uppercase tracking-[0.3em] opacity-50">No_Signal_Detected</span>
                 </div>
             )}
         </div>
 
         {hasMore && (
-            <div className="flex justify-center pt-4">
-                <Button variant="outline" onClick={() => fetchNotifications(true)} className="rounded-none border-border hover:bg-secondary font-mono text-[10px] uppercase tracking-widest px-8" disabled={loading}>
+            <div className="flex justify-center pt-6 pb-12">
+                <Button variant="outline" onClick={() => fetchNotifications(true)} className="rounded-none border-border hover:bg-secondary hover:text-foreground font-mono text-[10px] uppercase tracking-widest px-8 shadow-sm" disabled={loading}>
                     {loading ? <Loader2 className="animate-spin h-3 w-3" /> : "Retrieve_Archives"}
                 </Button>
             </div>

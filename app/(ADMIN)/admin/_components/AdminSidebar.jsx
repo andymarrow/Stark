@@ -1,3 +1,4 @@
+// app/(ADMIN)/admin/_components/AdminSidebar.jsx
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,16 +13,18 @@ import {
   LogOut,
   Trophy,
   Megaphone,
-  Medal ,
-  Swords
+  Medal,
+  Swords,
+  FileText
 } from "lucide-react";
 import { useAuth } from "@/app/_context/AuthContext";
 
 const NAV_ITEMS = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin" },
   { label: "User Management", icon: Users, href: "/admin/users" },
-  { label: "Achievements", icon: Medal, href: "/admin/achievements" }, // NEW ITEM
+  { label: "Achievements", icon: Medal, href: "/admin/achievements" },
   { label: "Announcements", icon: Megaphone, href: "/admin/announcements" },
+  { label: "Blog Control", icon: FileText, href: "/admin/blogs" }, 
   { label: "Contest Control", icon: Trophy, href: "/admin/contests" },
   { label: "Moderation Queue", icon: ShieldAlert, href: "/admin/moderation" },
   { label: "System Health", icon: Activity, href: "/admin/health" },
@@ -34,7 +37,6 @@ export default function AdminSidebar() {
   const { signOut } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Fetch Real Moderation Count
   useEffect(() => {
     const fetchCount = async () => {
       const { count } = await supabase
@@ -53,7 +55,6 @@ export default function AdminSidebar() {
   return (
     <div className="flex flex-col h-full text-zinc-400 bg-black border-r border-white/10">
       
-      {/* Brand */}
       <div className="h-16 flex items-center px-6 border-b border-white/10">
         <div className="flex items-center gap-2 text-white">
             <div className="w-6 h-6 bg-red-600 flex items-center justify-center font-bold text-xs text-black">S</div>
@@ -61,10 +62,9 @@ export default function AdminSidebar() {
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-6 space-y-1 px-3">
+      <nav className="flex-1 py-6 space-y-1 px-3 overflow-y-auto custom-scrollbar">
         {NAV_ITEMS.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
                 <Link 
                     key={item.href} 
@@ -77,7 +77,7 @@ export default function AdminSidebar() {
                     `}
                 >
                     <div className="flex items-center gap-3">
-                        <item.icon size={16} />
+                        <item.icon size={16} className={isActive ? "text-red-500" : "text-zinc-500 group-hover:text-zinc-300"} />
                         <span>{item.label}</span>
                     </div>
                     
@@ -91,8 +91,7 @@ export default function AdminSidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-white/10 shrink-0">
         <button 
             onClick={() => signOut()}
             className="flex items-center gap-3 px-3 py-2 text-sm font-mono text-zinc-500 hover:text-red-500 transition-colors w-full"
@@ -101,7 +100,6 @@ export default function AdminSidebar() {
             <span>Secure Logout</span>
         </button>
       </div>
-
     </div>
   );
 }

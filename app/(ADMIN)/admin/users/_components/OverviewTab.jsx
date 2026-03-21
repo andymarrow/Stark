@@ -1,8 +1,10 @@
+// app/(ADMIN)/admin/users/_components/OverviewTab.jsx
 "use client";
-import { FileCode, ThumbsUp, Activity, Mail, Users, UserPlus } from "lucide-react";
+import { FileCode, ThumbsUp, Activity, Mail, Users, UserPlus, ShieldAlert, Trash2, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
-export default function OverviewTab({ stats, recentProjects, setActiveTab }) {
+export default function OverviewTab({ stats, recentProjects, setActiveTab, onPurgeSignals, isPurging }) {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -17,29 +19,52 @@ export default function OverviewTab({ stats, recentProjects, setActiveTab }) {
             </div>
         </div>
 
-        <div className="border border-white/10">
-            <div className="bg-zinc-900/50 px-4 py-2 border-b border-white/10 flex justify-between items-center">
-                <h3 className="text-xs font-mono text-zinc-400 uppercase">Recent Submissions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 border border-white/10">
+                <div className="bg-zinc-900/50 px-4 py-3 border-b border-white/10 flex justify-between items-center">
+                    <h3 className="text-xs font-mono text-zinc-400 uppercase tracking-widest">Recent Submissions</h3>
+                </div>
+                <div className="divide-y divide-white/5">
+                    {recentProjects.length > 0 ? recentProjects.map((post) => (
+                        <Link 
+                            key={post.slug} 
+                            href={`/project/${post.slug}`} 
+                            target="_blank" 
+                            className="px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <FileCode size={14} className="text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+                                <span className="text-sm text-zinc-300 font-medium group-hover:text-white transition-colors">{post.title}</span>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs font-mono text-zinc-500">
+                                <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                            </div>
+                        </Link>
+                    )) : (
+                        <div className="p-8 text-xs font-mono text-zinc-500 text-center border-dashed border border-white/5 m-4">NO_ACTIVITY_LOGGED</div>
+                    )}
+                </div>
             </div>
-            <div className="divide-y divide-white/5">
-                {recentProjects.length > 0 ? recentProjects.map((post) => (
-                    <Link 
-                        key={post.slug} 
-                        href={`/project/${post.slug}`} 
-                        target="_blank" 
-                        className="px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors group"
-                    >
-                        <div className="flex items-center gap-3">
-                            <FileCode size={14} className="text-zinc-600 group-hover:text-zinc-400 transition-colors" />
-                            <span className="text-sm text-zinc-300 font-medium group-hover:text-white transition-colors">{post.title}</span>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs font-mono text-zinc-500">
-                            <span>{new Date(post.created_at).toLocaleDateString()}</span>
-                        </div>
-                    </Link>
-                )) : (
-                    <div className="p-4 text-xs font-mono text-zinc-500 text-center">NO_ACTIVITY_LOGGED</div>
-                )}
+
+            {/* DANGER ZONE - Mass Actions */}
+            <div className="border border-red-900/30 bg-red-950/10 p-5 flex flex-col justify-between">
+                <div>
+                    <h3 className="text-[10px] font-mono uppercase tracking-widest text-red-500 mb-4 flex items-center gap-2">
+                        <ShieldAlert size={14} /> Admin_Directives
+                    </h3>
+                    <p className="text-xs text-zinc-400 font-sans leading-relaxed mb-6">
+                        Execute network-wide sanitization. Purging signals will permanently delete every comment, annotation, and like this user has made across the entire Stark network.
+                    </p>
+                </div>
+                
+                <Button 
+                    onClick={onPurgeSignals}
+                    disabled={isPurging}
+                    className="w-full bg-red-900/20 text-red-500 hover:bg-red-600 hover:text-white border border-red-900/50 rounded-none font-mono text-[10px] uppercase h-10 transition-all"
+                >
+                    {isPurging ? <Loader2 size={14} className="animate-spin mr-2" /> : <Trash2 size={14} className="mr-2" />} 
+                    Mass-Purge Signals
+                </Button>
             </div>
         </div>
     </div>
@@ -51,10 +76,10 @@ function StatCard({ label, value, icon: Icon, color }) {
     return (
         <div className="bg-zinc-900/20 border border-white/10 p-4 flex flex-col justify-between h-24">
             <div className="flex justify-between items-start">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">{label}</span>
+                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">{label}</span>
                 <Icon size={14} className="text-zinc-600" />
             </div>
-            <div className={`text-2xl font-bold ${textColor}`}>{value}</div>
+            <div className={`text-2xl font-bold font-mono ${textColor}`}>{value}</div>
         </div>
     )
 }

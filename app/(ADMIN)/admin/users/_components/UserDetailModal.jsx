@@ -12,8 +12,9 @@ import TabsHeader from "./TabsHeader";
 import OverviewTab from "./OverviewTab";
 import ReportsTab from "./ReportsTab";
 import CommTab from "./CommTab";
-import ProtocolsTab from "./ProtocolsTab"; // Import the new Achievement management tab
+import ProtocolsTab from "./ProtocolsTab";
 import ModalFooter from "./ModalFooter";
+import UserBlogsTab from "./UserBlogsTab";
 
 export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
   const [activeTab, setActiveTab] = useState("overview"); 
@@ -23,9 +24,10 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
   // Categorized Reports
   const [profileReports, setProfileReports] = useState([]);
   const [projectReports, setProjectReports] = useState([]);
-  const [commentReports, setCommentReports] = useState([]); // New state for comment reports
+  const [commentReports, setCommentReports] = useState([]); 
 
   const [loading, setLoading] = useState(true);
+  const [isPurging, setIsPurging] = useState(false); // NEW: State for Mass Purge
   
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
@@ -164,6 +166,25 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
       setSendingEmail(false);
   };
 
+  // NEW: Mass Purge Signals Logic
+  const handlePurgeSignals = async () => {
+      const confirmText = prompt(`Type "WIPE" to permanently delete all comments and likes by @${user.username}.`);
+      if (confirmText !== 'WIPE') return;
+
+      setIsPurging(true);
+      try {
+          const { error } = await supabase.rpc('purge_user_signals', { target_user_id: user.id });
+          if (error) throw error;
+          
+          toast.success("Network Sanitized", { description: `All signals by @${user.username} have been eradicated.` });
+          if (onUpdate) onUpdate();
+      } catch (err) {
+          toast.error("Sanitization Failed", { description: err.message });
+      } finally {
+          setIsPurging(false);
+      }
+  };
+
   if (!user) return null;
 
   return (
@@ -178,7 +199,27 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
                 <div className="flex items-center justify-center h-40"><Loader2 className="animate-spin text-white" /></div>
             ) : (
                 <>
-                    {activeTab === 'overview' && <OverviewTab stats={stats} recentProjects={recentProjects} setActiveTab={setActiveTab} />}
+                    {activeTab === 'overview' && (
+                        <OverviewTab 
+                            stats={stats} 
+                            recentProjects={recentProjects} 
+                            setActiveTab={setActiveTab} 
+                            onPurgeSignals={handlePurgeSignals} // PASSED DOWN
+                            isPurging={isPurging}               // PASSED DOWN
+                        />
+                    )}
+
+                    {activeTab === 'overview' && (
+                        <OverviewTab 
+                            stats={stats} 
+                            recentProjects={recentProjects} 
+                            setActiveTab={setActiveTab} 
+                            onPurgeSignals={handlePurgeSignals}
+                            isPurging={isPurging}
+                        />
+                    )}
+
+                    {activeTab === 'blogs' && <UserBlogsTab user={user} />}
                     
                     {activeTab === 'reports' && (
                         <ReportsTab 
@@ -190,10 +231,18 @@ export default function UserDetailModal({ user, isOpen, onClose, onUpdate }) {
                         />
                     )}
 
-                    {/* NEW: Achievement Protocol Management Tab */}
                     {activeTab === 'protocols' && <ProtocolsTab user={user} />}
                     
-                    {activeTab === 'comm' && <CommTab emailSubject={emailSubject} setEmailSubject={setEmailSubject} emailBody={emailBody} setEmailBody={setEmailBody} handleSendEmail={handleSendEmail} sendingEmail={sendingEmail} />}
+                    {activeTab === 'comm' && (
+                        <CommTab 
+                            emailSubject={emailSubject} 
+                            setEmailSubject={setEmailSubject} 
+                            emailBody={emailBody} 
+                            setEmailBody={setEmailBody} 
+                            handleSendEmail={handleSendEmail} 
+                            sendingEmail={sendingEmail} 
+                        />
+                    )}
                 </>
             )}
         </div>

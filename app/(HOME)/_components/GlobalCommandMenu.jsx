@@ -17,7 +17,8 @@ import {
   Plus,
   FileCode,
   Loader2,
-  Trophy
+  Trophy,
+  Terminal
 } from "lucide-react";
 
 import {
@@ -32,24 +33,27 @@ import {
 } from "@/components/ui/command";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+// Renamed 'REPORTS' to 'BLOGS'
 const TABS = [
   { id: "all", label: "ALL" },
   { id: "users", label: "USERS" },
   { id: "projects", label: "PROJECTS" },
   { id: "contests", label: "CONTESTS" },
+  { id: "blogs", label: "BLOGS" }, 
 ];
+
+// Reusable class for the CommandItem to override the default solid red focus state
+const starkItemClass = "cursor-pointer transition-all border-l-2 border-transparent data-[selected='true']:bg-secondary/40 data-[selected='true']:border-accent data-[selected='true']:text-foreground";
 
 export function GlobalCommandMenu({ open, setOpen }) {
   const router = useRouter();
   const { setTheme } = useTheme();
   
-  // --- STATE ---
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [results, setResults] = useState({ users: [], projects: [], contests: [] });
+  const [results, setResults] = useState({ users: [], projects: [], contests: [], blogs: [] });
   const [loading, setLoading] = useState(false);
 
-  // Keyboard Shortcut (Cmd+K)
   useEffect(() => {
     const down = (e) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -61,94 +65,71 @@ export function GlobalCommandMenu({ open, setOpen }) {
     return () => document.removeEventListener("keydown", down);
   }, [setOpen]);
 
-  // Reset tab when closing
   useEffect(() => {
     if (!open) {
       setQuery("");
       setActiveTab("all");
-      setResults({ users: [], projects: [], contests: [] });
+      setResults({ users: [], projects: [], contests: [], blogs: [] });
     }
   }, [open]);
 
-  // --- SEARCH LOGIC ---
   useEffect(() => {
     const trimmedQuery = query.trim();
     
     if (!trimmedQuery) {
-        setResults({ users: [], projects: [], contests: [] });
+        setResults({ users: [], projects: [], contests: [], blogs: [] });
         return;
     }
 
     const delayDebounceFn = setTimeout(async () => {
         setLoading(true);
-        
-        // Limits: 3 items per category for 'all', 10 items for specific tabs
         const limit = activeTab === "all" ? 3 : 10;
-        const searchTerm = `%${trimmedQuery}%`; // SQL Wildcards
+        const searchTerm = `%${trimmedQuery}%`;
 
         try {
             const promises = [];
 
-            // 1. Users Query
             if (activeTab === "all" || activeTab === "users") {
                 promises.push(
-                    supabase
-                        .from('profiles')
-                        .select('id, username, full_name, avatar_url')
-                        // Correct PostgREST syntax for OR with ILIKE
+                    supabase.from('profiles').select('id, username, full_name, avatar_url')
                         .or(`username.ilike.${searchTerm},full_name.ilike.${searchTerm}`)
                         .limit(limit)
-                        .then(({ data, error }) => {
-                            if (error) console.error("Users Search Error:", error);
-                            return { type: 'users', data: data || [] };
-                        })
+                        .then(({ data }) => ({ type: 'users', data: data || [] }))
                 );
             }
 
-            // 2. Projects Query
             if (activeTab === "all" || activeTab === "projects") {
                 promises.push(
-                    supabase
-                        .from('projects')
-                        .select('id, title, slug, type')
-                        .ilike('title', searchTerm)
-                        .eq('status', 'published')
+                    supabase.from('projects').select('id, title, slug, type')
+                        .ilike('title', searchTerm).eq('status', 'published')
                         .limit(limit)
-                        .then(({ data, error }) => {
-                            if (error) console.error("Projects Search Error:", error);
-                            return { type: 'projects', data: data || [] };
-                        })
+                        .then(({ data }) => ({ type: 'projects', data: data || [] }))
                 );
             }
 
-            // 3. Contests Query
             if (activeTab === "all" || activeTab === "contests") {
                 promises.push(
-                    supabase
-                        .from('contests')
-                        .select('id, title, slug, is_public')
-                        .ilike('title', searchTerm)
-                        .eq('is_public', true)
+                    supabase.from('contests').select('id, title, slug, is_public')
+                        .ilike('title', searchTerm).eq('is_public', true)
                         .limit(limit)
-                        .then(({ data, error }) => {
-                            if (error) console.error("Contests Search Error:", error);
-                            return { type: 'contests', data: data || [] };
-                        })
+                        .then(({ data }) => ({ type: 'contests', data: data || [] }))
                 );
             }
 
-            // Execute in parallel
+            if (activeTab === "all" || activeTab === "blogs") {
+                promises.push(
+                    supabase.from('blogs').select('id, title, slug, author:profiles!author_id(username)')
+                        .ilike('title', searchTerm).eq('status', 'published')
+                        .limit(limit)
+                        .then(({ data }) => ({ type: 'blogs', data: data || [] }))
+                );
+            }
+
             const resultsArray = await Promise.all(promises);
-            
-            // Reconstruct State
-            const newResults = { users: [], projects: [], contests: [] };
-            resultsArray.forEach(r => {
-                if(r?.type) newResults[r.type] = r.data;
-            });
+            const newResults = { users: [], projects: [], contests: [], blogs: [] };
+            resultsArray.forEach(r => { if(r?.type) newResults[r.type] = r.data; });
 
-            // console.log("Search Results:", newResults); // Debugging
             setResults(newResults);
-
         } catch (err) {
             console.error("Global Search Exception:", err);
         } finally {
@@ -164,7 +145,7 @@ export function GlobalCommandMenu({ open, setOpen }) {
     command();
   };
 
-  const hasResults = results.users.length > 0 || results.projects.length > 0 || results.contests.length > 0;
+  const hasResults = results.users?.length > 0 || results.projects?.length > 0 || results.contests?.length > 0 || results.blogs?.length > 0;
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} shouldFilter={false}>
@@ -175,15 +156,14 @@ export function GlobalCommandMenu({ open, setOpen }) {
         onValueChange={setQuery}
       />
 
-      {/* --- SEARCH FILTER TABS (Telegram Style) --- */}
       {query && (
-        <div className="flex items-center gap-1 px-2 py-2 border-b border-border bg-secondary/5">
+        <div className="flex items-center gap-1 px-2 py-2 border-b border-border bg-secondary/5 overflow-x-auto no-scrollbar">
             {TABS.map((tab) => (
                 <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`
-                        px-3 py-1 text-[10px] font-mono font-bold transition-all border
+                        px-3 py-1 text-[10px] font-mono font-bold transition-all border shrink-0
                         ${activeTab === tab.id 
                             ? "bg-foreground text-background border-foreground" 
                             : "bg-transparent text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"}
@@ -197,7 +177,6 @@ export function GlobalCommandMenu({ open, setOpen }) {
 
       <CommandList className="max-h-[400px] overflow-y-auto custom-scrollbar">
         
-        {/* --- LOADING STATE --- */}
         {loading && (
             <div className="py-8 flex flex-col items-center justify-center text-muted-foreground gap-2">
                 <Loader2 className="animate-spin w-5 h-5 text-accent" />
@@ -205,7 +184,6 @@ export function GlobalCommandMenu({ open, setOpen }) {
             </div>
         )}
 
-        {/* --- RESULTS --- */}
         {!loading && query && (
             <>
                 {/* 1. USERS */}
@@ -214,9 +192,9 @@ export function GlobalCommandMenu({ open, setOpen }) {
                         {results.users.map((user) => (
                             <CommandItem 
                                 key={user.id} 
-                                value={`user-${user.username}`} // Unique value for cmdk
+                                value={`user-${user.username}`} 
                                 onSelect={() => run(() => router.push(`/profile/${user.username}`))}
-                                className="cursor-pointer"
+                                className={starkItemClass}
                             >
                                 <Avatar className="h-6 w-6 mr-2 rounded-none border border-border">
                                     <AvatarImage src={user.avatar_url} />
@@ -229,7 +207,37 @@ export function GlobalCommandMenu({ open, setOpen }) {
                     </CommandGroup>
                 )}
 
-                {/* 2. CONTESTS */}
+                {/* 2. BLOGS */}
+                {results.blogs?.length > 0 && (
+                    <>
+                        <CommandSeparator />
+                        <CommandGroup heading={activeTab === 'all' ? "Intelligence Reports" : `Blogs (${results.blogs.length})`}>
+                            {results.blogs.map((blog) => (
+                                <CommandItem 
+                                    key={blog.id} 
+                                    value={`blog-${blog.slug}`}
+                                    onSelect={() => run(() => router.push(`/${blog.author.username}/blog/${blog.slug}`))}
+                                    className={starkItemClass}
+                                >
+                                    <div className="w-6 h-6 mr-3 flex items-center justify-center bg-accent/10 border border-accent/20 text-accent shrink-0">
+                                        <Terminal size={12} />
+                                    </div>
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <span className="truncate">{blog.title}</span>
+                                        <span className="text-[9px] font-mono text-muted-foreground uppercase truncate">
+                                            Author: @{blog.author.username}
+                                        </span>
+                                    </div>
+                                    <span className="ml-2 text-[9px] font-mono text-accent bg-accent/5 px-1.5 py-0.5 uppercase tracking-widest border border-accent/20 shrink-0">
+                                        View
+                                    </span>
+                                </CommandItem>
+                            ))}
+                        </CommandGroup>
+                    </>
+                )}
+
+                {/* 3. CONTESTS */}
                 {results.contests.length > 0 && (
                     <>
                         <CommandSeparator />
@@ -239,13 +247,13 @@ export function GlobalCommandMenu({ open, setOpen }) {
                                     key={contest.id} 
                                     value={`contest-${contest.slug}`}
                                     onSelect={() => run(() => router.push(`/contests/${contest.slug}`))}
-                                    className="cursor-pointer"
+                                    className={starkItemClass}
                                 >
-                                    <div className="w-6 h-6 mr-2 flex items-center justify-center bg-yellow-500/10 border border-yellow-500/20 text-yellow-500">
+                                    <div className="w-6 h-6 mr-3 flex items-center justify-center bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 shrink-0">
                                         <Trophy size={12} />
                                     </div>
-                                    <span>{contest.title}</span>
-                                    <span className="ml-auto text-[9px] font-mono text-yellow-600 bg-yellow-500/10 px-1.5 py-0.5 uppercase">
+                                    <span className="truncate">{contest.title}</span>
+                                    <span className="ml-auto text-[9px] font-mono text-yellow-600 bg-yellow-500/10 px-1.5 py-0.5 uppercase shrink-0">
                                         Active
                                     </span>
                                 </CommandItem>
@@ -254,7 +262,7 @@ export function GlobalCommandMenu({ open, setOpen }) {
                     </>
                 )}
 
-                {/* 3. PROJECTS */}
+                {/* 4. PROJECTS */}
                 {results.projects.length > 0 && (
                     <>
                         <CommandSeparator />
@@ -264,13 +272,13 @@ export function GlobalCommandMenu({ open, setOpen }) {
                                     key={project.id} 
                                     value={`project-${project.slug}`}
                                     onSelect={() => run(() => router.push(`/project/${project.slug}`))}
-                                    className="cursor-pointer"
+                                    className={starkItemClass}
                                 >
-                                    <div className="w-6 h-6 mr-2 flex items-center justify-center bg-secondary border border-border text-muted-foreground">
+                                    <div className="w-6 h-6 mr-3 flex items-center justify-center bg-secondary border border-border text-muted-foreground shrink-0">
                                         <FileCode size={12} />
                                     </div>
-                                    <span>{project.title}</span>
-                                    <span className="ml-auto text-[9px] uppercase font-mono text-muted-foreground border border-border px-1.5 py-0.5">
+                                    <span className="truncate">{project.title}</span>
+                                    <span className="ml-auto text-[9px] uppercase font-mono text-muted-foreground border border-border px-1.5 py-0.5 shrink-0">
                                         {project.type}
                                     </span>
                                 </CommandItem>
@@ -279,7 +287,6 @@ export function GlobalCommandMenu({ open, setOpen }) {
                     </>
                 )}
 
-                {/* Empty State */}
                 {!hasResults && (
                     <div className="py-8 text-center text-muted-foreground">
                         <p className="text-sm font-mono">No results found for "{query}".</p>
@@ -296,21 +303,28 @@ export function GlobalCommandMenu({ open, setOpen }) {
             </>
         )}
 
-        {/* --- DEFAULT STATIC MENU (Only when no query) --- */}
+        {/* --- DEFAULT STATIC MENU --- */}
         {!query && (
             <>
                 <CommandGroup heading="Navigation">
-                  <CommandItem value="nav-explore" onSelect={() => run(() => router.push('/explore'))}>
+                  <CommandItem value="nav-explore" onSelect={() => run(() => router.push('/explore'))} className={starkItemClass}>
                     <LayoutGrid className="mr-2 h-4 w-4" />
                     <span>Explore</span>
                     <CommandShortcut>G E</CommandShortcut>
                   </CommandItem>
-                  <CommandItem value="nav-trending" onSelect={() => run(() => router.push('/trending'))}>
+                  <CommandItem value="nav-trending" onSelect={() => run(() => router.push('/trending'))} className={starkItemClass}>
                     <Zap className="mr-2 h-4 w-4" />
                     <span>Trending</span>
                     <CommandShortcut>G T</CommandShortcut>
                   </CommandItem>
-                  <CommandItem value="nav-create" onSelect={() => run(() => router.push('/create'))}>
+                  
+                  <CommandItem value="nav-blog" onSelect={() => run(() => router.push('/blog'))} className={starkItemClass}>
+                    <Terminal className="mr-2 h-4 w-4 text-accent" />
+                    <span>Intelligence Reports</span>
+                    <CommandShortcut>G I</CommandShortcut>
+                  </CommandItem>
+
+                  <CommandItem value="nav-create" onSelect={() => run(() => router.push('/create'))} className={starkItemClass}>
                     <Plus className="mr-2 h-4 w-4" />
                     <span>Create Project</span>
                     <CommandShortcut>C P</CommandShortcut>
@@ -320,17 +334,17 @@ export function GlobalCommandMenu({ open, setOpen }) {
                 <CommandSeparator />
 
                 <CommandGroup heading="Settings">
-                  <CommandItem value="set-profile" onSelect={() => run(() => router.push('/profile'))}>
+                  <CommandItem value="set-profile" onSelect={() => run(() => router.push('/profile'))} className={starkItemClass}>
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                     <CommandShortcut>⌘ P</CommandShortcut>
                   </CommandItem>
-                  <CommandItem value="set-billing" onSelect={() => run(() => router.push('/profile?view=settings'))}>
+                  <CommandItem value="set-billing" onSelect={() => run(() => router.push('/profile?view=settings'))} className={starkItemClass}>
                     <CreditCard className="mr-2 h-4 w-4" />
                     <span>Billing</span>
                     <CommandShortcut>⌘ B</CommandShortcut>
                   </CommandItem>
-                  <CommandItem value="set-config" onSelect={() => run(() => router.push('/profile?view=settings'))}>
+                  <CommandItem value="set-config" onSelect={() => run(() => router.push('/profile?view=settings'))} className={starkItemClass}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                     <CommandShortcut>⌘ S</CommandShortcut>
@@ -340,15 +354,15 @@ export function GlobalCommandMenu({ open, setOpen }) {
                 <CommandSeparator />
 
                 <CommandGroup heading="Theme">
-                  <CommandItem value="theme-light" onSelect={() => run(() => setTheme("light"))}>
+                  <CommandItem value="theme-light" onSelect={() => run(() => setTheme("light"))} className={starkItemClass}>
                     <Sun className="mr-2 h-4 w-4" />
                     <span>Light Mode</span>
                   </CommandItem>
-                  <CommandItem value="theme-dark" onSelect={() => run(() => setTheme("dark"))}>
+                  <CommandItem value="theme-dark" onSelect={() => run(() => setTheme("dark"))} className={starkItemClass}>
                     <Moon className="mr-2 h-4 w-4" />
                     <span>Dark Mode</span>
                   </CommandItem>
-                  <CommandItem value="theme-system" onSelect={() => run(() => setTheme("system"))}>
+                  <CommandItem value="theme-system" onSelect={() => run(() => setTheme("system"))} className={starkItemClass}>
                     <Laptop className="mr-2 h-4 w-4" />
                     <span>System</span>
                   </CommandItem>
@@ -357,14 +371,13 @@ export function GlobalCommandMenu({ open, setOpen }) {
                 <CommandSeparator />
 
                 <CommandGroup heading="System">
-                    <CommandItem value="sys-logout" onSelect={() => run(() => router.push('/login'))}>
+                    <CommandItem value="sys-logout" onSelect={() => run(() => router.push('/login'))} className={starkItemClass}>
                         <LogOut className="mr-2 h-4 w-4" />
                         <span>Log Out</span>
                     </CommandItem>
                 </CommandGroup>
             </>
         )}
-
       </CommandList>
     </CommandDialog>
   );

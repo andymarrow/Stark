@@ -11,7 +11,9 @@ import {
   Bell, 
   Settings, 
   LogOut,
-  Megaphone // Added for Announcements
+  Megaphone,
+  Terminal, // NEW: For the Intelligence/Blog link
+  PenTool  // NEW: For the Author Studio link
 } from "lucide-react";
 import ThemeToggle from "@/components/Themetoggle"; 
 import { Button } from "@/components/ui/button";
@@ -129,6 +131,12 @@ export default function DesktopNavbar() {
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium mr-4 uppercase font-mono tracking-tighter">
             <Link href="/explore" className={`transition-colors ${pathname === '/explore' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Explore</Link>
             <Link href="/contests" className={`transition-colors ${pathname.startsWith('/contests') ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Contests</Link>
+            
+            {/* NEW: Intelligence (Blog) Link */}
+            <Link href="/blog" className={`transition-colors flex items-center gap-1.5 ${pathname.startsWith('/blog') ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+                 Blogs
+            </Link>
+
             <Link href="/trending" className={`transition-colors ${pathname === '/trending' ? 'text-red-600 font-bold' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>Trending</Link>
           </nav>
 
@@ -181,7 +189,7 @@ export default function DesktopNavbar() {
                 </div>
               </DropdownMenuTrigger>
               
-              <DropdownMenuContent align="end" className="w-60 rounded-none border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black p-0 mt-2 shadow-2xl">
+              <DropdownMenuContent align="end" className="w-60 rounded-none border-zinc-200 dark:border-zinc-800 bg-white dark:bg-black p-0 mt-2 shadow-2xl z-[100]">
                 
                 {/* Header Label */}
                 <DropdownMenuLabel className="font-mono text-[10px] uppercase text-zinc-500 dark:text-zinc-400 px-4 py-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
@@ -194,6 +202,14 @@ export default function DesktopNavbar() {
                       <Link href="/profile" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
                         <User className="mr-3 h-4 w-4 opacity-70" />
                         My Dossier
+                      </Link>
+                    </DropdownMenuItem>
+
+                    {/* NEW: Author Studio Link */}
+                    <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
+                      <Link href="/blog/studio" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
+                        <PenTool className="mr-3 h-4 w-4 opacity-70 text-red-600" />
+                        Blog Studio
                       </Link>
                     </DropdownMenuItem>
 
@@ -211,7 +227,6 @@ export default function DesktopNavbar() {
                       </Link>
                     </DropdownMenuItem>
 
-                    {/* NEW: System Broadcasts Link */}
                     <DropdownMenuItem asChild className="rounded-none px-4 py-2.5 focus:bg-zinc-100 dark:focus:bg-zinc-900 cursor-pointer text-zinc-600 dark:text-zinc-300 focus:text-black dark:focus:text-white transition-colors">
                       <Link href="/announcements" className="flex items-center w-full font-mono text-xs uppercase tracking-widest">
                         <Megaphone className="mr-3 h-4 w-4 opacity-70" />

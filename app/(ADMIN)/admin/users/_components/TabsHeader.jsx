@@ -1,9 +1,10 @@
+// app/(ADMIN)/admin/users/_components/TabsHeader.jsx
 "use client";
-import { LayoutDashboard, ShieldAlert, Mail, Medal } from "lucide-react";
+import { LayoutDashboard, ShieldAlert, Mail, Medal, FileText } from "lucide-react";
 
 export default function TabsHeader({ activeTab, setActiveTab, reportCount }) {
   return (
-    <div className="flex border-b border-white/10 bg-zinc-900/20">
+    <div className="flex border-b border-white/10 bg-zinc-900/20 overflow-x-auto no-scrollbar shrink-0">
         <TabButton 
             label="Overview" 
             active={activeTab === 'overview'} 
@@ -11,12 +12,19 @@ export default function TabsHeader({ activeTab, setActiveTab, reportCount }) {
             icon={LayoutDashboard}
         />
         
-        {/* NEW PROTOCOLS TAB */}
         <TabButton 
             label="Protocols" 
             active={activeTab === 'protocols'} 
             onClick={() => setActiveTab('protocols')} 
             icon={Medal}
+        />
+
+        {/* NEW BLOGS TAB */}
+        <TabButton 
+            label="Blog Intel" 
+            active={activeTab === 'blogs'} 
+            onClick={() => setActiveTab('blogs')} 
+            icon={FileText}
         />
 
         <TabButton 
@@ -42,7 +50,7 @@ function TabButton({ label, active, onClick, alert, icon: Icon }) {
         <button 
             onClick={onClick}
             className={`
-                px-6 py-4 text-[10px] font-mono uppercase tracking-widest border-b-2 transition-all flex items-center gap-2
+                px-6 py-4 text-[10px] font-mono uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 whitespace-nowrap
                 ${active 
                     ? "border-red-500 text-white bg-white/5" 
                     : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"}

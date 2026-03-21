@@ -9,10 +9,11 @@ import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
-// NEW: Network Registry & Vault & Events Imports
+// NEW & EXISTING IMPORTS
 import NetworkRegistry from "../../_components/NetworkRegistry";
 import AchievementVault from "./AchievementVault";
-import EventsTabContent from "./EventsTabContent"; // <--- Added Import
+import EventsTabContent from "./EventsTabContent"; 
+import BlogsTabContent from "./BlogsTabContent"; // <-- NEW: The Blog UI
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
@@ -25,8 +26,9 @@ export default function ProfileClient({
   initialFollowerStats,
   contestEntries = [],
   judgingHistory = [],
-  hostedEvents = [], // <--- New Prop
-  attendedEvents = [], // <--- New Prop
+  hostedEvents = [], 
+  attendedEvents = [], 
+  initialBlogs = [], // <-- NEW Prop
   achievementCount = 0, 
   currentUser,
   username
@@ -35,7 +37,7 @@ export default function ProfileClient({
   const [activeTab, setActiveTab] = useState("work");
   const [viewMode, setViewMode] = useState("grid");
 
-  // --- NEW: CONNECTION STATES ---
+  // CONNECTION STATES 
   const [isConnectionsOpen, setIsConnectionsOpen] = useState(false);
   const [connectionType, setConnectionType] = useState("followers");
   const [connections, setConnections] = useState([]);
@@ -47,7 +49,6 @@ export default function ProfileClient({
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-
   const hasCountedRef = useRef(false);
 
   // 1. View Counting Logic
@@ -63,7 +64,7 @@ export default function ProfileClient({
     increment();
   }, [initialProfile.id, currentUser]);
 
-  // --- NEW: FETCH PUBLIC CONNECTIONS ---
+  // FETCH PUBLIC CONNECTIONS 
   const fetchConnectionsList = async (type) => {
     setConnLoading(true);
     setConnectionType(type);
@@ -97,29 +98,39 @@ export default function ProfileClient({
     setCurrentPage(1);
   }, [activeTab, sortOrder, popularMetric]);
 
-  // Calculate Event Activity Count
   const totalEventsActivity = hostedEvents.length + attendedEvents.length;
 
-  const sortedProjects = useMemo(() => {
-    // Exclude special tabs from this sorting logic
-    if (activeTab === 'competitions' || activeTab === 'achievements' || activeTab === 'events') return [];
-    
-    let list = activeTab === "work" ? [...initialWork] : [...initialSaved];
-    return list.sort((a, b) => {
-      if (sortOrder === 'latest') return new Date(b.created_at) - new Date(a.created_at);
-      if (sortOrder === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
-      if (sortOrder === 'popular') {
-        if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
-        if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
-        if (popularMetric === 'hype') {
-          const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
-          const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
-          return scoreB - scoreA;
+  // --- GENERAL SORTING ALGORITHM (Now handles Blogs too) ---
+  const getSortedItems = (list) => {
+      return [...list].sort((a, b) => {
+        const dateA = new Date(a.published_at || a.created_at);
+        const dateB = new Date(b.published_at || b.created_at);
+
+        if (sortOrder === 'latest') return dateB - dateA;
+        if (sortOrder === 'oldest') return dateA - dateB;
+        if (sortOrder === 'popular') {
+          if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
+          if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
+          if (popularMetric === 'hype') {
+            const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
+            const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
+            return scoreB - scoreA;
+          }
         }
-      }
-      return 0;
-    });
+        return 0;
+      });
+  };
+
+  const sortedProjects = useMemo(() => {
+    if (activeTab === 'work') return getSortedItems(initialWork);
+    if (activeTab === 'saved') return getSortedItems(initialSaved);
+    return [];
   }, [initialWork, initialSaved, activeTab, sortOrder, popularMetric]);
+
+  const sortedBlogs = useMemo(() => {
+    if (activeTab === 'blogs') return getSortedItems(initialBlogs);
+    return [];
+  }, [initialBlogs, activeTab, sortOrder, popularMetric]);
 
   const publicStats = {
     projects: initialWork.length,
@@ -130,9 +141,12 @@ export default function ProfileClient({
     projectTraffic: initialWork.reduce((acc, p) => acc + (p.views || 0), 0)
   };
 
-  const totalPages = Math.ceil(sortedProjects.length / ITEMS_PER_PAGE);
+  const currentListLength = activeTab === 'blogs' ? sortedBlogs.length : sortedProjects.length;
+  const totalPages = Math.ceil(currentListLength / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  
   const currentProjects = sortedProjects.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const currentBlogs = sortedBlogs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div className="container mx-auto px-4 max-w-6xl">
@@ -157,7 +171,8 @@ export default function ProfileClient({
           workCount={initialWork.length}
           savedCount={initialSaved.length}
           achievementCount={achievementCount}
-          eventsCount={totalEventsActivity} // <--- Pass events count
+          eventsCount={totalEventsActivity} 
+          blogCount={initialBlogs.length} // <-- NEW: Pass blog count
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
           popularMetric={popularMetric}
@@ -171,12 +186,22 @@ export default function ProfileClient({
           <AchievementVault userId={initialProfile.id} isOwner={currentUser?.id === initialProfile.id} />
       )}
 
-      {/* --- RENDER EVENTS TAB (NEW) --- */}
+      {/* --- RENDER EVENTS TAB --- */}
       {activeTab === 'events' && (
-        <EventsTabContent 
-          hostedEvents={hostedEvents} 
-          attendedEvents={attendedEvents} 
-        />
+        <EventsTabContent hostedEvents={hostedEvents} attendedEvents={attendedEvents} />
+      )}
+
+      {/* --- RENDER BLOGS TAB (NEW) --- */}
+      {activeTab === 'blogs' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <BlogsTabContent blogs={currentBlogs} viewMode={viewMode} author={initialProfile} />
+              
+              {totalPages > 1 && (
+                  <div className="mt-12">
+                      <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(p) => { setCurrentPage(p); window.scrollTo({ top: 600, behavior: 'smooth' }); }} />
+                  </div>
+              )}
+          </div>
       )}
 
       {/* --- RENDER PROJECTS TABS --- */}
@@ -199,14 +224,7 @@ export default function ProfileClient({
                   )}
                   {totalPages > 1 && (
                       <div className="mt-12">
-                          <Pagination 
-                              currentPage={currentPage}
-                              totalPages={totalPages}
-                              onPageChange={(p) => {
-                                  setCurrentPage(p);
-                                  window.scrollTo({ top: 600, behavior: 'smooth' });
-                              }}
-                          />
+                          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(p) => { setCurrentPage(p); window.scrollTo({ top: 600, behavior: 'smooth' }); }} />
                       </div>
                   )}
               </div>
@@ -218,13 +236,7 @@ export default function ProfileClient({
       )}
 
       {/* --- SHARED NETWORK REGISTRY MODAL --- */}
-      <NetworkRegistry 
-          isOpen={isConnectionsOpen}
-          onClose={() => setIsConnectionsOpen(false)}
-          type={connectionType}
-          connections={connections}
-          loading={connLoading}
-      />
+      <NetworkRegistry isOpen={isConnectionsOpen} onClose={() => setIsConnectionsOpen(false)} type={connectionType} connections={connections} loading={connLoading} />
     </div>
   );
 }

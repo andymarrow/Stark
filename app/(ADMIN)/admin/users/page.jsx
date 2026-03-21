@@ -221,14 +221,16 @@ export default function UserManagementPage() {
                                 {new Date(user.created_at).toLocaleDateString()}
                             </AdminCell>
 
+                            {/* Actions */}
                             <AdminCell>
-                                <DropdownMenu modal={false}>
+                                {/* Removed modal={false} here as well */}
+                                <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <button className="p-2 hover:bg-white/10 text-zinc-500 hover:text-white transition-colors">
                                             <MoreHorizontal size={16} />
                                         </button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="bg-black border-white/10 rounded-none text-zinc-300 w-48 z-[100]">
+                                    <DropdownMenuContent align="end" className="bg-black border border-white/10 rounded-none text-zinc-300 w-48 z-[9999]">
                                         <DropdownMenuLabel className="font-mono text-[10px] uppercase text-zinc-600 px-3 py-2">System_Directives</DropdownMenuLabel>
                                         
                                         <DropdownMenuItem className="focus:bg-white/10 cursor-pointer text-xs font-mono py-2" onClick={() => setSelectedUser(user)}>

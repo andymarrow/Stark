@@ -69,7 +69,7 @@ export default async function ProfilePage({ params }) {
 
   if (profileError || !profileData) return notFound();
 
-  // C. Fetch Projects, Follower Stats, Contest Data, Events in Parallel
+  // C. Fetch Projects, Follower Stats, Contest Data, Events, and BLOGS in Parallel
   const [
     projectsRes,
     likedRes,
@@ -78,8 +78,9 @@ export default async function ProfilePage({ params }) {
     contestEntriesRes,
     judgingRes,
     achievementsCountRes,
-    hostedEventsRes, // <--- NEW 1
-    attendedEventsRes // <--- NEW 2
+    hostedEventsRes, 
+    attendedEventsRes,
+    publishedBlogsRes // <-- NEW: Fetch Blogs
   ] = await Promise.all([
     // 1. Work Projects
     supabaseServer
@@ -133,15 +134,14 @@ export default async function ProfilePage({ params }) {
       .eq('user_id', profileData.id)
       .eq('is_public', true),
 
-    // 8. Hosted Events (NEW)
+    // 8. Hosted Events
     supabaseServer
       .from('events')
       .select('*')
       .eq('host_id', profileData.id)
       .order('created_at', { ascending: false }),
 
-    // 9. Attended/Submitted Events (NEW)
-    // We join projects to ensure we only get submissions owned by this profile
+    // 9. Attended/Submitted Events
     supabaseServer
       .from('event_submissions')
       .select(`
@@ -150,17 +150,24 @@ export default async function ProfilePage({ params }) {
         project:projects!inner(*)
       `)
       .eq('project.owner_id', profileData.id)
-      .order('submitted_at', { ascending: false })
+      .order('submitted_at', { ascending: false }),
+      
+    // 10. Published Blogs (NEW)
+    supabaseServer
+      .from('blogs')
+      .select('*')
+      .eq('author_id', profileData.id)
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
   ]);
 
   const workProjects = projectsRes.data || [];
   const likedProjects = likedRes.data?.map(item => item.projects).filter(Boolean) || [];
   const contestEntries = contestEntriesRes.data || [];
   const judgingHistory = judgingRes.data || [];
-  
-  // NEW DATA
   const hostedEvents = hostedEventsRes.data || [];
   const attendedEvents = attendedEventsRes.data || [];
+  const publishedBlogs = publishedBlogsRes.data || []; // <-- NEW
 
   const profileUrl = `${BASE_URL}/profile/${username}`;
   const sameAs = [];
@@ -206,11 +213,9 @@ export default async function ProfilePage({ params }) {
         initialSaved={likedProjects}
         contestEntries={contestEntries}
         judgingHistory={judgingHistory}
-        
-        // PASS NEW DATA PROPS
         hostedEvents={hostedEvents}
         attendedEvents={attendedEvents}
-        
+        initialBlogs={publishedBlogs} // <-- NEW: Pass blogs to client
         achievementCount={achievementsCountRes.count || 0}
         initialFollowerStats={{
           followers: followersCount.count || 0,

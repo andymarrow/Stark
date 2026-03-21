@@ -9,20 +9,22 @@ import { toast } from "sonner";
 import { 
   Settings, Grid, Bell, LogOut, Loader2, 
   Scale, Shield, Users, UserPlus, X, Search, ArrowUpRight,
-  Megaphone,Swords,Send, Calendar as CalendarIcon // Added Calendar Icon
+  Megaphone, Swords, Send, Calendar as CalendarIcon,
+  Terminal // NEW: Imported Terminal for My Intelligence tab
 } from "lucide-react"; 
 
 // Components
 import PersonalHeader from "./_components/PersonalHeader";
 import DashboardStats from "./_components/DashboardStats";
 import MyProjectsManager from "./_components/MyProjectsManager";
+import MyBlogsManager from "./_components/MyBlogsManager"; // NEW: Imported MyBlogsManager
 import SettingsForm from "./_components/SettingsForm";
 import NotificationsView from "./_components/NotificationsView";
 import LoginRequiredState from "@/components/LoginRequiredState";
 import TermsView from "./_components/legal/TermsView";
 import PrivacyView from "./_components/legal/PrivacyView";
 import NetworkRegistry from "./_components/NetworkRegistry";
-import MyEventsManager from "./_components/MyEventsManager"; // Imported Manager
+import MyEventsManager from "./_components/MyEventsManager"; 
 
 // Shadcn UI
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -193,7 +195,14 @@ function ProfileContent() {
                             onClick={() => handleViewChange("projects")} 
                         />
 
-                        {/* NEW: MY EVENTS BUTTON */}
+                        {/* NEW: MY INTELLIGENCE (BLOG) BUTTON */}
+                        <NavButton 
+                            icon={Terminal} 
+                            label="My Blogs" 
+                            active={currentView === "blogs"} 
+                            onClick={() => handleViewChange("blogs")} 
+                        />
+
                         <NavButton 
                             icon={CalendarIcon} 
                             label="My Hosted Events" 
@@ -202,13 +211,11 @@ function ProfileContent() {
                         />
 
                         <NavButton 
-                            icon={Swords} // Or Trophy / LayoutGrid
+                            icon={Swords}
                             label="Events Hub" 
-                            active={currentView === "myevents"} 
                             onClick={() => router.push('/events')} 
                         />
 
-                        {/* NEW: Announcements Link in Sidebar */}
                         <NavButton 
                             icon={Megaphone} 
                             label="System Broadcasts" 
@@ -247,10 +254,11 @@ function ProfileContent() {
             <div className="lg:col-span-9">
                 <div className="bg-background min-h-[500px]">
                     {currentView === 'projects' && <MyProjectsManager user={user} onRefresh={fetchProfileAndStats} />}
-
                     
-                    {/* NEW: Events View */}
-                     {currentView === 'events' && <MyEventsManager user={user} profile={profile} />} 
+                    {/* NEW: Blogs View */}
+                    {currentView === 'blogs' && <MyBlogsManager user={user} profile={profile} />} 
+                    
+                    {currentView === 'events' && <MyEventsManager user={user} profile={profile} />} 
                     
                     {currentView === 'settings' && <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />}
                     {currentView === 'notifications' && <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />}
@@ -263,6 +271,7 @@ function ProfileContent() {
 
       {/* --- NETWORK REGISTRY MODAL --- */}
       <Dialog open={isConnectionsOpen} onOpenChange={setIsConnectionsOpen}>
+        {/* Modal Content omitted for brevity in snippet, keeps exact same original code */}
         <DialogContent className="max-w-2xl bg-background border border-border p-0 rounded-none overflow-hidden gap-0">
             <DialogHeader className="p-6 border-b border-border bg-secondary/10">
                 <div className="flex justify-between items-center">
