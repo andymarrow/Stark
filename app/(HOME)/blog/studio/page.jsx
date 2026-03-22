@@ -17,10 +17,10 @@ export default async function BlogStudioPage() {
     redirect("/login");
   }
 
-  // 1. Fetch User's Blogs (Drafts & Published)
+  // 1. Fetch User's Blogs (Drafts & Published) WITH AUTHOR DATA
   const { data: myBlogs } = await supabase
     .from('blogs')
-    .select('*')
+    .select('*, author:profiles!author_id(username, avatar_url, full_name, role)') // FIXED: Now we fetch the username!
     .eq('author_id', user.id)
     .order('updated_at', { ascending: false });
 
@@ -34,7 +34,6 @@ export default async function BlogStudioPage() {
   const savedBlogs = savedData?.map(s => s.blog) || [];
 
   // 3. Fetch Private Feedback (Comments marked 'private_to_author' on YOUR blogs)
-  // We join through the blog to ensure it belongs to the author
   const { data: privateNotes } = await supabase
     .from('blog_comments')
     .select('*, user:profiles!user_id(username, avatar_url, full_name), blog:blogs(title, slug)')

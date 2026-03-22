@@ -4,15 +4,15 @@ import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { 
-  FileText, Lock, Bookmark, PenTool, 
-  Eye, Heart, MessageSquare, Clock, Trash2, 
+import {
+  FileText, Lock, Bookmark, PenTool,
+  Eye, Heart, MessageSquare, Clock, Trash2,
   Edit3, ShieldAlert, Terminal, Inbox,
   UserPlus, MessageCircle, MoreHorizontal,
-  ChevronDown, Layers, Search, X, 
+  ChevronDown, Layers, Search, X,
   ShieldCheck, Loader2, Check, History,
   Filter, Grid, List, Download, RotateCcw, ArrowUpRight,
-  AlertTriangle ,Activity
+  AlertTriangle, Activity
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -79,13 +79,13 @@ function VersionVisualPreview({ content }) {
 
 export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, privateNotes }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("published"); 
+  const [activeTab, setActiveTab] = useState("published");
   const [searchQuery, setSearchQuery] = useState("");
   const [savedFilterSector, setSavedFilterSector] = useState(null);
-  const [viewMode, setViewMode] = useState("list"); 
-  
+  const [viewMode, setViewMode] = useState("list");
+
   const [expandedBlogId, setExpandedBlogId] = useState(null);
-  
+
   const [inspectingBlog, setInspectingBlog] = useState(null);
   const [inspectingComments, setInspectingComments] = useState([]);
   const [blogVersions, setBlogVersions] = useState([]);
@@ -95,7 +95,7 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
   const [managingVersionsBlog, setManagingVersionsBlog] = useState(null);
   const [revisionHistory, setRevisionHistory] = useState([]);
   const [isRevisionLoading, setIsRevisionLoading] = useState(false);
-  
+
   const [blogToDelete, setBlogToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -104,16 +104,19 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
 
   const [mutualFollowers, setMutualFollowers] = useState([]);
 
+  // Extract actual author username from the first blog, fallback to user_metadata
+  const actualUsername = myBlogs[0]?.author?.username || currentUser?.user_metadata?.username || 'user';
+
   useEffect(() => {
     const fetchHandshakes = async () => {
-        if (!currentUser) return;
-        const { data: iFollow } = await supabase.from('follows').select('following_id').eq('follower_id', currentUser.id);
-        const { data: followMe } = await supabase.from('follows').select('follower_id').eq('following_id', currentUser.id);
-        if (iFollow && followMe) {
-            const iFollowIds = iFollow.map(f => f.following_id);
-            const followMeIds = followMe.map(f => f.follower_id);
-            setMutualFollowers(iFollowIds.filter(id => followMeIds.includes(id)));
-        }
+      if (!currentUser) return;
+      const { data: iFollow } = await supabase.from('follows').select('following_id').eq('follower_id', currentUser.id);
+      const { data: followMe } = await supabase.from('follows').select('follower_id').eq('following_id', currentUser.id);
+      if (iFollow && followMe) {
+        const iFollowIds = iFollow.map(f => f.following_id);
+        const followMeIds = followMe.map(f => f.follower_id);
+        setMutualFollowers(iFollowIds.filter(id => followMeIds.includes(id)));
+      }
     };
     fetchHandshakes();
   }, [currentUser]);
@@ -121,20 +124,20 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
   const filteredData = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return {
-        published: myBlogs.filter(b => b.status === 'published' && b.title.toLowerCase().includes(q)),
-        drafts: myBlogs.filter(b => b.status === 'draft' && b.title.toLowerCase().includes(q)),
-        saved: savedBlogs.filter(b => {
-            const matchesSearch = b.title.toLowerCase().includes(q) || b.author.username.toLowerCase().includes(q);
-            const matchesSector = !savedFilterSector || b.tags?.includes(savedFilterSector);
-            return matchesSearch && matchesSector;
-        })
+      published: myBlogs.filter(b => b.status === 'published' && b.title.toLowerCase().includes(q)),
+      drafts: myBlogs.filter(b => b.status === 'draft' && b.title.toLowerCase().includes(q)),
+      saved: savedBlogs.filter(b => {
+        const matchesSearch = b.title.toLowerCase().includes(q) || b.author.username.toLowerCase().includes(q);
+        const matchesSector = !savedFilterSector || b.tags?.includes(savedFilterSector);
+        return matchesSearch && matchesSector;
+      })
     };
   }, [myBlogs, savedBlogs, searchQuery, savedFilterSector]);
 
   const savedTags = useMemo(() => {
-      const tags = new Set();
-      savedBlogs.forEach(b => b.tags?.forEach(t => tags.add(t)));
-      return Array.from(tags);
+    const tags = new Set();
+    savedBlogs.forEach(b => b.tags?.forEach(t => tags.add(t)));
+    return Array.from(tags);
   }, [savedBlogs]);
 
   const stats = useMemo(() => {
@@ -158,99 +161,99 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
   }, [privateNotes]);
 
   const openInspector = async (blog) => {
-      setInspectingBlog(blog);
-      setIsInspectorLoading(true);
-      setSelectedVersionId("all");
-      try {
-          const { data: comments } = await supabase.from('blog_comments').select('*, user:profiles!user_id(id, username, avatar_url)').eq('blog_id', blog.id).neq('visibility', 'private_to_self').order('created_at', { ascending: false });
-          const { data: versions } = await supabase.from('blog_versions').select('id, version_number, created_at').eq('blog_id', blog.id).order('version_number', { ascending: false });
-          setInspectingComments(comments || []);
-          setBlogVersions(versions || []);
-      } catch (err) { toast.error("Sync Failure"); } finally { setIsInspectorLoading(false); }
+    setInspectingBlog(blog);
+    setIsInspectorLoading(true);
+    setSelectedVersionId("all");
+    try {
+      const { data: comments } = await supabase.from('blog_comments').select('*, user:profiles!user_id(id, username, avatar_url)').eq('blog_id', blog.id).neq('visibility', 'private_to_self').order('created_at', { ascending: false });
+      const { data: versions } = await supabase.from('blog_versions').select('id, version_number, created_at').eq('blog_id', blog.id).order('version_number', { ascending: false });
+      setInspectingComments(comments || []);
+      setBlogVersions(versions || []);
+    } catch (err) { toast.error("Sync Failure"); } finally { setIsInspectorLoading(false); }
   };
 
   const handleExportMarkdown = (blog) => {
-      if (!blog.content) return toast.error("No content to export.");
-      const blob = new Blob([blog.content], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${blog.slug}.md`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Intel Exported", { description: "Markdown file saved locally." });
+    if (!blog.content) return toast.error("No content to export.");
+    const blob = new Blob([blog.content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${blog.slug}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Intel Exported", { description: "Markdown file saved locally." });
   };
 
   const openRevisionManager = async (blog) => {
-      setManagingVersionsBlog(blog);
-      setIsRevisionLoading(true);
-      try {
-          const { data, error } = await supabase.from('blog_versions').select('*').eq('blog_id', blog.id).order('version_number', { ascending: false });
-          if (error) throw error;
-          setRevisionHistory(data || []);
-      } catch (err) { toast.error("Failed to load revisions"); } finally { setIsRevisionLoading(false); }
+    setManagingVersionsBlog(blog);
+    setIsRevisionLoading(true);
+    try {
+      const { data, error } = await supabase.from('blog_versions').select('*').eq('blog_id', blog.id).order('version_number', { ascending: false });
+      if (error) throw error;
+      setRevisionHistory(data || []);
+    } catch (err) { toast.error("Failed to load revisions"); } finally { setIsRevisionLoading(false); }
   };
 
   const executeDelete = async () => {
     if (!blogToDelete) return;
     setIsDeleting(true);
     try {
-        const { error } = await supabase.from('blogs').delete().eq('id', blogToDelete.id);
-        if (error) throw error;
-        toast.success("Report Purged Successfully");
-        router.refresh();
+      const { error } = await supabase.from('blogs').delete().eq('id', blogToDelete.id);
+      if (error) throw error;
+      toast.success("Report Purged Successfully");
+      router.refresh();
     } catch (err) {
-        toast.error("Purge Failed", { description: err.message });
+      toast.error("Purge Failed", { description: err.message });
     } finally {
-        setIsDeleting(false);
-        setBlogToDelete(null);
+      setIsDeleting(false);
+      setBlogToDelete(null);
     }
   };
 
   const executeRestore = async () => {
-      if (!versionToRestore || !managingVersionsBlog) return;
-      setIsRestoring(true);
-      try {
-          const { error: updateErr } = await supabase.from('blogs').update({ content: versionToRestore.content_markdown, updated_at: new Date().toISOString() }).eq('id', managingVersionsBlog.id);
-          if (updateErr) throw updateErr;
+    if (!versionToRestore || !managingVersionsBlog) return;
+    setIsRestoring(true);
+    try {
+      const { error: updateErr } = await supabase.from('blogs').update({ content: versionToRestore.content_markdown, updated_at: new Date().toISOString() }).eq('id', managingVersionsBlog.id);
+      if (updateErr) throw updateErr;
 
-          const nextVersionNumber = revisionHistory[0].version_number + 1;
-          const { error: vErr } = await supabase.from('blog_versions').insert({ blog_id: managingVersionsBlog.id, version_number: nextVersionNumber, content_json: versionToRestore.content_json, content_markdown: versionToRestore.content_markdown });
-          if (vErr) throw vErr;
+      const nextVersionNumber = revisionHistory[0].version_number + 1;
+      const { error: vErr } = await supabase.from('blog_versions').insert({ blog_id: managingVersionsBlog.id, version_number: nextVersionNumber, content_json: versionToRestore.content_json, content_markdown: versionToRestore.content_markdown });
+      if (vErr) throw vErr;
 
-          toast.success("Rollback Successful", { description: `REV_${nextVersionNumber}.0 deployed.` });
-          setVersionToRestore(null);
-          setManagingVersionsBlog(null);
-          router.refresh();
-      } catch (err) { 
-          toast.error("Rollback Failed", { description: err.message }); 
-      } finally { 
-          setIsRestoring(false); 
-      }
+      toast.success("Rollback Successful", { description: `REV_${nextVersionNumber}.0 deployed.` });
+      setVersionToRestore(null);
+      setManagingVersionsBlog(null);
+      router.refresh();
+    } catch (err) { 
+      toast.error("Rollback Failed", { description: err.message }); 
+    } finally { 
+      setIsRestoring(false); 
+    }
   };
 
   const handleHandshake = async (senderId) => {
     if (mutualFollowers.includes(senderId)) {
-        router.push(`/chat?target=${senderId}`);
+      router.push(`/chat?target=${senderId}`);
     } else {
-        toast.promise(supabase.from('follows').insert({ follower_id: currentUser.id, following_id: senderId }), {
-            loading: 'Transmitting Handshake...',
-            success: 'Handshake Sent.',
-            error: 'Transmission Failed'
-        });
+      toast.promise(supabase.from('follows').insert({ follower_id: currentUser.id, following_id: senderId }), {
+        loading: 'Transmitting Handshake...',
+        success: 'Handshake Sent.',
+        error: 'Transmission Failed'
+      });
     }
   };
 
   return (
     <div className="container mx-auto px-4 max-w-7xl animate-in fade-in duration-700 pb-20">
-      
+
       {/* STUDIO HUD */}
       <div className="mb-8 border border-border bg-secondary/5 overflow-hidden shadow-sm">
           <div className="bg-secondary/10 px-4 md:px-6 py-2 border-b border-border flex justify-between items-center">
               <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground uppercase tracking-[0.3em]">
                   <Activity size={12} className="text-accent animate-pulse" /> System_Status: Online
               </div>
-              <div className="text-[10px] font-mono text-muted-foreground uppercase">Author_ID: {currentUser.user_metadata?.username || 'STARK_NODE'}</div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase">Author_ID: @{actualUsername}</div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border">
               <StatBlock label="Network_Reach" value={stats.totalViews} icon={Eye} unit="Nodes" />
@@ -368,6 +371,7 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
                 </div>
             )}
 
+            {/* SAVED TAB */}
             {activeTab === 'saved' && (
                 <div className="p-4 md:p-6 space-y-6 animate-in fade-in slide-in-from-right-4">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border pb-4 md:pb-6">
@@ -378,12 +382,14 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
                                 <span className="text-lg font-black uppercase font-mono text-foreground">{filteredData.saved.length} Records</span>
                             </div>
                         </div>
+                        
                         <div className="flex items-center gap-2 bg-secondary/10 border border-border p-1 self-start md:self-auto">
                             <button onClick={() => setViewMode('list')} className={`p-2 transition-colors ${viewMode === 'list' ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}><List size={16}/></button>
                             <button onClick={() => setViewMode('grid')} className={`p-2 transition-colors ${viewMode === 'grid' ? 'bg-foreground text-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}><Grid size={16}/></button>
                         </div>
                     </div>
 
+                    {/* Sector Pills */}
                     {savedTags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             <button onClick={()=>setSavedFilterSector(null)} className={`px-3 py-1.5 text-[9px] font-mono uppercase border transition-all ${!savedFilterSector ? 'bg-accent text-white border-accent shadow-sm' : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50 bg-background'}`}>All_Sectors</button>
@@ -419,6 +425,15 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
                           ))}
                       </div>
                   </div>
+                  <button onClick={() => setInspectingBlog(null)} className="p-2 hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors shrink-0"><X size={20} /></button>
+              </div>
+
+              {/* Mobile Version Filter */}
+              <div className="flex md:hidden items-center bg-secondary/5 border-b border-border p-2 overflow-x-auto no-scrollbar">
+                  <button onClick={()=>setSelectedVersionId('all')} className={`px-3 py-1.5 text-[9px] font-mono uppercase transition-all shrink-0 border border-transparent ${selectedVersionId === 'all' ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground hover:border-border'}`}>All_Flows</button>
+                  {blogVersions.map(v => (
+                      <button key={v.id} onClick={()=>setSelectedVersionId(v.id)} className={`px-3 py-1.5 text-[9px] font-mono uppercase transition-all shrink-0 border border-transparent ${selectedVersionId === v.id ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground hover:border-border'}`}>REV_{v.version_number}.0</button>
+                  ))}
               </div>
 
               <div className="flex-1 flex overflow-hidden">
@@ -461,6 +476,39 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
                               ))}
                           </div>
                       )}
+                  </div>
+
+                  {/* RIGHT SIDEBAR (Hidden on mobile, flex on LG) */}
+                  <div className="w-80 hidden lg:flex flex-col bg-secondary/5 p-6 space-y-8 border-l border-border shrink-0">
+                      <div className="p-4 bg-background border border-border shadow-sm">
+                          <h5 className="text-[10px] font-mono text-accent uppercase tracking-widest mb-4 flex items-center gap-2"><UserPlus size={12}/> Author_Identity</h5>
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 relative border border-border bg-secondary"><Image src={getAvatar({avatar_url: currentUser.user_metadata?.avatar_url})} alt="" fill className="object-cover" /></div>
+                              <div className="min-w-0">
+                                  <p className="text-xs font-bold uppercase truncate text-foreground">@{actualUsername}</p>
+                                  <p className="text-[9px] font-mono text-muted-foreground">LEVEL: SENIOR_ARCHITECT</p>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div>
+                          <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2"><Filter size={12}/> Revision_Status</h5>
+                          <div className="space-y-1">
+                              {blogVersions.map(v => (
+                                  <div key={v.id} className={`flex justify-between items-center p-2 text-[10px] font-mono uppercase ${selectedVersionId === v.id ? 'bg-accent/10 text-accent border-l-2 border-accent' : 'text-muted-foreground'}`}>
+                                      <span>REV {v.version_number}.0</span>
+                                      <span>{new Date(v.created_at).toLocaleDateString()}</span>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
+                      <div className="pt-8 border-t border-border/50 space-y-4">
+                          <h5 className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Global_Telemetry</h5>
+                          <MetaStat label="Total_Flow" value={inspectingComments.length} />
+                          <MetaStat label="Public_Consensus" value={inspectingComments.filter(c=>c.visibility==='public').length} />
+                          <MetaStat label="Private_Buffer" value={inspectingComments.filter(c=>c.visibility==='private_to_author').length} />
+                      </div>
                   </div>
               </div>
           </DialogContent>
@@ -535,6 +583,7 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
           </DialogContent>
       </Dialog>
 
+      {/* DELETE CONFIRMATION MODAL */}
       <Dialog open={!!blogToDelete} onOpenChange={(open) => !open && setBlogToDelete(null)}>
           <DialogContent className="sm:max-w-[400px] border-destructive/50 bg-background p-0 rounded-none gap-0 shadow-2xl z-[100]">
               <DialogHeader className="p-6 border-b border-destructive/20 bg-red-950/10">
@@ -557,6 +606,7 @@ export default function BlogStudioClient({ currentUser, myBlogs, savedBlogs, pri
           </DialogContent>
       </Dialog>
 
+      {/* RESTORE CONFIRMATION MODAL */}
       <Dialog open={!!versionToRestore} onOpenChange={(open) => !open && setVersionToRestore(null)}>
           <DialogContent className="sm:max-w-[400px] border-yellow-500/50 bg-background p-0 rounded-none gap-0 shadow-2xl z-[100]">
               <DialogHeader className="p-6 border-b border-yellow-500/20 bg-yellow-950/10">
@@ -602,6 +652,9 @@ function TabButton({ active, onClick, icon: Icon, label, count, isSpecial }) {
 }
 
 function BlogDataRow({ blog, isDraft, onDelete, currentUser, onInspect, onManageVersions, onExport }) {
+    // Use blog.author?.username if available, else currentUser username, else 'user'
+    const finalUsername = blog.author?.username || currentUser?.user_metadata?.username || 'user';
+
     return (
         <div className="group flex flex-col md:flex-row items-start md:items-center justify-between p-4 md:p-5 border border-border bg-background hover:bg-secondary/5 hover:border-foreground/30 transition-all gap-4 md:gap-6 shadow-sm">
             <div className="flex-1 min-w-0 w-full">
@@ -618,6 +671,7 @@ function BlogDataRow({ blog, isDraft, onDelete, currentUser, onInspect, onManage
                             <div className="flex items-center gap-1.5"><Heart size={12} className="text-accent" /> {blog.likes_count}</div>
                             <div className="flex items-center gap-1.5 pl-3 border-l border-border">
                                 <MatrixBadge label="PUB" count={blog.comments_count} color="text-green-600" onClick={onInspect} />
+                                <MatrixBadge label="AUTH" count={0} color="text-blue-600" onClick={onInspect} /> 
                             </div>
                         </>
                     )}
@@ -625,13 +679,13 @@ function BlogDataRow({ blog, isDraft, onDelete, currentUser, onInspect, onManage
             </div>
             
             <div className="flex items-center gap-2 w-full md:w-auto shrink-0 mt-2 md:mt-0 border-t border-border md:border-0 pt-3 md:pt-0">
-                <Link href={isDraft ? `/blog/write?id=${blog.id}` : `/${currentUser?.user_metadata?.username || 'user'}/blog/${blog.slug}`} className="flex-1 md:flex-none">
-                    <Button variant="outline" className="w-full h-9 md:h-10 rounded-none border-border bg-transparent text-foreground hover:bg-foreground hover:text-background text-[10px] md:text-xs uppercase tracking-widest px-4 md:px-6">{isDraft ? "Resume Edit" : "View Live"}</Button>
+                <Link href={isDraft ? `/blog/write?id=${blog.id}` : `/${finalUsername}/blog/${blog.slug}`} className="flex-1 md:flex-none">
+                    <Button variant="outline" className="w-full h-9 md:h-10 rounded-none border-border bg-background hover:bg-secondary text-[10px] md:text-[11px] font-mono uppercase tracking-widest px-4 md:px-6">{isDraft ? "Resume Edit" : "View Live"}</Button>
                 </Link>
                 
                 <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10 rounded-none border-border bg-transparent text-foreground hover:bg-foreground hover:text-background transition-colors shrink-0">
+                        <Button variant="outline" size="icon" className="h-9 w-9 md:h-10 md:w-10 rounded-none border-border bg-background hover:bg-secondary text-foreground transition-colors shrink-0">
                             <MoreHorizontal size={16} />
                         </Button>
                     </DropdownMenuTrigger>
@@ -667,8 +721,9 @@ function SavedCard({ blog, mode }) {
                 <div>
                     <div className="aspect-video relative overflow-hidden bg-secondary mb-4 border border-border">
                         {blog.cover_image && <Image src={blog.cover_image} alt="" fill className="object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />}
+                        <div className="absolute top-2 left-2 bg-background/80 backdrop-blur-sm px-2 py-1 text-[8px] font-mono text-foreground border border-border">ARCHIVE_ID: {blog.id.substring(0,4)}</div>
                     </div>
-                    <Link href={`/${blog.author.username}/blog/${blog.slug}`} className="text-sm font-bold uppercase tracking-tight text-foreground group-hover:text-accent transition-colors line-clamp-2">{blog.title}</Link>
+                    <Link href={`/${blog.author.username}/blog/${blog.slug}`} className="text-sm md:text-base font-bold uppercase tracking-tight leading-tight text-foreground group-hover:text-accent transition-colors line-clamp-2">{blog.title}</Link>
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                     <div className="flex items-center gap-2 min-w-0">
@@ -688,10 +743,10 @@ function SavedCard({ blog, mode }) {
                 </div>
                 <div className="min-w-0">
                     <Link href={`/${blog.author.username}/blog/${blog.slug}`} className="text-sm font-bold uppercase tracking-tight text-foreground group-hover:text-accent transition-colors truncate block">{blog.title}</Link>
-                    <p className="text-[9px] font-mono text-muted-foreground uppercase mt-1">@{blog.author.username}</p>
+                    <p className="text-[9px] md:text-[10px] font-mono text-muted-foreground uppercase mt-1 truncate">Author: @{blog.author.username} | {new Date(blog.published_at || blog.created_at).toLocaleDateString()}</p>
                 </div>
             </div>
-            <div className="flex items-center justify-between sm:justify-end gap-6 sm:ml-4 shrink-0 w-full sm:w-auto">
+            <div className="flex items-center justify-between sm:justify-end gap-6 sm:ml-4 shrink-0 border-t border-border sm:border-0 pt-3 sm:pt-0 w-full sm:w-auto">
                 <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground uppercase">
                     <span className="flex items-center gap-1"><Heart size={10} className="text-accent" /> {blog.likes_count}</span>
                     <span className="flex items-center gap-1"><MessageSquare size={10}/> {blog.comments_count}</span>
@@ -706,7 +761,7 @@ function SavedCard({ blog, mode }) {
 
 function MatrixBadge({ label, count, color, onClick, disabled }) {
     return (
-        <button disabled={disabled} onClick={onClick} className={`flex items-center gap-1 px-1.5 py-0.5 border border-border bg-background text-[9px] font-mono uppercase transition-all ${disabled ? 'opacity-40' : 'hover:border-accent hover:bg-accent/5 cursor-pointer'}`}>
+        <button disabled={disabled} onClick={onClick} className={`flex items-center gap-1 px-1.5 py-0.5 border border-border bg-background text-[9px] md:text-[10px] font-mono uppercase transition-all ${disabled ? 'opacity-40 cursor-default' : 'hover:border-accent hover:bg-accent/5 cursor-pointer'}`}>
             <span className="text-muted-foreground">{label}:</span>
             <span className={`${color} font-bold`}>{count || 0}</span>
         </button>
@@ -718,5 +773,5 @@ function MetaStat({ label, value }) {
 }
 
 function EmptyState({ msg }) {
-    return <div className="py-20 text-center border border-dashed border-border bg-secondary/5 mx-4 my-4 flex flex-col items-center gap-3 text-muted-foreground text-[10px] font-mono uppercase tracking-widest">{msg}</div>
+    return <div className="py-20 text-center border border-dashed border-border bg-secondary/5 mx-4 my-4 flex flex-col items-center gap-3 text-muted-foreground"><ShieldAlert size={24} className="opacity-20" /><span className="text-[10px] font-mono uppercase tracking-[0.2em]">{msg}</span></div>
 }
