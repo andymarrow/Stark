@@ -1,16 +1,17 @@
 "use client";
 import Link from "next/link";
-import { Flame, ArrowUpRight, Activity, Trophy, Clock } from "lucide-react";
+import { Flame, ArrowUpRight, Activity, Trophy, Clock, Terminal, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function ExploreTrendingBanner() {
   return (
-    <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
       
-      {/* 1. TRENDING BANNER (Left) */}
+      {/* 1. TRENDING BANNER (Left - Red) */}
       <motion.div 
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0 }}
         className="group h-full"
       >
         <Link href="/trending" className="block h-full">
@@ -58,10 +59,11 @@ export default function ExploreTrendingBanner() {
         </Link>
       </motion.div>
 
-      {/* 2. CONTEST BANNER (Right) */}
+      {/* 2. CONTEST BANNER (Middle - Yellow) */}
       <motion.div 
-        initial={{ opacity: 0, x: 10 }}
-        animate={{ opacity: 1, x: 0 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
         className="group h-full"
       >
         <Link href="/contests" className="block h-full">
@@ -103,6 +105,58 @@ export default function ExploreTrendingBanner() {
                   animate={{ x: ["-100%", "100%"] }}
                   transition={{ repeat: Infinity, duration: 4, ease: "linear", delay: 1 }}
                   className="h-full w-1/3 bg-gradient-to-r from-transparent via-yellow-500 to-transparent"
+              />
+            </div>
+          </div>
+        </Link>
+      </motion.div>
+
+      {/* 3. BLOG / NETWORK INTEL BANNER (Right - Blue) */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="group h-full"
+      >
+        <Link href="/blog" className="block h-full">
+          <div className="relative h-full overflow-hidden border border-blue-500/30 bg-blue-500/5 p-4 transition-all duration-300 hover:border-blue-500 hover:bg-blue-500/10 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)] flex flex-col justify-between">
+            
+            {/* Background Visual */}
+            <div className="absolute top-0 right-0 h-full w-1/2 pointer-events-none opacity-20">
+               <div className="absolute inset-0 bg-[radial-gradient(circle_at_right,rgba(59,130,246,0.2),transparent_70%)]" />
+               <Terminal className="absolute right-[-20%] top-1/2 -translate-y-1/2 w-48 h-48 text-blue-500/20 rotate-12" />
+            </div>
+
+            <div className="flex items-start justify-between relative z-10">
+                <div className="w-10 h-10 bg-blue-500 text-white flex items-center justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group-active:shadow-none group-active:translate-x-1 group-active:translate-y-1 transition-all">
+                  <Globe size={20} />
+                </div>
+                <div className="flex items-center gap-1 text-blue-500 font-mono text-[9px] font-bold uppercase">
+                   <span className="hidden sm:inline">Intel_Log</span>
+                   <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
+            </div>
+
+            <div className="mt-4 relative z-10">
+                <div className="flex items-center gap-2 mb-1">
+                    <span className="bg-blue-500 text-white text-[7px] font-bold px-1.5 py-0.5 uppercase tracking-widest flex items-center gap-1">
+                        <span className="w-1 h-1 bg-white rounded-full animate-pulse" /> Signal
+                    </span>
+                    <h3 className="text-sm md:text-lg font-bold font-mono uppercase tracking-tight text-foreground">
+                        Network Blogs
+                    </h3>
+                </div>
+                <p className="text-[9px] text-muted-foreground font-mono uppercase tracking-tighter">
+                    // Engineering reports & guides
+                </p>
+            </div>
+            
+            {/* Bottom Scanner Line */}
+            <div className="absolute bottom-0 left-0 h-[1px] bg-blue-500/50 w-full">
+              <motion.div 
+                  animate={{ x: ["-100%", "100%"] }}
+                  transition={{ repeat: Infinity, duration: 3.5, ease: "linear", delay: 0.5 }}
+                  className="h-full w-1/3 bg-gradient-to-r from-transparent via-blue-500 to-transparent"
               />
             </div>
           </div>
