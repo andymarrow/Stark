@@ -176,6 +176,103 @@
   font-weight: bold;
 }
 
+/* ==========================================
+   STARK TERMINAL SYNTAX HIGHLIGHTING (LOWLIGHT)
+   ========================================== */
+
+/* Base Code Block Reset */
+.prose pre code {
+  color: #e4e4e7; /* zinc-200 */
+  background: transparent;
+  text-shadow: none;
+  font-family: var(--font-mono), monospace;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  line-height: 1.6;
+  tab-size: 4;
+  hyphens: none;
+}
+
+/* Comments */
+.hljs-comment,
+.hljs-quote {
+  color: #71717a; /* zinc-500 */
+  font-style: italic;
+}
+
+/* Keywords, Operators, Tags (The Stark Red) */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-operator,
+.hljs-tag {
+  color: #ef4444; /* Hyper Red */
+  font-weight: bold;
+}
+
+/* Functions, Titles, Class Names */
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: #3b82f6; /* Blue-500 */
+  font-weight: bold;
+}
+
+/* Strings, Attributes, Regex */
+.hljs-string,
+.hljs-attr,
+.hljs-regexp,
+.hljs-symbol,
+.hljs-template-variable {
+  color: #10b981; /* Emerald-500 */
+}
+
+/* Numbers, Booleans, Constants */
+.hljs-number,
+.hljs-literal,
+.hljs-built_in,
+.hljs-type {
+  color: #f97316; /* Orange-500 */
+}
+
+/* Variables, Properties, Params */
+.hljs-variable,
+.hljs-property,
+.hljs-params {
+  color: #a855f7; /* Purple-500 */
+}
+
+/* Punctuation (Brackets, commas) */
+.hljs-punctuation {
+  color: #a1a1aa; /* zinc-400 */
+}
+
+/* Deletions/Additions (For Git Diffs) */
+.hljs-deletion {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+.hljs-addition {
+  color: #10b981;
+  background-color: rgba(16, 185, 129, 0.1);
+}
+
+/* Meta/Directives (e.g. #include, import) */
+.hljs-meta {
+  color: #f59e0b; /* Amber-500 */
+}
+
+/* Make sure the text selection inside code blocks fits the theme */
+.prose pre code ::selection,
+.prose pre code::selection {
+  background-color: rgba(239, 68, 68, 0.3); /* Transparent Red */
+  color: #ffffff;
+}
+
 /* Ensure the text selection is the brand color */
 ::selection {
   background-color: var(--accent);
