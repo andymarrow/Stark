@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'edge';
 
+// We use the Service Role Key to ensure the bot can always see the metadata
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL, 
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -15,18 +16,23 @@ export async function GET(request) {
 
     if (!slug) return new Response('Missing Slug', { status: 400 });
 
-    // 1. Fetch Blog & Author Data (Using Service Role, so it bypasses RLS)
+    // 1. Fetch Blog & Author Data
     const { data: b, error } = await supabase
       .from('blogs')
       .select('title, cover_image, likes_count, views, reading_time, author:profiles!author_id(username, avatar_url, full_name)')
       .eq('slug', slug)
       .single();
 
-    if (error || !b) return new Response('Intelligence Report Not Found', { status: 404 });
+    if (error || !b) {
+      console.error("Supabase Error:", error);
+      return new Response('Intelligence Report Not Found', { status: 404 });
+    }
 
-    // 2. ULTRA-SAFE FALLBACKS (Prevents Satori Crashes)
+    // 2. STARK_SAFE_FALLBACKS
+    // Satori will crash if these URLs are null or undefined
     const imageSource = b.cover_image || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1200';
-    const authorUsername = b.author?.username || 'UNKNOWN_NODE';
+    const authorUsername = b.author?.username || 'STARK_OPERATOR';
+    const authorDisplayName = b.author?.full_name || authorUsername;
     const authorAvatar = b.author?.avatar_url || `https://ui-avatars.com/api/?name=${authorUsername}&background=09090b&color=ef4444`;
 
     return new ImageResponse(
@@ -38,134 +44,175 @@ export async function GET(request) {
           flexDirection: 'column',
           backgroundColor: '#050505',
           color: 'white',
-          padding: '40px',
+          padding: '50px',
           position: 'relative',
-          border: '10px solid #18181b',
+          border: '12px solid #18181b', // Outer Industrial Frame
         }}>
-          {/* 1. Tactical Grid Background */}
+          {/* 1. Tactical Grid Background Layer */}
           <div style={{
             position: 'absolute',
             inset: 0,
             backgroundImage: 'linear-gradient(to right, #18181b 1px, transparent 1px), linear-gradient(to bottom, #18181b 1px, transparent 1px)',
             backgroundSize: '40px 40px',
-            opacity: 0.3,
+            opacity: 0.4,
             display: 'flex'
           }} />
 
-          {/* 2. Top Header HUD */}
+          {/* 2. TOP HEADER HUD */}
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
             width: '100%', 
-            marginBottom: '30px',
-            zIndex: 10
+            marginBottom: '40px',
+            zIndex: 10,
+            borderBottom: '1px solid #27272a',
+            paddingBottom: '20px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <div style={{ width: '12px', height: '12px', backgroundColor: '#ef4444' }} />
-                <span style={{ fontSize: '20px', letterSpacing: '4px', fontWeight: 'bold', color: '#ef4444' }}>STARK_INTELLIGENCE_REPORT //</span>
+                <div style={{ width: '14px', height: '14px', backgroundColor: '#ff0000', boxShadow: '0 0 10px #ff0000' }} />
+                <span style={{ fontSize: '22px', letterSpacing: '6px', fontWeight: 'bold', color: '#ff0000', fontFamily: 'monospace' }}>
+                    STARK_INTELLIGENCE_REPORT //
+                </span>
             </div>
-            <span style={{ fontSize: '16px', color: '#52525b', letterSpacing: '2px' }}>DECRYPTED_ACCESS: LEVEL_4</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontSize: '14px', color: '#52525b', letterSpacing: '2px', fontWeight: 'bold' }}>DECRYPTED_ACCESS: LEVEL_4</span>
+                <span style={{ fontSize: '10px', color: '#3f3f46', marginTop: '4px' }}>REF_ID: {slug.substring(0, 16).toUpperCase()}</span>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', flex: 1, gap: '40px', zIndex: 10 }}>
-            {/* 3. Left Side: Content & Meta */}
+          {/* 3. MAIN CONTENT MATRIX */}
+          <div style={{ display: 'flex', flex: 1, gap: '50px', zIndex: 10 }}>
+            
+            {/* LEFT SIDE: INTEL DATA */}
             <div style={{ display: 'flex', flexDirection: 'column', width: '60%', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <h1 style={{ 
-                    fontSize: '72px', 
+                    fontSize: '80px', 
                     margin: 0, 
                     fontWeight: '900', 
                     lineHeight: 1, 
                     textTransform: 'uppercase', 
-                    letterSpacing: '-3px',
-                    color: 'white'
+                    letterSpacing: '-4px',
+                    color: 'white',
+                    marginBottom: '30px'
                 }}>
                     {b.title}
                 </h1>
                 
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '30px', gap: '15px' }}>
-                    <div style={{ display: 'flex', width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #ef4444' }}>
+                {/* Author Card */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ 
+                        display: 'flex', 
+                        width: '60px', 
+                        height: '60px', 
+                        border: '2px solid #ff0000', 
+                        overflow: 'hidden',
+                        padding: '4px',
+                        backgroundColor: '#000'
+                    }}>
                         <img src={authorAvatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#a1a1aa' }}>@{authorUsername.toUpperCase()}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '28px', fontWeight: '900', color: 'white' }}>{authorDisplayName}</span>
+                        <span style={{ fontSize: '18px', color: '#ef4444', fontWeight: 'bold', letterSpacing: '2px' }}>@{authorUsername.toUpperCase()}</span>
+                    </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '30px', borderTop: '1px solid #27272a', paddingTop: '30px' }}>
+              {/* Bottom Metrics Bar */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '40px', 
+                borderTop: '1px solid #27272a', 
+                paddingTop: '40px',
+                paddingBottom: '20px'
+              }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '2px' }}>READ_TIME</span>
-                      <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#ef4444' }}>{b.reading_time || 5} MIN</span>
+                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '3px', fontWeight: 'bold' }}>READ_TIME</span>
+                      <span style={{ fontSize: '38px', fontWeight: '900', color: '#ff0000' }}>{b.reading_time || 5} MIN</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '2px' }}>ENGAGEMENT</span>
-                      <span style={{ fontSize: '32px', fontWeight: 'bold' }}>{b.likes_count || 0} STARS</span>
+                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '3px', fontWeight: 'bold' }}>ENGAGEMENT</span>
+                      <span style={{ fontSize: '38px', fontWeight: '900', color: 'white' }}>{b.likes_count || 0} STARS</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '2px' }}>REACH</span>
-                      <span style={{ fontSize: '32px', fontWeight: 'bold' }}>{b.views || 0} NODES</span>
+                      <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '3px', fontWeight: 'bold' }}>REACH</span>
+                      <span style={{ fontSize: '38px', fontWeight: '900', color: 'white' }}>{b.views || 0} NODES</span>
                   </div>
               </div>
             </div>
 
-            {/* 4. Right Side: Clipped Asset Cover */}
+            {/* RIGHT SIDE: CLIPPED COVER ASSET */}
             <div style={{ 
                 display: 'flex', 
                 width: '40%', 
                 border: '1px solid #27272a', 
                 position: 'relative', 
                 overflow: 'hidden',
-                backgroundColor: '#000' 
+                backgroundColor: '#000',
+                height: '100%'
             }}>
               <img 
                 src={imageSource} 
-                style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }} 
               />
+              
+              {/* Tactical Overlay */}
               <div style={{ 
                   position: 'absolute', 
                   inset: 0, 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center',
-                  backgroundColor: 'rgba(255,0,0,0.05)'
+                  backgroundColor: 'rgba(255,0,0,0.03)'
               }}>
                   <div style={{ 
-                      border: '1px solid #ff0000', 
-                      padding: '10px 20px', 
-                      transform: 'rotate(-15deg)',
-                      fontSize: '12px',
+                      border: '2px solid #ff0000', 
+                      padding: '15px 30px', 
+                      transform: 'rotate(-20deg)',
+                      fontSize: '14px',
                       color: '#ff0000',
-                      fontWeight: 'bold',
-                      letterSpacing: '5px',
-                      backgroundColor: 'rgba(0,0,0,0.8)'
+                      fontWeight: '900',
+                      letterSpacing: '8px',
+                      backgroundColor: 'rgba(0,0,0,0.85)',
+                      boxShadow: '0 0 20px rgba(255,0,0,0.2)'
                   }}>
                       SYSTEM_CLEARED
                   </div>
               </div>
+
+              {/* Data Corner Decor */}
+              <div style={{ position: 'absolute', top: 0, right: 0, width: '40px', height: '40px', borderRight: '4px solid #ff0000', borderTop: '4px solid #ff0000' }} />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, width: '40px', height: '40px', borderLeft: '4px solid #ff0000', borderBottom: '4px solid #ff0000' }} />
             </div>
           </div>
 
-          {/* Footer Bar */}
+          {/* 4. FOOTER STATUS BAR */}
           <div style={{ 
-            position: 'absolute', 
-            bottom: '30px', 
-            left: '40px', 
-            right: '40px',
             display: 'flex', 
             justifyContent: 'space-between',
             alignItems: 'center',
+            marginTop: '30px',
             borderTop: '1px solid #18181b',
-            paddingTop: '15px'
+            paddingTop: '20px',
+            zIndex: 10
           }}>
-              <span style={{ fontSize: '12px', color: '#3f3f46', letterSpacing: '4px' }}>VERIFIED_STARK_TRANSMISSION_v2.4.0</span>
-              <span style={{ fontSize: '12px', color: '#3f3f46' }}>HASH_ID: {slug.substring(0, 12)}</span>
+              <span style={{ fontSize: '12px', color: '#3f3f46', letterSpacing: '5px', fontWeight: 'bold' }}>
+                VERIFIED_STARK_TRANSMISSION_v2.4.0
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e', opacity: 0.5 }} />
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e', opacity: 0.2 }} />
+              </div>
           </div>
         </div>
       ),
       { width: 1200, height: 630 }
     );
   } catch (e) {
-    console.error("Blog OG Error:", e.message);
+    console.error("Blog OG Generation Error:", e.message);
     return new Response(`Failed to generate image`, { status: 500 });
   }
 }
