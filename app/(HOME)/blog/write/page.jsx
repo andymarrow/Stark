@@ -14,7 +14,6 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 import DualPaneEditor from "../_components/DualPaneEditor";
 
-// THE FIX IS RIGHT HERE:
 import { broadcastNewBlog } from "@/app/actions/broadcastBlog";
 
 // Predefined Network Tags
@@ -26,6 +25,17 @@ const SYSTEM_TAGS = [
 // Helper: Generate clean slugs
 const generateSlug = (text) => {
   return text.toLowerCase().trim().replace(/[\s\W-]+/g, '-').replace(/^-+|-+$/g, '');
+};
+
+// Helper: Calculate Reading Time
+const calculateReadingTime = (text) => {
+  if (!text) return 1;
+  // Strip basic markdown formatting to get accurate word count
+  const plainText = text.replace(/#|\*|_|\[|\]|\(|\)|`|>|!/g, '');
+  const wordCount = plainText.trim().split(/\s+/).length;
+  const wpm = 238; // Average adult reading speed (words per minute)
+  const time = Math.ceil(wordCount / wpm);
+  return time < 1 ? 1 : time; // Ensure it never says "0 MIN"
 };
 
 function WriteBlogContent() {
@@ -168,12 +178,16 @@ function WriteBlogContent() {
             if (count > 0) finalSlug = `${baseSlug}-${count + 1}`;
         }
 
+        // --- NEW: Calculate Time ---
+        const calculatedTime = calculateReadingTime(content);
+
         const payload = {
             author_id: user.id,
             title: title || "Untitled Report",
             content: content,
             cover_image: overrideCover !== null ? overrideCover : coverImage, 
             tags: tags, 
+            reading_time: calculatedTime, // <-- INJECTED HERE
             updated_at: new Date().toISOString()
         };
 
@@ -235,6 +249,9 @@ function WriteBlogContent() {
         
         if (count > 0) finalSlug = `${baseSlug}-${count + 1}`;
 
+        // --- NEW: Calculate Time ---
+        const calculatedTime = calculateReadingTime(content);
+
         const blogPayload = {
             author_id: user.id,
             title: title,
@@ -242,6 +259,7 @@ function WriteBlogContent() {
             cover_image: coverImage, 
             tags: tags, 
             slug: finalSlug, 
+            reading_time: calculatedTime, // <-- INJECTED HERE
             status: 'published',
             updated_at: new Date().toISOString()
         };
