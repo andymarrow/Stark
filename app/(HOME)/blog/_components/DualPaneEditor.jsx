@@ -18,13 +18,14 @@ import Dropcursor from "@tiptap/extension-dropcursor";
 
 // CUSTOM EXTENSIONS
 import { StarkProjectEmbed } from "./ProjectEmbedExtension";
+import { SlashCommand } from "./slash-command/slashExtension";
 
 // SYNTAX HIGHLIGHTING
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
 
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth } from "@/app/_context/AuthContext"; // Needed for project search
+import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 import Image from "next/image";
 import { 
@@ -109,14 +110,11 @@ const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
   const [userProjects, setUserProjects] = useState([]);
   const [isSearchingProjects, setIsSearchingProjects] = useState(false);
 
-  
-
   // --- PROJECT SEARCH LOGIC ---
   const fetchUserProjects = useCallback(async (q = "") => {
     if (!user) return;
     setIsSearchingProjects(true);
     
-    // UPDATED SELECT QUERY: Added stats, date, and author join
     let query = supabase
         .from('projects')
         .select(`
@@ -135,12 +133,27 @@ const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
 
   useEffect(() => {
     if (isProjectModalOpen) fetchUserProjects();
-  }, [isProjectModalOpen]);
+  }, [isProjectModalOpen, fetchUserProjects]);
 
+  // --- MOVED LISTENER LOGIC HERE ---
+  useEffect(() => {
+    const handleOpenProjectModal = () => setIsProjectModalOpen(true);
+    const handleOpenYtModal = () => { setYtUrl(""); setIsYtModalOpen(true); };
+    const handleOpenImageUpload = () => fileInputRef.current?.click();
+
+    window.addEventListener('stark-open-project-modal', handleOpenProjectModal);
+    window.addEventListener('stark-open-yt-modal', handleOpenYtModal);
+    window.addEventListener('stark-open-image-upload', handleOpenImageUpload);
+
+    return () => {
+      window.removeEventListener('stark-open-project-modal', handleOpenProjectModal);
+      window.removeEventListener('stark-open-yt-modal', handleOpenYtModal);
+      window.removeEventListener('stark-open-image-upload', handleOpenImageUpload);
+    };
+  }, []);
 
   if (!editor) return null;
 
-  
   const insertProject = (project) => {
       editor.chain().focus().insertContent({
           type: 'starkProjectEmbed',
@@ -241,7 +254,6 @@ const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
         <ToolbarBtn icon={TableIcon} title="Insert Table" action={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} isActive={editor.isActive("table")} />
         <Divider />
 
-        {/* --- PROJECT DOSSIER EMBED BUTTON --- */}
         <ToolbarBtn icon={Layers} title="Uplink Project Dossier" action={() => setIsProjectModalOpen(true)} isActive={editor.isActive("starkProjectEmbed")} />
         <Divider />
 
@@ -403,9 +415,8 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
       TableRow, TableHeader, TableCell,
       Dropcursor.configure({ color: '#ef4444', width: 2 }),
       CodeBlockLowlight.extend({ addNodeView() { return ReactNodeViewRenderer(CodeBlockNode) } }).configure({ lowlight }),
-      
-      // REGISTER CUSTOM STARK PROJECT EMBED
       StarkProjectEmbed,
+      SlashCommand,
     ],
     content: content || "",
     immediatelyRender: false,
