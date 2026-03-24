@@ -1,4 +1,3 @@
-// app/api/og/blog/route.js
 import { ImageResponse } from 'next/og';
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,7 +15,7 @@ export async function GET(request) {
 
     if (!slug) return new Response('Missing Slug', { status: 400 });
 
-    // 1. Fetch Blog & Author Data
+    // 1. Fetch Blog & Author Data (Using Service Role, so it bypasses RLS)
     const { data: b, error } = await supabase
       .from('blogs')
       .select('title, cover_image, likes_count, views, reading_time, author:profiles!author_id(username, avatar_url, full_name)')
@@ -25,8 +24,10 @@ export async function GET(request) {
 
     if (error || !b) return new Response('Intelligence Report Not Found', { status: 404 });
 
+    // 2. ULTRA-SAFE FALLBACKS (Prevents Satori Crashes)
     const imageSource = b.cover_image || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1200';
-    const authorName = b.author?.full_name || b.author?.username;
+    const authorUsername = b.author?.username || 'UNKNOWN_NODE';
+    const authorAvatar = b.author?.avatar_url || `https://ui-avatars.com/api/?name=${authorUsername}&background=09090b&color=ef4444`;
 
     return new ImageResponse(
       (
@@ -61,8 +62,8 @@ export async function GET(request) {
             zIndex: 10
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <div style={{ width: '12px', height: '12px', backgroundColor: '#ff0000' }} />
-                <span style={{ fontSize: '20px', letterSpacing: '4px', fontWeight: 'bold', color: '#ff0000' }}>STARK_INTELLIGENCE_REPORT //</span>
+                <div style={{ width: '12px', height: '12px', backgroundColor: '#ef4444' }} />
+                <span style={{ fontSize: '20px', letterSpacing: '4px', fontWeight: 'bold', color: '#ef4444' }}>STARK_INTELLIGENCE_REPORT //</span>
             </div>
             <span style={{ fontSize: '16px', color: '#52525b', letterSpacing: '2px' }}>DECRYPTED_ACCESS: LEVEL_4</span>
           </div>
@@ -84,17 +85,17 @@ export async function GET(request) {
                 </h1>
                 
                 <div style={{ display: 'flex', alignItems: 'center', marginTop: '30px', gap: '15px' }}>
-                    <div style={{ display: 'flex', width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #ff0000' }}>
-                        <img src={b.author?.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ display: 'flex', width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #ef4444' }}>
+                        <img src={authorAvatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#a1a1aa' }}>@{b.author?.username.toUpperCase()}</span>
+                    <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#a1a1aa' }}>@{authorUsername.toUpperCase()}</span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '30px', borderTop: '1px solid #27272a', paddingTop: '30px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '2px' }}>READ_TIME</span>
-                      <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#ff0000' }}>{b.reading_time || 5} MIN</span>
+                      <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#ef4444' }}>{b.reading_time || 5} MIN</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '12px', color: '#71717a', letterSpacing: '2px' }}>ENGAGEMENT</span>
@@ -120,7 +121,6 @@ export async function GET(request) {
                 src={imageSource} 
                 style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} 
               />
-              {/* Overlapping HUD Watermark */}
               <div style={{ 
                   position: 'absolute', 
                   inset: 0, 

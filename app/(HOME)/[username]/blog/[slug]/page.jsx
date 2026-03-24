@@ -11,37 +11,52 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 // --- DYNAMIC METADATA (SEO & SOCIAL CARDS) ---
 export async function generateMetadata({ params }) {
   const { username, slug } = await params;
-  const supabase = await createClient();
+  
+  // 1. Safe Domain Fallback
+  // Replace "https://stark.et" with your ACTUAL production domain if it differs.
+  const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et"; 
+  
+  try {
+    const supabase = await createClient();
 
-  const { data: blog } = await supabase
-    .from('blogs')
-    .select('title, excerpt, cover_image')
-    .eq('slug', slug)
-    .single();
+    const { data: blog, error } = await supabase
+      .from('blogs')
+      .select('title, excerpt, cover_image')
+      .eq('slug', slug)
+      .single();
 
-  if (!blog) return { title: "Report Not Found | Stark" };
+    if (error || !blog) return { title: "Report Not Found | Stark" };
 
-  // Point to our specialized Intelligence OG API
-  const ogUrl = `${BASE_URL}/api/og/blog?slug=${encodeURIComponent(slug)}`;
+    // Point to our specialized Intelligence OG API
+    const ogUrl = `${BASE_URL}/api/og/blog?slug=${encodeURIComponent(slug)}`;
 
-  return {
-    title: `${blog.title} | Stark Intel`,
-    description: blog.excerpt || `Read this intelligence report by @${username} on the Stark network.`,
-    openGraph: {
-        title: blog.title,
-        description: blog.excerpt,
-        url: `${BASE_URL}/${username}/blog/${slug}`,
-        siteName: 'Stark Network',
-        images: [{ url: ogUrl, width: 1200, height: 630, alt: blog.title }],
-        type: 'article',
-    },
-    twitter: {
-        card: 'summary_large_image',
-        title: blog.title,
-        description: blog.excerpt,
-        images: [ogUrl],
-    }
-  };
+    const pageTitle = `${blog.title} | Stark Intel`;
+    const pageDesc = blog.excerpt || `Read this intelligence report by @${username} on the Stark network.`;
+    const canonicalUrl = `${BASE_URL}/${username}/blog/${slug}`;
+
+    return {
+      title: pageTitle,
+      description: pageDesc,
+      alternates: { canonical: canonicalUrl },
+      openGraph: {
+          title: pageTitle,
+          description: pageDesc,
+          url: canonicalUrl,
+          siteName: 'Stark Network',
+          images: [{ url: ogUrl, width: 1200, height: 630, alt: blog.title }],
+          type: 'article',
+      },
+      twitter: {
+          card: 'summary_large_image',
+          title: pageTitle,
+          description: pageDesc,
+          images: [ogUrl],
+      }
+    };
+  } catch (err) {
+    console.error("Metadata Generation Error:", err);
+    return { title: "Stark Intelligence Network" };
+  }
 }
 
 // --- 1. STARK THEMED SKELETON LOADER ---
