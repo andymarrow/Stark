@@ -41,6 +41,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 
+import { StarkProjectEmbed } from "@/app/(HOME)/blog/_components/ProjectEmbedExtension";
+
 const lowlight = createLowlight(common);
 
 const extractMentions = (text) => {
@@ -242,6 +244,7 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
       Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
       // Add custom code block extension mapped to our STARK code block
       CodeBlockLowlight.extend({ addNodeView() { return ReactNodeViewRenderer(CodeBlockNode) } }).configure({ lowlight }),
+      StarkProjectEmbed, 
     ],
     content: selectedVersion.content_json && Object.keys(selectedVersion.content_json).length > 0 ? selectedVersion.content_json : selectedVersion.content_markdown,
     immediatelyRender: false,

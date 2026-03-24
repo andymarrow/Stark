@@ -1,6 +1,5 @@
-// app/(HOME)/blog/_components/DualPaneEditor.jsx
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useEditor, EditorContent, NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
@@ -17,19 +16,24 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { TextAlign } from "@tiptap/extension-text-align"; 
 import Dropcursor from "@tiptap/extension-dropcursor";
 
+// CUSTOM EXTENSIONS
+import { StarkProjectEmbed } from "./ProjectEmbedExtension";
+
 // SYNTAX HIGHLIGHTING
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
 
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/app/_context/AuthContext"; // Needed for project search
 import { toast } from "sonner";
+import Image from "next/image";
 import { 
   Terminal, PenTool, Bold, Italic, Underline as UnderlineIcon, 
   Strikethrough, Code, Heading1, Heading2, Heading3, List, ListOrdered, 
   Quote, Image as ImageIcon, Link as LinkIcon, Youtube as YoutubeIcon, 
   Table as TableIcon, Undo, Redo, Loader2,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  UploadCloud, FileText, Copy, Check
+  UploadCloud, FileText, Copy, Check, Layers, Search, ArrowRight
 } from "lucide-react";
 
 import {
@@ -90,15 +94,62 @@ const ViewToggles = ({ viewMode, setViewMode }) => (
 
 // --- 3. THE RICH TOOLBAR COMPONENT ---
 const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
+  const { user } = useAuth();
   const fileInputRef = useRef(null);
 
+  // Modal States
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  
   const [isYtModalOpen, setIsYtModalOpen] = useState(false);
   const [ytUrl, setYtUrl] = useState("");
 
+  // PROJECT EMBED MODAL STATE
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [userProjects, setUserProjects] = useState([]);
+  const [isSearchingProjects, setIsSearchingProjects] = useState(false);
+
+  
+
+  // --- PROJECT SEARCH LOGIC ---
+  const fetchUserProjects = useCallback(async (q = "") => {
+    if (!user) return;
+    setIsSearchingProjects(true);
+    
+    // UPDATED SELECT QUERY: Added stats, date, and author join
+    let query = supabase
+        .from('projects')
+        .select(`
+          id, title, thumbnail_url, slug, views, likes_count, created_at,
+          author:profiles!owner_id(username, full_name, avatar_url)
+        `)
+        .eq('owner_id', user.id)
+        .order('created_at', { ascending: false });
+
+    if (q) query = query.ilike('title', `%${q}%`);
+    
+    const { data } = await query.limit(5);
+    setUserProjects(data || []);
+    setIsSearchingProjects(false);
+  }, [user]);
+
+  useEffect(() => {
+    if (isProjectModalOpen) fetchUserProjects();
+  }, [isProjectModalOpen]);
+
+
   if (!editor) return null;
+
+  
+  const insertProject = (project) => {
+      editor.chain().focus().insertContent({
+          type: 'starkProjectEmbed',
+          attrs: { projectId: project.id, projectData: project }
+      }).run();
+      setIsProjectModalOpen(false);
+      setProjectSearch("");
+      toast.success("Dossier Linked Successfully");
+  };
 
   const openLinkModal = () => {
     const previousUrl = editor.getAttributes("link").href;
@@ -190,11 +241,68 @@ const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
         <ToolbarBtn icon={TableIcon} title="Insert Table" action={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} isActive={editor.isActive("table")} />
         <Divider />
 
+        {/* --- PROJECT DOSSIER EMBED BUTTON --- */}
+        <ToolbarBtn icon={Layers} title="Uplink Project Dossier" action={() => setIsProjectModalOpen(true)} isActive={editor.isActive("starkProjectEmbed")} />
+        <Divider />
+
         <ToolbarBtn icon={Undo} title="Undo" action={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} />
         <ToolbarBtn icon={Redo} title="Redo" action={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} />
       </div>
 
       {/* --- MODALS --- */}
+      
+      {/* 1. Project Search Modal */}
+      <Dialog open={isProjectModalOpen} onOpenChange={setIsProjectModalOpen}>
+        <DialogContent className="sm:max-w-md bg-background border border-border p-0 rounded-none shadow-2xl gap-0 z-[100]">
+          <DialogHeader className="p-6 border-b border-border bg-secondary/5">
+            <DialogTitle className="text-lg font-bold uppercase tracking-tight flex items-center gap-2 font-mono">
+              <Layers size={18} className="text-accent" /> Uplink_Dossier_Asset
+            </DialogTitle>
+          </DialogHeader>
+          <div className="p-6 space-y-4">
+              <div className="relative group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-accent transition-colors" size={14} />
+                  <Input 
+                    autoFocus 
+                    value={projectSearch} 
+                    onChange={(e) => { setProjectSearch(e.target.value); fetchUserProjects(e.target.value); }} 
+                    placeholder="Search your deployments..." 
+                    className="pl-10 h-10 rounded-none bg-secondary/5 border-border focus-visible:ring-accent font-mono text-xs" 
+                  />
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                  {isSearchingProjects ? (
+                      <div className="py-10 text-center"><Loader2 className="animate-spin text-accent mx-auto" /></div>
+                  ) : userProjects.length > 0 ? (
+                      userProjects.map(proj => (
+                          <button 
+                            key={proj.id} 
+                            onClick={() => insertProject(proj)}
+                            className="w-full flex items-center gap-3 p-2 border border-border bg-background hover:border-accent hover:bg-accent/5 transition-all group text-left"
+                          >
+                              <div className="w-12 h-8 relative bg-secondary overflow-hidden shrink-0">
+                                  {proj.thumbnail_url && <Image src={proj.thumbnail_url} alt="" fill className="object-cover grayscale group-hover:grayscale-0 transition-all" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold uppercase truncate text-foreground group-hover:text-accent">{proj.title}</p>
+                                  <p className="text-[9px] font-mono text-muted-foreground uppercase">ID: {proj.slug}</p>
+                              </div>
+                              <ArrowRight size={14} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                      ))
+                  ) : (
+                      <div className="py-10 text-center text-[10px] font-mono text-muted-foreground uppercase border border-dashed border-border">No Deployments Found</div>
+                  )}
+              </div>
+          </div>
+          <DialogFooter className="p-4 border-t border-border bg-secondary/5">
+              <DialogClose asChild><Button variant="ghost" className="rounded-none font-mono text-xs uppercase">Abort</Button></DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. Link Modal */}
       <Dialog open={isLinkModalOpen} onOpenChange={setIsLinkModalOpen}>
         <DialogContent className="sm:max-w-md bg-background border border-border p-0 rounded-none shadow-2xl gap-0 z-[100]">
           <DialogHeader className="p-6 border-b border-border bg-secondary/5">
@@ -213,6 +321,7 @@ const RichToolbar = ({ editor, isUploading, onUploadImage }) => {
         </DialogContent>
       </Dialog>
 
+      {/* 3. Youtube Modal */}
       <Dialog open={isYtModalOpen} onOpenChange={setIsYtModalOpen}>
         <DialogContent className="sm:max-w-md bg-background border border-border p-0 rounded-none shadow-2xl gap-0 z-[100]">
           <DialogHeader className="p-6 border-b border-border bg-secondary/5">
@@ -243,7 +352,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
   const [isDraggingVisual, setIsDraggingVisual] = useState(false);
   const [isDraggingCode, setIsDraggingCode] = useState(false); 
 
-  // Added ref to guard our raw text inputs against looping normalized updates
   const textareaRef = useRef(null); 
 
   useEffect(() => {
@@ -255,7 +363,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
     return () => window.removeEventListener("resize", handleResize);
   }, [viewMode]);
 
-  // --- CORE IMAGE UPLOAD LOGIC ---
   const processImageUpload = async (file, insertPos = null) => {
       if (!file) return;
       if (file.size > 5 * 1024 * 1024) return toast.error("Image must be under 5MB");
@@ -270,7 +377,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
 
           const { data: { publicUrl } } = supabase.storage.from("project-assets").getPublicUrl(fileName);
           
-          // Insert precisely where the drop occurred, or at the current cursor
           if (insertPos !== null && editor) {
               editor.chain().insertContentAt(insertPos, { type: 'image', attrs: { src: publicUrl } }).focus().run();
           } else if (editor) {
@@ -284,10 +390,9 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
       }
   };
 
-
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ codeBlock: false }), // Disable default code block
+      StarterKit.configure({ codeBlock: false }),
       Markdown.configure({ html: true, transformPastedText: true }),
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -296,8 +401,11 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
       Youtube.configure({ inline: false, HTMLAttributes: { class: 'w-full aspect-video border border-border shadow-md my-4' } }),
       Table.configure({ resizable: true }),
       TableRow, TableHeader, TableCell,
-      Dropcursor.configure({ color: '#ef4444', width: 2 }), // STARK RED DROP CURSOR
+      Dropcursor.configure({ color: '#ef4444', width: 2 }),
       CodeBlockLowlight.extend({ addNodeView() { return ReactNodeViewRenderer(CodeBlockNode) } }).configure({ lowlight }),
+      
+      // REGISTER CUSTOM STARK PROJECT EMBED
+      StarkProjectEmbed,
     ],
     content: content || "",
     immediatelyRender: false,
@@ -308,7 +416,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
     },
     onUpdate: ({ editor }) => {
       if (textareaRef.current && document.activeElement === textareaRef.current) return;
-
       const markdown = editor.storage.markdown.getMarkdown();
       const json = editor.getJSON(); 
       setContent(markdown);
@@ -319,7 +426,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
   useEffect(() => {
       if (editor && content) {
           if (textareaRef.current && document.activeElement === textareaRef.current) return;
-
           const currentTiptapContent = editor.storage.markdown.getMarkdown();
           if (content !== currentTiptapContent && Math.abs(content.length - currentTiptapContent.length) > 10) {
               editor.commands.setContent(content, false);
@@ -339,17 +445,14 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
     }
   };
 
-  // Visual Pane Drop Events
   const onVisualDrop = (e) => {
       if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) {
           setIsDraggingVisual(false);
           return; 
       }
-
       e.preventDefault();
       setIsDraggingVisual(false);
       const file = e.dataTransfer.files[0];
-      
       if (file.type.startsWith('image/')) {
           let insertPos = null;
           if (editor) {
@@ -362,13 +465,11 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
       }
   };
 
-  // Code Pane Drop Events (.md files)
   const onCodeDrop = (e) => {
       e.preventDefault();
       setIsDraggingCode(false);
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
-
       if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.type.includes('text')) {
           const reader = new FileReader();
           reader.onload = (event) => {
@@ -389,7 +490,6 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
 
   return (
     <div className="flex flex-col md:flex-row w-full flex-1 min-h-0 relative bg-background border-t border-border">
-        
       {/* VISUAL PANE */}
       <div 
         className={`flex-1 flex flex-col min-w-0 min-h-0 transition-all duration-300 relative
