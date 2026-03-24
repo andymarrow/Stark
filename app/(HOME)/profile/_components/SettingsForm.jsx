@@ -417,7 +417,12 @@ export default function SettingsForm({ user, onUpdate }) {
       <section className="space-y-6">
         <SectionHeader icon={Bell} title="Preferences" description="Manage system behavior." />
         <div className="space-y-4 max-w-xl">
-            <ToggleRow label="Email Notifications" description="Receive weekly digests and major updates." defaultChecked={true} />
+            <ToggleRow 
+                label="Email Notifications" 
+                description="Receive network digests and new reports from your connections." 
+                checked={formData.settings.email_notifications !== false} // Default to true
+                onCheckedChange={(val) => handleSettingChange("email_notifications", val)}
+            />
             <ToggleRow 
                 label="For Hire Status" 
                 description="Show the 'Open to Work' badge on your profile." 
