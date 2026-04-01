@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { 
   Clock, Calendar, ShieldCheck, Share2, Heart, Bookmark, Eye, 
-  MessageSquare, Lock, Quote, Target, X, Loader2, Send, Check, CornerDownRight, Edit3, EyeOff, ChevronDown, History, ChevronUp, Plus, Copy , Terminal
+  MessageSquare, Lock, Quote, Target, X, Loader2, Send, Check, CornerDownRight, Edit3, EyeOff, ChevronDown, History, ChevronUp, Plus, Copy, Terminal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getAvatar } from "@/constants/assets";
@@ -29,7 +29,10 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 
-// SYNTAX HIGHLIGHTING (Same as Editor)
+// CUSTOM EXTENSIONS
+import { StarkProjectEmbed } from "@/app/(HOME)/blog/_components/ProjectEmbedExtension";
+
+// SYNTAX HIGHLIGHTING
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
 
@@ -40,8 +43,6 @@ import mentionStyles from "@/app/(HOME)/project/[slug]/_components/mentionStyles
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-
-import { StarkProjectEmbed } from "@/app/(HOME)/blog/_components/ProjectEmbedExtension";
 
 const lowlight = createLowlight(common);
 
@@ -58,7 +59,7 @@ const formatContent = (text) => {
     return text.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<a href="/profile/$2" class="text-accent font-bold hover:underline decoration-dotted underline-offset-2 transition-colors">@$1</a>');
 };
 
-// --- 1. STARK CODE BLOCK COMPONENT (Matches Editor) ---
+// --- 1. STARK CODE BLOCK COMPONENT ---
 const CodeBlockNode = ({ node }) => {
   const [copied, setCopied] = useState(false);
   const language = node.attrs.language || 'text';
@@ -91,7 +92,7 @@ const CodeBlockNode = ({ node }) => {
   );
 };
 
-// --- SUB-COMPONENT: MARGIN COMMENT THREAD (PROGRESSIVE DISCLOSURE) ---
+// --- SUB-COMPONENT: MARGIN COMMENT THREAD ---
 function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText, setReplyText, submitAnnotation, isSubmitting, fetchUsers, cancelReply }) {
     const [replyLimit, setReplyLimit] = useState(0); 
     const totalReplies = rootComment.replies?.length || 0;
@@ -99,7 +100,6 @@ function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText,
     const hasMoreReplies = replyLimit > 0 && replyLimit < totalReplies;
     const isCollapsed = replyLimit === 0;
 
-    // Auto-expand if the user initiates a reply on this specific thread
     useEffect(() => {
         if (replyingTo === rootComment.id && isCollapsed) {
             setReplyLimit(5);
@@ -139,7 +139,6 @@ function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText,
                 </div>
             </div>
 
-            {/* FLATTENED REPLIES */}
             {!isCollapsed && visibleReplies.length > 0 && (
                 <div className="mt-4 pl-4 border-l border-border/50 space-y-4 animate-in fade-in duration-300">
                     {visibleReplies.map(reply => (
@@ -167,7 +166,6 @@ function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText,
                 </div>
             )}
 
-            {/* REPLY INPUT FORM */}
             {replyingTo === rootComment.id && (
                 <div className="pl-6 ml-3 mt-4 animate-in slide-in-from-top-2">
                     <div className="border border-accent/50 bg-background flex flex-col relative z-0 shadow-lg">
@@ -233,8 +231,8 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
   const editor = useEditor({
     editable: false, 
     extensions: [
-      StarterKit.configure({ codeBlock: false }), // Disable default codeblock to use custom one
-      Markdown.configure({ html: true, transformPastedText: true }), // Match Editor Markdown Parser
+      StarterKit.configure({ codeBlock: false }), 
+      Markdown.configure({ html: true, transformPastedText: true }), 
       Underline, 
       TextAlign.configure({ types: ['heading', 'paragraph'] }), 
       Highlight.configure({ HTMLAttributes: { class: 'bg-accent/15 border-b border-dashed border-accent/50 text-inherit cursor-pointer transition-colors hover:bg-accent/30' } }),
@@ -242,14 +240,15 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
       TiptapLink.configure({ openOnClick: true, HTMLAttributes: { class: 'text-accent underline decoration-accent/50 underline-offset-4 hover:decoration-accent transition-colors cursor-pointer' } }),
       Youtube.configure({ inline: false, HTMLAttributes: { class: 'w-full aspect-video border border-border shadow-md my-8 rounded-none' } }),
       Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
-      // Add custom code block extension mapped to our STARK code block
       CodeBlockLowlight.extend({ addNodeView() { return ReactNodeViewRenderer(CodeBlockNode) } }).configure({ lowlight }),
-      StarkProjectEmbed, 
+      StarkProjectEmbed, // IMPORTANT: Allows projects to render in reader
     ],
     content: selectedVersion.content_json && Object.keys(selectedVersion.content_json).length > 0 ? selectedVersion.content_json : selectedVersion.content_markdown,
     immediatelyRender: false,
     editorProps: {
-      attributes: { class: "prose prose-zinc dark:prose-invert max-w-none focus:outline-none text-base md:text-lg leading-[1.8] font-sans prose-headings:font-bold prose-headings:tracking-tight prose-headings:font-mono prose-headings:uppercase prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl prose-p:text-foreground/90 prose-code:text-accent prose-code:bg-secondary/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-pre:bg-black prose-pre:border prose-pre:border-border prose-pre:rounded-none prose-hr:border-border selection:bg-accent/30 selection:text-foreground" },
+      attributes: { 
+        class: "prose prose-zinc dark:prose-invert max-w-none focus:outline-none text-base md:text-lg leading-[1.8] font-sans prose-headings:font-bold prose-headings:tracking-tight prose-headings:font-mono prose-h1:text-4xl prose-h2:text-3xl prose-h3:text-2xl prose-p:text-foreground/90 prose-code:text-accent prose-code:bg-secondary/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-pre:bg-black prose-pre:border prose-pre:border-border prose-pre:rounded-none prose-hr:border-border selection:bg-accent/30 selection:text-foreground" 
+      },
       handleClick: (view, pos, event) => {
          if (event.target.tagName === 'MARK') {
              setActiveThreadText(event.target.innerText);
@@ -356,7 +355,6 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
       return Object.values(groups).sort((a, b) => a.from - b.from);
   }, [publicAnnotations]);
 
-  // FIX: Track highlight coordinates to prevent redraw loops on replies
   const highlightCoords = useMemo(() => {
       return groupedAnnotations.map(g => `${g.from}-${g.to}`).join(',');
   }, [groupedAnnotations]);
@@ -365,7 +363,6 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
       if (editor && !isLoadingAnnotations) {
           isProgrammaticRef.current = true; 
           
-          // Save cursor position so we don't disrupt user
           const { from, to } = editor.state.selection;
           
           editor.commands.selectAll(); 
@@ -377,12 +374,10 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
               });
           }
           
-          // Restore cursor
           editor.commands.setTextSelection({ from, to });
-          
           setTimeout(() => { isProgrammaticRef.current = false; }, 100);
       }
-  }, [editor, highlightCoords, isLoadingAnnotations, showHighlights]); // Notice highlightCoords dependency!
+  }, [editor, highlightCoords, isLoadingAnnotations, showHighlights]); 
 
   const fetchUsers = async (query, callback) => {
     if (!query) return;
@@ -390,8 +385,6 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
     const suggestions = data?.map(u => ({ id: u.username, display: u.username, avatar: getAvatar(u) })) || [];
     callback(suggestions);
   };
-
-
 
   const handleAction = (actionType) => {
     if (!currentUser) return toast.error("Clearance Denied");
@@ -463,14 +456,14 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
 
   return (
     <>
-      <div className="fixed top-16 md:top-[68px] left-0 w-full h-[3px] z-[100] bg-secondary/30">
+      <div className="fixed bottom-[56px] md:bottom-auto md:top-[71px] left-0 w-full h-[3px] z-[100] bg-secondary/30">
           <div className="h-full bg-accent transition-all duration-150 ease-out shadow-[0_0_10px_rgba(220,38,38,0.8)]" style={{ width: `${scrollProgress * 100}%` }} />
       </div>
 
-      <main className="container mx-auto px-4 max-w-7xl animate-in fade-in duration-700 pt-8">
+      <main className="container mx-auto px-4 max-w-7xl animate-in fade-in duration-700">
         
         {!isLatestVersion && (
-            <div className="max-w-3xl mx-auto mb-8 bg-yellow-500/10 border border-yellow-500/30 p-4 flex items-start gap-3">
+            <div className="max-w-3xl mx-auto mb-8 mt-4 md:mt-8 bg-yellow-500/10 border border-yellow-500/30 p-4 flex items-start gap-3">
                 <History className="text-yellow-500 shrink-0 mt-0.5" size={16} />
                 <div>
                     <h4 className="text-sm font-bold text-yellow-500 uppercase tracking-widest font-mono mb-1">Viewing Archived Record</h4>
@@ -484,36 +477,74 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
             </div>
         )}
 
-        <header className="max-w-3xl mx-auto mb-12">
-          <div className="flex items-center gap-4 mb-8">
-            <Link href={`/profile/${author.username}`} className="relative w-14 h-14 bg-secondary border border-border overflow-hidden hover:border-accent transition-colors">
-              <Image src={getAvatar(author)} alt={author.username} fill className="object-cover transition-all hover:scale-105" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <Link href={`/profile/${author.username}`} className="text-base font-bold uppercase hover:text-accent transition-colors tracking-tight">{author.full_name || author.username}</Link>
-                {author.role === 'admin' && <ShieldCheck size={14} className="text-purple-500" title="Admin Node" />}
-              </div>
-              <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground uppercase tracking-widest mt-1">
-                <span className="text-accent">@{author.username}</span><span className="text-border">|</span>
-                <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(blog.published_at || blog.created_at).toLocaleDateString()}</span><span className="text-border">|</span>
-                <span className="flex items-center gap-1"><Clock size={12} /> {blog.reading_time || 5} MIN_READ</span>
-              </div>
+        {/* --- CINEMATIC HERO HEADER --- */}
+        <header className="max-w-5xl mx-auto mb-12 md:mb-16 relative pt-4 md:pt-8">
+          {/* Changed aspect-ratio to min-height for better mobile framing */}
+          <div className="relative w-full min-h-[380px] md:min-h-[450px] border border-border bg-black overflow-hidden flex flex-col justify-end p-5 sm:p-8 md:p-12 z-0">
+            {blog.cover_image ? (
+                <Image 
+                    src={blog.cover_image} 
+                    alt={blog.title} 
+                    fill 
+                    className="object-cover opacity-50" 
+                    priority 
+                />
+            ) : (
+                <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: `linear-gradient(to right, #888 1px, transparent 1px), linear-gradient(to bottom, #888 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
+            )}
+            {/* Smoother gradient for mobile */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
+            
+            <div className="relative z-10 w-full max-w-3xl">
+                {/* Tag & Date */}
+                <div className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-accent uppercase tracking-widest mb-4">
+                    <span className="bg-accent/10 px-2 py-1 border border-accent/20">
+                        {blog.tags?.[0] || "STARK_INTEL"}
+                    </span>
+                    <span className="text-muted-foreground">|</span>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                        <Calendar size={12} /> {new Date(blog.published_at || blog.created_at).toLocaleDateString()}
+                    </span>
+                </div>
+
+                {/* Adjusted text sizing for mobile */}
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter text-foreground leading-[1.05] mb-6 font-mono drop-shadow-lg">
+                    {blog.title}
+                </h1>
+
+                {/* Author Block */}
+                <div className="flex items-center gap-4">
+                    <Link href={`/profile/${author.username}`} className="relative w-10 h-10 md:w-12 md:h-12 bg-secondary border border-border overflow-hidden hover:border-accent transition-colors shadow-xl">
+                        <Image src={getAvatar(author)} alt={author.username} fill className="object-cover transition-all hover:scale-105" />
+                    </Link>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <Link href={`/profile/${author.username}`} className="text-sm font-bold uppercase hover:text-accent transition-colors tracking-tight drop-shadow-md">
+                                {author.full_name || author.username}
+                            </Link>
+                            {author.role === 'admin' && <ShieldCheck size={14} className="text-purple-500 drop-shadow-md" title="Admin Node" />}
+                        </div>
+                        <Link href={`/profile/${author.username}`} className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors">
+                            @{author.username}
+                        </Link>
+                    </div>
+                </div>
             </div>
           </div>
 
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter text-foreground leading-[1.05] mb-6 font-mono">{blog.title}</h1>
-
-          <div className="sticky top-[71px] z-40 flex items-center justify-between border-y border-border py-4 bg-background/80 backdrop-blur-md px-6 shadow-sm">
-            <div className="flex items-center gap-8">
-              <button onClick={handleLike} className={`flex items-center gap-2 text-xs font-mono transition-all duration-300 group ${isLiked ? 'text-accent' : 'text-muted-foreground hover:text-foreground'}`}>
+          {/* STICKY TOP ACTION BAR */}
+          <div className="sticky top-[71px] z-40 flex items-center justify-between border-y border-border py-4 bg-background/80 backdrop-blur-md px-4 sm:px-6 shadow-sm mx-auto max-w-5xl">
+            <div className="flex items-center gap-4 sm:gap-8">
+              <button onClick={handleLike} className={`flex items-center gap-1.5 sm:gap-2 text-xs font-mono transition-all duration-300 group ${isLiked ? 'text-accent' : 'text-muted-foreground hover:text-foreground'}`}>
                 <Heart size={16} className={`transition-all duration-300 ${isLiked ? 'fill-accent scale-110' : 'group-hover:scale-110'}`} /> {likesCount}
               </button>
-              <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-default transition-colors"><MessageSquare size={16} /> {blog.comments_count || 0}</div>
-              <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-default"><Eye size={16} /> {blog.views || 0}</div>
+              <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="flex items-center gap-1.5 sm:gap-2 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors group">
+                  <MessageSquare size={16} className="group-hover:scale-110 transition-transform" /> {blog.comments_count || 0}
+              </button>
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs font-mono text-muted-foreground cursor-default"><Eye size={16} /> {blog.views || 0}</div>
             </div>
             
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3 sm:gap-5">
               <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                       <button className={`hidden sm:flex items-center gap-1.5 text-[10px] font-mono uppercase border px-2 py-1 tracking-widest transition-colors ${!isLatestVersion ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30' : 'bg-background text-muted-foreground border-border hover:bg-secondary/50 hover:text-foreground'}`}>
@@ -536,63 +567,53 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
         </header>
 
         {isOwner && (
-  <div className="max-w-3xl mx-auto mb-8 bg-secondary/5 border border-border p-3 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
-    <div className="flex items-center gap-2 text-[10px] font-mono uppercase text-muted-foreground tracking-widest px-3">
-      <ShieldCheck size={14} className="text-accent" /> 
-      <span className="hidden sm:inline">Author_Console</span>
-      <span className="sm:hidden">Controls</span>
-    </div>
+          <div className="max-w-3xl mx-auto mb-8 bg-secondary/5 border border-border p-3 flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2 text-[10px] font-mono uppercase text-muted-foreground tracking-widest px-3">
+              <ShieldCheck size={14} className="text-accent" /> 
+              <span className="hidden sm:inline">Author_Console</span>
+              <span className="sm:hidden">Controls</span>
+            </div>
 
-    <div className="flex flex-wrap gap-2">
-      {/* 1. Toggle Signals Button */}
-      <Button 
-        onClick={() => setShowHighlights(!showHighlights)} 
-        variant="outline" 
-        className={`h-8 rounded-none border-border bg-transparent font-mono text-[10px] uppercase transition-all
-          text-foreground hover:bg-foreground hover:text-background`}
-      >
-        {showHighlights ? (
-          <><EyeOff size={12} className="mr-2" /> Hide Signals</>
-        ) : (
-          <><Eye size={12} className="mr-2 text-accent" /> Show Signals</>
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                onClick={() => setShowHighlights(!showHighlights)} 
+                variant="outline" 
+                className={`h-8 rounded-none border-border bg-transparent font-mono text-[10px] uppercase transition-all
+                  text-foreground hover:bg-foreground hover:text-background`}
+              >
+                {showHighlights ? (
+                  <><EyeOff size={12} className="mr-2" /> Hide Signals</>
+                ) : (
+                  <><Eye size={12} className="mr-2 text-accent" /> Show Signals</>
+                )}
+              </Button>
+
+              <Button 
+                onClick={() => setShowPrivateIntel(!showPrivateIntel)} 
+                variant="outline" 
+                className={`h-8 rounded-none border-border font-mono text-[10px] uppercase transition-all
+                  ${showPrivateIntel 
+                    ? 'bg-accent text-white border-accent hover:bg-accent/90' 
+                    : 'bg-transparent text-foreground hover:bg-foreground hover:text-background'}`}
+              >
+                <Lock size={12} className={`mr-2 ${showPrivateIntel ? 'text-white' : 'text-accent'}`} /> 
+                Intel ({privateAnnotations.length})
+              </Button>
+
+              <Button 
+                onClick={() => router.push(`/blog/write?id=${blog.id}`)} 
+                className="h-8 rounded-none bg-foreground text-background hover:bg-accent hover:text-white border-transparent transition-all text-[10px] font-mono uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
+              >
+                <Edit3 size={12} className="mr-2" /> Edit Report
+              </Button>
+            </div>
+          </div>
         )}
-      </Button>
-
-      {/* 2. Private Intel Button */}
-      <Button 
-        onClick={() => setShowPrivateIntel(!showPrivateIntel)} 
-        variant="outline" 
-        className={`h-8 rounded-none border-border font-mono text-[10px] uppercase transition-all
-          ${showPrivateIntel 
-            ? 'bg-accent text-white border-accent hover:bg-accent/90' 
-            : 'bg-transparent text-foreground hover:bg-foreground hover:text-background'}`}
-      >
-        <Lock size={12} className={`mr-2 ${showPrivateIntel ? 'text-white' : 'text-accent'}`} /> 
-        Intel ({privateAnnotations.length})
-      </Button>
-
-      {/* 3. Edit Report Button */}
-      <Button 
-        onClick={() => router.push(`/blog/write?id=${blog.id}`)} 
-        className="h-8 rounded-none bg-foreground text-background hover:bg-accent hover:text-white border-transparent transition-all text-[10px] font-mono uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5"
-      >
-        <Edit3 size={12} className="mr-2" /> Edit Report
-      </Button>
-    </div>
-  </div>
-)}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 max-w-7xl mx-auto relative pt-4">
           
           <article className="lg:col-span-8 flex justify-end">
             <div className="w-full max-w-3xl relative">
-              {blog.cover_image && (
-                 <div className="relative w-full aspect-[16/9] md:aspect-[21/9] border border-border bg-secondary/5 mb-10 overflow-hidden group">
-                   <Image src={blog.cover_image} alt={blog.title} fill className="object-cover " priority />
-                   <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent pointer-events-none" />
-                   <div className="absolute bottom-4 left-4"><span className="text-[10px] font-mono bg-black/60 text-white px-2 py-1 border border-white/10 uppercase tracking-widest backdrop-blur-md">Attached_Asset_01</span></div>
-                 </div>
-              )}
 
               {isOwner && showPrivateIntel && privateAnnotations.length > 0 && (
                   <div className="mb-10 border border-dashed border-accent/50 bg-accent/5 p-6 animate-in slide-in-from-top-2">
@@ -615,6 +636,7 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
                   </div>
               )}
 
+              {/* EDITOR CONTENT */}
               <EditorContent editor={editor} />
             </div>
           </article>
@@ -717,7 +739,38 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
           </aside>
         </div>
 
-        <div className="mt-20">
+        {/* --- 4. SLEEK BOTTOM ACTION CONSOLE --- */}
+        <div className="max-w-3xl mx-auto mt-16 mb-12 py-3 border-y border-border/50 flex flex-wrap items-center justify-between gap-4">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-accent/50 rounded-full" />
+                End_Of_Report
+            </span>
+            
+            <div className="flex items-center gap-4 sm:gap-6">
+                <button onClick={handleLike} className={`flex items-center gap-1.5 text-xs font-mono transition-all duration-300 group ${isLiked ? 'text-accent' : 'text-muted-foreground hover:text-foreground'}`}>
+                    <Heart size={16} className={`transition-all duration-300 ${isLiked ? 'fill-accent scale-110' : 'group-hover:scale-110'}`} /> {likesCount}
+                </button>
+
+                <button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-all duration-300 group">
+                    <MessageSquare size={16} className="group-hover:scale-110 transition-transform" /> {blog.comments_count || 0}
+                </button>
+
+                <div className="w-px h-3 bg-border mx-1 hidden sm:block" />
+
+                <button onClick={handleSave} className={`flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest transition-all duration-300 group ${isSaved ? 'text-accent' : 'text-muted-foreground hover:text-foreground'}`} title={isSaved ? "Saved to Library" : "Save to Library"}>
+                    <Bookmark size={14} className={`transition-transform duration-300 ${isSaved ? 'fill-accent scale-110' : 'group-hover:scale-110'}`} />
+                    <span className="hidden sm:block">{isSaved ? "Saved" : "Save"}</span>
+                </button>
+                
+                <button onClick={handleShare} className={`flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest transition-all duration-300 group ${isCopied ? 'text-green-500' : 'text-muted-foreground hover:text-foreground'}`} title="Share Report">
+                    {isCopied ? <Check size={14} className="scale-110" /> : <Share2 size={14} className="group-hover:scale-110" />}
+                    <span className="hidden sm:block">{isCopied ? "Copied" : "Share"}</span>
+                </button>
+            </div>
+        </div>
+
+        {/* Global Comments */}
+        <div className="max-w-3xl mx-auto">
           <BlogComments blogId={blog.id} currentUser={currentUser} />
         </div>
 

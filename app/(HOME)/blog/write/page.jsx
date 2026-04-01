@@ -7,7 +7,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Loader2, ArrowLeft, Rocket, Save, CheckCircle2, 
-  Image as ImageIcon, Trash2, Hash, X, Plus
+  Image as ImageIcon, Trash2, Hash, X, Plus, Quote
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,12 +30,11 @@ const generateSlug = (text) => {
 // Helper: Calculate Reading Time
 const calculateReadingTime = (text) => {
   if (!text) return 1;
-  // Strip basic markdown formatting to get accurate word count
   const plainText = text.replace(/#|\*|_|\[|\]|\(|\)|`|>|!/g, '');
   const wordCount = plainText.trim().split(/\s+/).length;
-  const wpm = 238; // Average adult reading speed (words per minute)
+  const wpm = 238; 
   const time = Math.ceil(wordCount / wpm);
-  return time < 1 ? 1 : time; // Ensure it never says "0 MIN"
+  return time < 1 ? 1 : time; 
 };
 
 function WriteBlogContent() {
@@ -47,14 +46,16 @@ function WriteBlogContent() {
   // Blog State
   const [blogId, setBlogId] = useState(null); 
   const [title, setTitle] = useState("");
+  const [excerpt, setExcerpt] = useState(""); // NEW EXCERPT STATE
   const [content, setContent] = useState(""); 
   const [coverImage, setCoverImage] = useState(""); 
   const [jsonContent, setJsonContent] = useState({}); 
   
-  // Tags State
+  // Panels & Tags State
   const [tags, setTags] = useState([]);
   const [tagInput, setTagInput] = useState("");
   const [isTagsPanelOpen, setIsTagsPanelOpen] = useState(false);
+  const [isExcerptPanelOpen, setIsExcerptPanelOpen] = useState(false); // NEW PANEL STATE
   
   const [originalStatus, setOriginalStatus] = useState("draft");
   const [isLoadingDraft, setIsLoadingDraft] = useState(!!draftId); 
@@ -101,6 +102,7 @@ function WriteBlogContent() {
         if (data) {
           setBlogId(data.id);
           setTitle(data.title || "");
+          setExcerpt(data.excerpt || ""); // LOAD EXCERPT
           setContent(data.content || "");
           setCoverImage(data.cover_image || "");
           setTags(data.tags || []); 
@@ -166,7 +168,8 @@ function WriteBlogContent() {
 
   // --- CORE SAVE FUNCTION (DRAFTS) ---
   const saveDraft = useCallback(async (isManual = false, overrideCover = null) => {
-    if (!title && !content && !coverImage && !overrideCover && tags.length === 0) return;
+    // UPDATED to include excerpt check
+    if (!title && !content && !coverImage && !overrideCover && tags.length === 0 && !excerpt) return;
     
     setSyncStatus("Syncing");
     try {
@@ -178,16 +181,16 @@ function WriteBlogContent() {
             if (count > 0) finalSlug = `${baseSlug}-${count + 1}`;
         }
 
-        // --- NEW: Calculate Time ---
         const calculatedTime = calculateReadingTime(content);
 
         const payload = {
             author_id: user.id,
             title: title || "Untitled Report",
+            excerpt: excerpt, // <-- INJECT EXCERPT HERE
             content: content,
             cover_image: overrideCover !== null ? overrideCover : coverImage, 
             tags: tags, 
-            reading_time: calculatedTime, // <-- INJECTED HERE
+            reading_time: calculatedTime, 
             updated_at: new Date().toISOString()
         };
 
@@ -214,11 +217,12 @@ function WriteBlogContent() {
         setSyncStatus("Unsaved");
         if (isManual) toast.error("Sync Failed", { description: error.message });
     }
-  }, [blogId, title, content, coverImage, tags, user]);
+  }, [blogId, title, content, excerpt, coverImage, tags, user]);
 
   // --- AUTO-SAVE EFFECT ---
   useEffect(() => {
-    if (!title && !content && !coverImage && tags.length === 0) {
+    // Include excerpt in check
+    if (!title && !content && !coverImage && !excerpt && tags.length === 0) {
         setSyncStatus("Awaiting_Input");
         return;
     }
@@ -228,7 +232,7 @@ function WriteBlogContent() {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => { saveDraft(false); }, 2000);
     return () => clearTimeout(autoSaveTimerRef.current);
-  }, [title, content, coverImage, tags, saveDraft]); 
+  }, [title, content, coverImage, tags, excerpt, saveDraft]); 
 
   // --- PUBLISH ENGINE ---
   const handlePublish = async () => {
@@ -249,17 +253,17 @@ function WriteBlogContent() {
         
         if (count > 0) finalSlug = `${baseSlug}-${count + 1}`;
 
-        // --- NEW: Calculate Time ---
         const calculatedTime = calculateReadingTime(content);
 
         const blogPayload = {
             author_id: user.id,
             title: title,
+            excerpt: excerpt, // <-- INJECT EXCERPT HERE
             content: content,
             cover_image: coverImage, 
             tags: tags, 
             slug: finalSlug, 
-            reading_time: calculatedTime, // <-- INJECTED HERE
+            reading_time: calculatedTime, 
             status: 'published',
             updated_at: new Date().toISOString()
         };
@@ -292,11 +296,9 @@ function WriteBlogContent() {
 
         if (versionErr) throw versionErr;
 
-        // FETCH USERNAME FOR REDIRECT
         const { data: profileData } = await supabase.from('profiles').select('username').eq('id', user.id).single();
         const authorUsername = profileData?.username || user?.user_metadata?.username || "user";
 
-        // BROADCAST TO FOLLOWERS (IF NEWLY PUBLISHED)
         if (originalStatus === 'draft') {
             await broadcastNewBlog(currentBlogId, user.id, authorUsername, title, finalSlug);
         }
@@ -322,6 +324,7 @@ function WriteBlogContent() {
       
       <input type="file" ref={coverInputRef} onChange={handleCoverUpload} className="hidden" accept="image/*" />
 
+      {/* --- HEADER --- */}
       <header className="h-14 md:h-16 shrink-0 border-b border-border bg-secondary/5 flex items-center justify-between px-3 md:px-4 relative z-50">
         <div className="flex items-center flex-1 min-w-0 h-full">
             <button onClick={() => router.back()} className="text-muted-foreground hover:text-foreground transition-colors shrink-0 pr-4">
@@ -336,8 +339,19 @@ function WriteBlogContent() {
                 autoFocus
             />
             
+            {/* EXCERPT BUTTON */}
             <button 
-                onClick={() => setIsTagsPanelOpen(!isTagsPanelOpen)}
+                onClick={() => { setIsExcerptPanelOpen(!isExcerptPanelOpen); setIsTagsPanelOpen(false); }}
+                className={`hidden md:flex items-center gap-2 h-full px-4 md:px-6 border-l border-border transition-colors text-[10px] font-mono uppercase tracking-widest shrink-0
+                    ${isExcerptPanelOpen || excerpt.length > 0 ? 'bg-accent/10 text-accent hover:bg-accent/20' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
+            >
+                <Quote size={14} />
+                <span>{excerpt.length > 0 ? 'Edit Excerpt' : 'Add Excerpt'}</span>
+            </button>
+
+            {/* TAGS BUTTON */}
+            <button 
+                onClick={() => { setIsTagsPanelOpen(!isTagsPanelOpen); setIsExcerptPanelOpen(false); }}
                 className={`hidden md:flex items-center gap-2 h-full px-4 md:px-6 border-l border-border transition-colors text-[10px] font-mono uppercase tracking-widest shrink-0
                     ${isTagsPanelOpen || tags.length > 0 ? 'bg-accent/10 text-accent hover:bg-accent/20' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'}`}
             >
@@ -345,6 +359,7 @@ function WriteBlogContent() {
                 <span>{tags.length > 0 ? `${tags.length} Tags` : 'Add Tags'}</span>
             </button>
 
+            {/* COVER BUTTON */}
             <button 
                 onClick={() => coverInputRef.current?.click()}
                 disabled={isUploadingCover}
@@ -371,7 +386,7 @@ function WriteBlogContent() {
             <Button 
                 variant="outline" 
                 onClick={() => saveDraft(true)}
-                disabled={syncStatus === 'Syncing' || (!title && !content && !coverImage && tags.length === 0)}
+                disabled={syncStatus === 'Syncing' || (!title && !content && !coverImage && tags.length === 0 && !excerpt)}
                 className="h-8 md:h-9 px-2 md:px-4 rounded-none border-border text-[10px] md:text-xs uppercase hover:bg-secondary transition-colors hidden sm:flex shrink-0 ml-2"
             >
                 <Save size={14} className="sm:mr-2" />
@@ -388,6 +403,37 @@ function WriteBlogContent() {
         </div>
       </header>
 
+      {/* --- EXCERPT PANEL --- */}
+      <AnimatePresence>
+        {isExcerptPanelOpen && (
+            <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="border-b border-border bg-background overflow-hidden z-40 shrink-0 shadow-lg"
+            >
+                <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-[10px] font-mono text-accent uppercase tracking-widest flex items-center gap-2">
+                            <Quote size={12} /> Brief / Excerpt
+                        </h3>
+                        <span className={`text-[10px] font-mono uppercase ${excerpt.length > 150 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                            {excerpt.length} / 160 Chars
+                        </span>
+                    </div>
+                    <textarea 
+                        value={excerpt}
+                        onChange={(e) => setExcerpt(e.target.value)}
+                        maxLength={160}
+                        placeholder="Write a short, engaging summary for the global feed..."
+                        className="w-full bg-secondary/5 border border-border p-4 text-sm font-sans outline-none focus:border-accent transition-colors resize-none h-24 text-foreground placeholder:text-muted-foreground/40"
+                    />
+                </div>
+            </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- TAGS PANEL --- */}
       <AnimatePresence>
         {isTagsPanelOpen && (
             <motion.div 

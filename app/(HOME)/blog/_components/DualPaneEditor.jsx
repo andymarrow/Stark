@@ -422,7 +422,8 @@ export default function DualPaneEditor({ content, setContent, setJsonContent }) 
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "prose prose-zinc dark:prose-invert max-w-none focus:outline-none min-h-full pb-32 p-4 md:p-10 font-mono text-sm leading-[1.8] prose-headings:font-bold prose-headings:tracking-tight prose-headings:uppercase prose-h1:text-3xl prose-h2:text-2xl prose-code:text-accent prose-code:bg-secondary/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-pre:bg-black prose-pre:border prose-pre:border-border prose-pre:rounded-none prose-hr:border-border prose-table:border-collapse prose-table:border prose-table:border-border prose-th:border prose-th:border-border prose-th:bg-secondary/20 prose-td:border prose-td:border-border",
+        // PROSE-HEADINGS:UPPERCASE REMOVED BELOW
+        class: "prose prose-zinc dark:prose-invert max-w-none focus:outline-none min-h-full pb-32 p-4 md:p-10 font-mono text-sm leading-[1.8] prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-3xl prose-h2:text-2xl prose-code:text-accent prose-code:bg-secondary/30 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-pre:bg-black prose-pre:border prose-pre:border-border prose-pre:rounded-none prose-hr:border-border prose-table:border-collapse prose-table:border prose-table:border-border prose-th:border prose-th:border-border prose-th:bg-secondary/20 prose-td:border prose-td:border-border",
       },
     },
     onUpdate: ({ editor }) => {
