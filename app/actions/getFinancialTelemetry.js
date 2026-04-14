@@ -3,26 +3,37 @@
 import { createClient } from "@/utils/supabase/server";
 
 export async function getFinancialTelemetry(userId) {
-  const supabase = await createClient();
-
   try {
-    // 1. Fetch all transactions for this creator
+    // 1. Move client creation INSIDE the try-catch so it doesn't trigger a 500 if cookies fail
+    const supabase = await createClient();
+
+    if (!userId) {
+        throw new Error("No User ID provided to telemetry engine.");
+    }
+
+    // 2. Fetch all transactions (Using safer Foreign Key syntax)
     const { data: transactions, error: txError } = await supabase
       .from('support_transactions')
       .select(`
         id, amount, currency, net_amount, fee_amount, provider_id, created_at, asset_type, asset_id, status,
-        supporter:profiles!support_transactions_supporter_id_fkey(id, username, avatar_url, full_name)
+        supporter:profiles!supporter_id(id, username, avatar_url, full_name)
       `)
       .eq('receiver_id', userId)
       .eq('status', 'completed')
       .order('created_at', { ascending: false });
 
-    if (txError) throw txError;
+    // Catch missing table errors gracefully
+    if (txError) {
+        console.error("Supabase Query Error:", txError);
+        throw new Error(txError.message);
+    }
 
-    // 2. Fetch Asset Titles (Since asset_id can be a project OR a blog)
-    // To make the UI fast, we will grab the titles of the assets that were supported
-    const projectIds = transactions.filter(t => t.asset_type === 'project').map(t => t.asset_id);
-    const blogIds = transactions.filter(t => t.asset_type === 'blog').map(t => t.asset_id);
+    // Safely default to empty array
+    const safeTransactions = transactions || [];
+
+    // 3. Fetch Asset Titles 
+    const projectIds = safeTransactions.filter(t => t.asset_type === 'project' && t.asset_id).map(t => t.asset_id);
+    const blogIds = safeTransactions.filter(t => t.asset_type === 'blog' && t.asset_id).map(t => t.asset_id);
 
     let projects = [];
     let blogs = [];
@@ -36,8 +47,8 @@ export async function getFinancialTelemetry(userId) {
       blogs = data || [];
     }
 
-    // 3. Map the titles back into the transactions for easy frontend rendering
-    const enrichedTransactions = transactions.map(tx => {
+    // 4. Map the titles back
+    const enrichedTransactions = safeTransactions.map(tx => {
       let assetTitle = "Unknown Asset";
       let assetSlug = "";
       if (tx.asset_type === 'project') {
@@ -51,8 +62,10 @@ export async function getFinancialTelemetry(userId) {
     });
 
     return { success: true, data: enrichedTransactions };
+
   } catch (error) {
-    console.error("Telemetry Fetch Error:", error);
-    return { success: false, error: error.message };
+    // Return the error safely to the frontend instead of crashing the Next.js server
+    console.error("Telemetry Fetch Fatal Error:", error);
+    return { success: false, error: error.message, data: [] };
   }
 }
