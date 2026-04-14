@@ -43,6 +43,8 @@ import mentionStyles from "@/app/(HOME)/project/[slug]/_components/mentionStyles
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import FuelButton from "@/app/(HOME)/_components/FuelButton";
+
 
 const lowlight = createLowlight(common);
 
@@ -747,6 +749,18 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
             </span>
             
             <div className="flex items-center gap-4 sm:gap-6">
+
+                {/* The New Fuel Button */}
+                {currentUser?.id !== blog.author_id && (
+                    <div className="w-40 mr-2 border-r border-border/50 pr-4">
+                        <FuelButton 
+                            creatorId={blog.author_id} 
+                            assetType="blog" 
+                            assetId={blog.id} 
+                        />
+                    </div>
+                )}
+                
                 <button onClick={handleLike} className={`flex items-center gap-1.5 text-xs font-mono transition-all duration-300 group ${isLiked ? 'text-accent' : 'text-muted-foreground hover:text-foreground'}`}>
                     <Heart size={16} className={`transition-all duration-300 ${isLiked ? 'fill-accent scale-110' : 'group-hover:scale-110'}`} /> {likesCount}
                 </button>

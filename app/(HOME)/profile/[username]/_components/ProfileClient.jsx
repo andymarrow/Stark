@@ -1,3 +1,4 @@
+// app/(HOME)/profile/[username]/_components/ProfileClient.jsx
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import ProfileHeader from "./ProfileHeader";
@@ -9,11 +10,10 @@ import ProjectListItem from "./ProjectListItem";
 import Pagination from "@/components/ui/Pagination";
 import { registerView } from "@/app/actions/viewAnalytics";
 
-// NEW & EXISTING IMPORTS
 import NetworkRegistry from "../../_components/NetworkRegistry";
 import AchievementVault from "./AchievementVault";
 import EventsTabContent from "./EventsTabContent"; 
-import BlogsTabContent from "./BlogsTabContent"; // <-- NEW: The Blog UI
+import BlogsTabContent from "./BlogsTabContent"; 
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 
@@ -28,10 +28,11 @@ export default function ProfileClient({
   judgingHistory = [],
   hostedEvents = [], 
   attendedEvents = [], 
-  initialBlogs = [], // <-- NEW Prop
+  initialBlogs = [], 
   achievementCount = 0, 
   currentUser,
-  username
+  username,
+  financialStats // <--- NEW PROP RECEIVED
 }) {
   // UI State
   const [activeTab, setActiveTab] = useState("work");
@@ -100,7 +101,6 @@ export default function ProfileClient({
 
   const totalEventsActivity = hostedEvents.length + attendedEvents.length;
 
-  // --- GENERAL SORTING ALGORITHM (Now handles Blogs too) ---
   const getSortedItems = (list) => {
       return [...list].sort((a, b) => {
         const dateA = new Date(a.published_at || a.created_at);
@@ -132,13 +132,15 @@ export default function ProfileClient({
     return [];
   }, [initialBlogs, activeTab, sortOrder, popularMetric]);
 
+  // --- NEW: Add the financial stats to the object we pass to ProfileStats ---
   const publicStats = {
     projects: initialWork.length,
     followers: initialFollowerStats.followers,
     following: initialFollowerStats.following,
     likes: initialWork.reduce((acc, p) => acc + (p.likes_count || 0), 0),
     nodeReach: initialProfile.views || 0,
-    projectTraffic: initialWork.reduce((acc, p) => acc + (p.views || 0), 0)
+    projectTraffic: initialWork.reduce((acc, p) => acc + (p.views || 0), 0),
+    financialStats: financialStats // <--- INJECTED HERE
   };
 
   const currentListLength = activeTab === 'blogs' ? sortedBlogs.length : sortedProjects.length;
@@ -172,7 +174,7 @@ export default function ProfileClient({
           savedCount={initialSaved.length}
           achievementCount={achievementCount}
           eventsCount={totalEventsActivity} 
-          blogCount={initialBlogs.length} // <-- NEW: Pass blog count
+          blogCount={initialBlogs.length} 
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
           popularMetric={popularMetric}
@@ -181,17 +183,14 @@ export default function ProfileClient({
           judgingHistory={judgingHistory}
       />
 
-      {/* --- RENDER VAULT TAB --- */}
       {activeTab === 'achievements' && (
           <AchievementVault userId={initialProfile.id} isOwner={currentUser?.id === initialProfile.id} />
       )}
 
-      {/* --- RENDER EVENTS TAB --- */}
       {activeTab === 'events' && (
         <EventsTabContent hostedEvents={hostedEvents} attendedEvents={attendedEvents} />
       )}
 
-      {/* --- RENDER BLOGS TAB (NEW) --- */}
       {activeTab === 'blogs' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <BlogsTabContent blogs={currentBlogs} viewMode={viewMode} author={initialProfile} />
@@ -204,7 +203,6 @@ export default function ProfileClient({
           </div>
       )}
 
-      {/* --- RENDER PROJECTS TABS --- */}
       {(activeTab === 'work' || activeTab === 'saved') && (
           currentProjects.length > 0 ? (
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -235,7 +233,6 @@ export default function ProfileClient({
           )
       )}
 
-      {/* --- SHARED NETWORK REGISTRY MODAL --- */}
       <NetworkRegistry isOpen={isConnectionsOpen} onClose={() => setIsConnectionsOpen(false)} type={connectionType} connections={connections} loading={connLoading} />
     </div>
   );

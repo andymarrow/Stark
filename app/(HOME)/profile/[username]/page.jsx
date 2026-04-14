@@ -1,3 +1,4 @@
+// app/(HOME)/profile/[username]/page.jsx
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 import ProfileClient from "./_components/ProfileClient";
@@ -80,7 +81,7 @@ export default async function ProfilePage({ params }) {
     achievementsCountRes,
     hostedEventsRes, 
     attendedEventsRes,
-    publishedBlogsRes // <-- NEW: Fetch Blogs
+    publishedBlogsRes 
   ] = await Promise.all([
     // 1. Work Projects
     supabaseServer
@@ -152,7 +153,7 @@ export default async function ProfilePage({ params }) {
       .eq('project.owner_id', profileData.id)
       .order('submitted_at', { ascending: false }),
       
-    // 10. Published Blogs (NEW)
+    // 10. Published Blogs 
     supabaseServer
       .from('blogs')
       .select('*')
@@ -167,7 +168,29 @@ export default async function ProfilePage({ params }) {
   const judgingHistory = judgingRes.data || [];
   const hostedEvents = hostedEventsRes.data || [];
   const attendedEvents = attendedEventsRes.data || [];
-  const publishedBlogs = publishedBlogsRes.data || []; // <-- NEW
+  const publishedBlogs = publishedBlogsRes.data || []; 
+
+  // --- NEW: FETCH FINANCIAL TELEMETRY IF PUBLIC ---
+  let financialStats = null;
+  if (profileData.show_financial_telemetry) {
+      const { data: txs } = await supabaseServer
+          .from('support_transactions')
+          .select('net_amount, currency')
+          .eq('receiver_id', profileData.id)
+          .eq('status', 'completed');
+      
+      let totalVolume = 0;
+      txs?.forEach(tx => {
+          // Standardize to a generic "Network Credits" unit (Assuming 1 USD = 120 ETB/Credits)
+          const amt = parseFloat(tx.net_amount);
+          totalVolume += (tx.currency === 'USD') ? amt * 120 : amt;
+      });
+      
+      financialStats = {
+          volume: totalVolume,
+          injections: txs?.length || 0
+      };
+  }
 
   const profileUrl = `${BASE_URL}/profile/${username}`;
   const sameAs = [];
@@ -215,12 +238,13 @@ export default async function ProfilePage({ params }) {
         judgingHistory={judgingHistory}
         hostedEvents={hostedEvents}
         attendedEvents={attendedEvents}
-        initialBlogs={publishedBlogs} // <-- NEW: Pass blogs to client
+        initialBlogs={publishedBlogs} 
         achievementCount={achievementsCountRes.count || 0}
         initialFollowerStats={{
           followers: followersCount.count || 0,
           following: followingCount.count || 0
         }}
+        financialStats={financialStats} // <--- NEW PROP PASSED HERE
       />
     </div>
   );

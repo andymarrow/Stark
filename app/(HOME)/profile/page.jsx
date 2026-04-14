@@ -10,8 +10,10 @@ import {
   Settings, Grid, Bell, LogOut, Loader2, 
   Scale, Shield, Users, UserPlus, X, Search, ArrowUpRight,
   Megaphone, Swords, Send, Calendar as CalendarIcon,
-  Terminal // NEW: Imported Terminal for My Intelligence tab
+  Terminal,Wallet // NEW: Imported Terminal for My Intelligence tab
 } from "lucide-react"; 
+
+import MyFinanceManager from "./_components/MyFinanceManager"; // Import the new component
 
 // Components
 import PersonalHeader from "./_components/PersonalHeader";
@@ -211,6 +213,13 @@ function ProfileContent() {
                         />
 
                         <NavButton 
+                            icon={Wallet} 
+                            label="Financial Telemetry" 
+                            active={currentView === "finances"} 
+                            onClick={() => handleViewChange("finances")} 
+                        />
+
+                        <NavButton 
                             icon={Swords}
                             label="Events Hub" 
                             onClick={() => router.push('/events')} 
@@ -259,6 +268,9 @@ function ProfileContent() {
                     {currentView === 'blogs' && <MyBlogsManager user={user} profile={profile} />} 
                     
                     {currentView === 'events' && <MyEventsManager user={user} profile={profile} />} 
+
+                    {/* --- RENDER THE NEW FINANCE DASHBOARD --- */}
+                    {currentView === 'finances' && <MyFinanceManager user={user} profile={profile} />}
                     
                     {currentView === 'settings' && <SettingsForm user={profile} onUpdate={fetchProfileAndStats} />}
                     {currentView === 'notifications' && <NotificationsView onNotificationRead={() => setUnreadCount(prev => Math.max(0, prev - 1))} />}

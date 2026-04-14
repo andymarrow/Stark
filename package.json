@@ -16,6 +16,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.35.5",
     "@google/generative-ai": "^0.24.1",
+    "@gurshaplus/sdk": "^1.0.9",
     "@heroicons/react": "^2.2.0",
     "@next/third-parties": "^16.1.0",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -102,6 +103,7 @@
     "resend": "^6.7.0",
     "shadcn": "^3.6.3",
     "sonner": "^2.0.7",
+    "stripe": "^22.0.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "tippy.js": "^6.3.7",

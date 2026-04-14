@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { registerView } from "@/app/actions/viewAnalytics"; 
+import FuelButton from "@/app/(HOME)/_components/FuelButton";
 
 export default function ProjectSidebar({ project }) {
   const { user } = useAuth();
@@ -386,6 +387,15 @@ export default function ProjectSidebar({ project }) {
 
       {/* 2. Key Actions */}
       <div className="space-y-3">
+        
+         {project.author?.id !== user?.id && (
+            <FuelButton 
+                creatorId={project.author.id} 
+                assetType="project" 
+                assetId={project.id} 
+            />
+        )}
+
         {renderProjectActions()}
 
         {user?.id === project.author.id && (
