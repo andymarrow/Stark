@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { 
   Wallet, TrendingUp, DollarSign, Activity, 
-  ArrowUpRight, Loader2, ArrowRightLeft, ShieldCheck, Database
+  ArrowUpRight, Loader2, ArrowRightLeft, ShieldCheck, Database,
+  Globe
 } from "lucide-react";
 import { getFinancialTelemetry } from "@/app/actions/getFinancialTelemetry";
 import Image from "next/image";
