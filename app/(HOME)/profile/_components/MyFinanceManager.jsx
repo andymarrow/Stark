@@ -22,15 +22,25 @@ export default function MyFinanceManager({ user, profile }) {
 
   useEffect(() => {
     const fetchFinances = async () => {
-      setLoading(true);
-      const res = await getFinancialTelemetry(user.id);
-      if (res.success) {
-        setTransactions(res.data);
+      try {
+        setLoading(true);
+        const res = await getFinancialTelemetry(user.id);
+        
+        if (res?.success) {
+          setTransactions(res.data || []);
+        } else {
+          toast.error("Telemetry Link Failure", { description: res?.error || "Unknown Error" });
+          setTransactions([]);
+        }
+      } catch (err) {
+        toast.error("Network Error", { description: "Failed to communicate with Mainframe." });
+      } finally {
+        setLoading(false); // This ensures the loader stops no matter what
       }
-      setLoading(false);
     };
+
     if (user?.id) fetchFinances();
-  }, [user]);
+  }, [user.id]);
 
   // --- FINANCIAL ALGORITHMS (Currency Conversion) ---
   const convertAmount = (amount, fromCurrency, toCurrency) => {
