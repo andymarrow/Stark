@@ -10,6 +10,7 @@ import { getFinancialTelemetry } from "@/app/actions/getFinancialTelemetry";
 import Image from "next/image";
 import Link from "next/link";
 import { getAvatar } from "@/constants/assets";
+import { toast } from "sonner";
 
 // Fallback Exchange Rate (Update this or connect to an API later)
 const EXCHANGE_RATE_USD_TO_ETB = 120; 
