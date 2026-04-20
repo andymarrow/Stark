@@ -16,7 +16,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.35.5",
     "@google/generative-ai": "^0.24.1",
-    "@gurshaplus/sdk": "^1.0.9",
+    "@gurshaplus/sdk": "^1.1.0",
     "@heroicons/react": "^2.2.0",
     "@next/third-parties": "^16.1.0",
     "@radix-ui/react-accordion": "^1.2.12",

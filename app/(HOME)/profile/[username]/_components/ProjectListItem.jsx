@@ -1,13 +1,23 @@
+// app/(HOME)/profile/[username]/_components/ProjectListItem.jsx
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Eye, Calendar, ArrowUpRight, GitCommit } from "lucide-react";
+import { Star, Eye, Calendar, ArrowUpRight, Zap } from "lucide-react"; // Added Zap
+
+function formatNumber(num) {
+  if (!num) return "0";
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'k';
+  }
+  return num;
+}
 
 export default function ProjectListItem({ project }) {
   // Safe Fallbacks
   const thumbnail = project.thumbnail_url || "/placeholder.jpg";
   const stars = project.likes_count || 0;
   const views = project.views || 0;
+  const fuelInjections = project.fuel_injections || 0; // NEW
   const date = new Date(project.created_at).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -51,7 +61,7 @@ export default function ProjectListItem({ project }) {
             <span className="text-[10px] text-border">|</span>
             <div className="flex gap-2 overflow-hidden">
                 {(project.tags || []).slice(0, 3).map((tag, i) => (
-                    <span key={i} className="text-[10px] text-muted-foreground font-mono truncate">
+                    <span key={i} className="text-[10px] text-muted-foreground font-mono truncate uppercase">
                         {typeof tag === 'string' ? tag : tag.name}
                     </span>
                 ))}
@@ -60,17 +70,25 @@ export default function ProjectListItem({ project }) {
       </div>
 
       {/* 3. Metrics (Tabular Data) */}
-      <div className="flex items-center gap-6 text-muted-foreground">
+      <div className="flex items-center gap-4 md:gap-6 text-muted-foreground">
         
         {/* Stats */}
         <div className="hidden md:flex items-center gap-4 text-xs font-mono">
-            <div className="flex items-center gap-1.5 w-16">
+            {/* NEW: FUEL INDICATOR */}
+            {fuelInjections > 0 && (
+                <div className="flex items-center gap-1.5 w-12 text-accent animate-pulse" title="Fueled Node">
+                    <Zap size={12} className="fill-accent" />
+                    <span>{formatNumber(fuelInjections)}</span>
+                </div>
+            )}
+            
+            <div className="flex items-center gap-1.5 w-12">
                 <Star size={12} className="group-hover:text-accent transition-colors" />
-                <span>{stars}</span>
+                <span>{formatNumber(stars)}</span>
             </div>
-            <div className="flex items-center gap-1.5 w-16">
+            <div className="flex items-center gap-1.5 w-12">
                 <Eye size={12} />
-                <span>{views}</span>
+                <span>{formatNumber(views)}</span>
             </div>
         </div>
 

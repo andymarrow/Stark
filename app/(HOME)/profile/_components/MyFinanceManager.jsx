@@ -2,15 +2,13 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { 
-  Wallet, TrendingUp, DollarSign, Activity, 
-  ArrowUpRight, Loader2, ArrowRightLeft, ShieldCheck, Database,
-  Globe
+  Wallet, Database, Activity, ArrowRightLeft, ShieldCheck, Globe, User, Loader2
 } from "lucide-react";
 import { getFinancialTelemetry } from "@/app/actions/getFinancialTelemetry";
 import Image from "next/image";
 import Link from "next/link";
-import { getAvatar } from "@/constants/assets";
 import { toast } from "sonner";
+import { getAvatar } from "@/constants/assets";
 
 // Fallback Exchange Rate (Update this or connect to an API later)
 const EXCHANGE_RATE_USD_TO_ETB = 120; 
@@ -37,7 +35,7 @@ export default function MyFinanceManager({ user, profile }) {
       } catch (err) {
         toast.error("Network Error", { description: "Failed to communicate with Mainframe." });
       } finally {
-        setLoading(false); // This ensures the loader stops no matter what
+        setLoading(false); 
       }
     };
 
@@ -67,8 +65,9 @@ export default function MyFinanceManager({ user, profile }) {
       totalVolume += convertedAmount;
 
       // Group by Asset for the Breakdown
-      if (!assetMap[tx.asset_id]) {
-        assetMap[tx.asset_id] = {
+      const groupKey = tx.asset_id || 'profile';
+      if (!assetMap[groupKey]) {
+        assetMap[groupKey] = {
           title: tx.assetTitle,
           slug: tx.assetSlug,
           type: tx.asset_type,
@@ -76,8 +75,8 @@ export default function MyFinanceManager({ user, profile }) {
           injections: 0
         };
       }
-      assetMap[tx.asset_id].total += convertedAmount;
-      assetMap[tx.asset_id].injections += 1;
+      assetMap[groupKey].total += convertedAmount;
+      assetMap[groupKey].injections += 1;
     });
 
     const topAssets = Object.values(assetMap).sort((a, b) => b.total - a.total);
@@ -97,7 +96,7 @@ export default function MyFinanceManager({ user, profile }) {
                 <Wallet className="text-accent" /> Financial Telemetry
             </h2>
             <p className="text-xs font-mono text-muted-foreground uppercase mt-1 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> Ledger Sync Complete
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.5)]" /> Ledger Sync Complete
             </p>
         </div>
 
@@ -154,9 +153,13 @@ export default function MyFinanceManager({ user, profile }) {
                           <div key={idx} className="p-4 border border-border bg-background flex items-center justify-between group hover:border-accent transition-colors">
                               <div className="min-w-0 flex-1">
                                   <p className="text-[9px] font-mono text-accent uppercase tracking-widest mb-1">{asset.type}</p>
-                                  <Link href={asset.type === 'project' ? `/project/${asset.slug}` : `/${profile.username}/blog/${asset.slug}`} className="font-bold text-sm uppercase truncate block group-hover:text-accent transition-colors">
-                                      {asset.title}
-                                  </Link>
+                                  {asset.type === 'profile' ? (
+                                      <span className="font-bold text-sm uppercase block text-muted-foreground">General Support</span>
+                                  ) : (
+                                      <Link href={asset.type === 'project' ? `/project/${asset.slug}` : `/${profile.username}/blog/${asset.slug}`} className="font-bold text-sm uppercase truncate block group-hover:text-accent transition-colors">
+                                          {asset.title}
+                                      </Link>
+                                  )}
                                   <p className="text-[10px] font-mono text-muted-foreground mt-1">{asset.injections} Injections</p>
                               </div>
                               <div className="text-right pl-4">
@@ -184,10 +187,10 @@ export default function MyFinanceManager({ user, profile }) {
                   ) : (
                       <div className="divide-y divide-border max-h-[500px] overflow-y-auto custom-scrollbar">
                           {transactions.map(tx => (
-                              <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-secondary/10 transition-colors">
+                              <div key={tx.id} className="p-4 flex items-center justify-between hover:bg-secondary/10 transition-colors group">
                                   <div className="flex items-center gap-4">
                                       {tx.supporter ? (
-                                          <Link href={`/profile/${tx.supporter.username}`} className="w-10 h-10 bg-secondary border border-border relative overflow-hidden grayscale hover:grayscale-0 transition-all">
+                                          <Link href={`/profile/${tx.supporter.username}`} className="w-10 h-10 bg-secondary border border-border relative overflow-hidden grayscale group-hover:grayscale-0 transition-all">
                                               <Image src={getAvatar(tx.supporter)} alt="" fill className="object-cover" />
                                           </Link>
                                       ) : (
@@ -208,7 +211,7 @@ export default function MyFinanceManager({ user, profile }) {
                                       <p className="text-sm font-mono font-black text-green-500">
                                           +{formatCurrency(convertAmount(tx.net_amount, tx.currency, viewCurrency), viewCurrency)}
                                       </p>
-                                      <p className="text-[8px] font-mono text-muted-foreground uppercase">Target: {tx.assetTitle.substring(0, 15)}...</p>
+                                      <p className="text-[8px] font-mono text-muted-foreground uppercase">Target: {tx.assetTitle.substring(0, 15)}{tx.assetTitle.length > 15 ? '...' : ''}</p>
                                   </div>
                               </div>
                           ))}
@@ -224,7 +227,7 @@ export default function MyFinanceManager({ user, profile }) {
 
 function MetricCard({ label, value, icon: Icon, isHighlight, subtext }) {
     return (
-        <div className="bg-background p-6 flex flex-col justify-between h-32 group">
+        <div className="bg-background p-6 flex flex-col justify-between h-32 group hover:bg-secondary/5 transition-colors">
             <div className="flex justify-between items-start">
                 <span className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">{label}</span>
                 <Icon size={16} className={isHighlight ? "text-accent" : "text-muted-foreground"} />

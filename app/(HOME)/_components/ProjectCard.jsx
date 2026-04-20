@@ -1,7 +1,8 @@
+// app/(HOME)/_components/ProjectCard.jsx
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck, Trophy, Radio } from "lucide-react"; 
+import { Star, Eye, ArrowUpRight, PlayCircle, ShieldCheck, Trophy, Radio, Zap } from "lucide-react"; // Added Zap
 import { getSmartThumbnail, isVideoUrl } from "@/lib/mediaUtils"; 
 
 // --- HELPER: STRIP MARKDOWN & MENTIONS ---
@@ -19,19 +20,28 @@ function stripMarkdown(md) {
     .trim();
 }
 
+function formatNumber(num) {
+  if (!num) return "0";
+  if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'k';
+  }
+  return num;
+}
+
 export default function ProjectCard({ project }) {
   const stars = project?.likes_count ?? project?.stats?.stars ?? 0;
   const views = project?.views ?? project?.stats?.views ?? 0;
   const qScore = project?.quality_score ?? project?.qualityScore ?? 0;
+  const fuelInjections = project?.fuel_injections || 0; // NEW
   
   // Contest Info
   const contestName = project?.contestName; 
   const contestSlug = project?.contestSlug; 
   
-  // Event Info (NEW PHASE 7)
+  // Event Info
   const eventName = project?.eventName;
   const eventId = project?.eventId;
-  const eventColor = project?.eventColor || "#DC2626"; // Default accent
+  const eventColor = project?.eventColor || "#DC2626";
 
   const rawThumbnail = project?.thumbnail_url || project?.thumbnail || "";
   const imageSrc = getSmartThumbnail(rawThumbnail);
@@ -78,10 +88,8 @@ export default function ProjectCard({ project }) {
             </div>
           )}
 
-          {/* INDICATORS SECTION (Stacked Top Left) */}
           <div className="absolute top-3 left-3 z-30 flex flex-col gap-2 items-start pointer-events-none">
-              
-              {/* 1. Contest Badge */}
+              {/* Contest Badge */}
               {contestName && contestSlug && (
                  <Link 
                     href={`/contests/${contestSlug}`}
@@ -93,13 +101,13 @@ export default function ProjectCard({ project }) {
                  </Link>
               )}
 
-              {/* 2. Public Event Badge (NEW) */}
+              {/* Public Event Badge */}
               {eventName && eventId && (
                  <Link 
                     href={`/events/${eventId}`}
                     onClick={(e) => e.stopPropagation()} 
                     className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide flex items-center gap-1.5 shadow-sm backdrop-blur-sm pointer-events-auto transition-colors cursor-pointer text-white"
-                    style={{ backgroundColor: eventColor }} // Dynamic Host Color
+                    style={{ backgroundColor: eventColor }} 
                  >
                     <Radio size={10} className="animate-pulse" />
                     <span className="truncate max-w-[120px]">{eventName}</span>
@@ -155,7 +163,6 @@ export default function ProjectCard({ project }) {
             )}
           </div>
 
-          {/* FOOTER: Fixed truncation for long usernames */}
           <div className="flex items-center justify-between pt-4 border-t border-border border-dashed group-hover:border-accent/20 transition-colors relative z-20 overflow-hidden">
             
             <Link 
@@ -184,7 +191,14 @@ export default function ProjectCard({ project }) {
 
             <div className="flex items-center gap-3 text-muted-foreground font-mono text-[10px] flex-shrink-0">
               
-              {/* CLICK FRENZY LISTENER ADDED HERE */}
+              {/* NEW: FUEL INDICATOR */}
+              {fuelInjections > 0 && (
+                <div className="flex items-center gap-1 text-accent animate-pulse" title={`${fuelInjections} Fuel Injections`}>
+                    <Zap size={12} className="fill-accent" />
+                    <span>{formatNumber(fuelInjections)}</span>
+                </div>
+              )}
+
               <div 
                 className="flex items-center gap-1 cursor-pointer pointer-events-auto"
                 onClick={async (e) => {
@@ -214,12 +228,4 @@ export default function ProjectCard({ project }) {
         </div>
     </article>
   );
-}
-
-function formatNumber(num) {
-  if (!num) return "0";
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'k';
-  }
-  return num;
 }

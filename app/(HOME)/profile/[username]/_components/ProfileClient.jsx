@@ -32,7 +32,7 @@ export default function ProfileClient({
   achievementCount = 0, 
   currentUser,
   username,
-  financialStats // <--- NEW PROP RECEIVED
+  financialStats // <--- RECEIVED FINANCIAL STATS
 }) {
   // UI State
   const [activeTab, setActiveTab] = useState("work");
@@ -101,6 +101,7 @@ export default function ProfileClient({
 
   const totalEventsActivity = hostedEvents.length + attendedEvents.length;
 
+  // --- GENERAL SORTING ALGORITHM (Now includes Fuel Injections!) ---
   const getSortedItems = (list) => {
       return [...list].sort((a, b) => {
         const dateA = new Date(a.published_at || a.created_at);
@@ -112,8 +113,9 @@ export default function ProfileClient({
           if (popularMetric === 'views') return (b.views || 0) - (a.views || 0);
           if (popularMetric === 'likes') return (b.likes_count || 0) - (a.likes_count || 0);
           if (popularMetric === 'hype') {
-            const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5);
-            const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5);
+            // HYPE MATRIX: Views (1x) + Stars (5x) + Fuel Injections (50x)
+            const scoreA = (a.views || 0) + ((a.likes_count || 0) * 5) + ((a.fuel_injections || 0) * 50);
+            const scoreB = (b.views || 0) + ((b.likes_count || 0) * 5) + ((b.fuel_injections || 0) * 50);
             return scoreB - scoreA;
           }
         }
@@ -132,7 +134,6 @@ export default function ProfileClient({
     return [];
   }, [initialBlogs, activeTab, sortOrder, popularMetric]);
 
-  // --- NEW: Add the financial stats to the object we pass to ProfileStats ---
   const publicStats = {
     projects: initialWork.length,
     followers: initialFollowerStats.followers,
@@ -140,7 +141,7 @@ export default function ProfileClient({
     likes: initialWork.reduce((acc, p) => acc + (p.likes_count || 0), 0),
     nodeReach: initialProfile.views || 0,
     projectTraffic: initialWork.reduce((acc, p) => acc + (p.views || 0), 0),
-    financialStats: financialStats // <--- INJECTED HERE
+    financialStats: financialStats 
   };
 
   const currentListLength = activeTab === 'blogs' ? sortedBlogs.length : sortedProjects.length;
