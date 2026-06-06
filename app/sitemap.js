@@ -15,16 +15,16 @@ function url(path) {
   return `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-/** Static routes included in the sitemap. */
 const STATIC_ROUTES = [
-  { path: '/', changeFrequency: 'daily', priority: 1 },
-  { path: '/explore', changeFrequency: 'daily', priority: 0.9 },
-  { path: '/contests', changeFrequency: 'daily', priority: 0.9 },
-  { path: '/trending', changeFrequency: 'daily', priority: 0.8 },
-  { path: '/about', changeFrequency: 'monthly', priority: 0.6 },
+  { path: '/',          changeFrequency: 'daily',   priority: 1   },
+  { path: '/explore',   changeFrequency: 'daily',   priority: 0.9 },
+  { path: '/trending',  changeFrequency: 'daily',   priority: 0.9 },
+  { path: '/contests',  changeFrequency: 'daily',   priority: 0.9 },
+  { path: '/blog',      changeFrequency: 'daily',   priority: 0.8 },
+  { path: '/about',     changeFrequency: 'monthly', priority: 0.6 },
   { path: '/legal/guidelines', changeFrequency: 'yearly', priority: 0.4 },
-  { path: '/legal/terms', changeFrequency: 'yearly', priority: 0.4 },
-  { path: '/legal/privacy', changeFrequency: 'yearly', priority: 0.4 },
+  { path: '/legal/terms',      changeFrequency: 'yearly', priority: 0.4 },
+  { path: '/legal/privacy',    changeFrequency: 'yearly', priority: 0.4 },
 ];
 
 function staticEntries() {
@@ -37,16 +37,13 @@ function staticEntries() {
   }));
 }
 
-/**
- * Fetch counts for projects and profiles to build paginated sitemap ids.
- * Uses small queries to avoid timeouts; actual data is fetched per segment.
- */
 export async function generateSitemaps() {
   const supabase = getSitemapSupabase();
 
   const [
     { count: projectCount },
     { count: profileCount },
+    { count: blogCount },
   ] = await Promise.all([
     supabase
       .from('projects')
@@ -56,15 +53,22 @@ export async function generateSitemaps() {
     supabase
       .from('profiles')
       .select('username', { count: 'exact', head: true }),
+    supabase
+      .from('blogs')
+      .select('slug', { count: 'exact', head: true })
+      .eq('status', 'published'),
   ]);
 
   const nProjectChunks = Math.ceil(Math.max(0, projectCount || 0) / CHUNK_SIZE);
   const nProfileChunks = Math.ceil(Math.max(0, profileCount || 0) / CHUNK_SIZE);
+  const nBlogChunks    = Math.ceil(Math.max(0, blogCount    || 0) / CHUNK_SIZE);
 
   const ids = [{ id: 'static' }];
   for (let i = 0; i < nProjectChunks; i++) ids.push({ id: `projects-${i}` });
   for (let i = 0; i < nProfileChunks; i++) ids.push({ id: `profiles-${i}` });
+  for (let i = 0; i < nBlogChunks;    i++) ids.push({ id: `blogs-${i}` });
   ids.push({ id: 'contests' });
+  ids.push({ id: 'events' });
 
   return ids;
 }
@@ -81,6 +85,7 @@ export default async function sitemap(props) {
   const supabase = getSitemapSupabase();
   const now = new Date();
 
+  // --- CONTESTS ---
   if (id === 'contests') {
     const { data: contests } = await supabase
       .from('contests')
@@ -94,11 +99,26 @@ export default async function sitemap(props) {
     }));
   }
 
+  // --- EVENTS ---
+  if (id === 'events') {
+    const { data: events } = await supabase
+      .from('events')
+      .select('id, updated_at, created_at')
+      .eq('is_public', true);
+    return (events || []).map((e) => ({
+      url: url(`/events/${e.id}`),
+      lastModified: (e.updated_at || e.created_at) ? new Date(e.updated_at || e.created_at) : now,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    }));
+  }
+
+  // --- PROJECTS (paginated) ---
   if (typeof id === 'string' && id.startsWith('projects-')) {
     const page = parseInt(id.replace('projects-', ''), 10);
     if (Number.isNaN(page) || page < 0) return staticEntries();
     const from = page * CHUNK_SIZE;
-    const to = from + CHUNK_SIZE - 1;
+    const to   = from + CHUNK_SIZE - 1;
     const { data: projects } = await supabase
       .from('projects')
       .select('slug, updated_at, created_at')
@@ -114,11 +134,12 @@ export default async function sitemap(props) {
     }));
   }
 
+  // --- PROFILES (paginated) ---
   if (typeof id === 'string' && id.startsWith('profiles-')) {
     const page = parseInt(id.replace('profiles-', ''), 10);
     if (Number.isNaN(page) || page < 0) return [];
     const from = page * CHUNK_SIZE;
-    const to = from + CHUNK_SIZE - 1;
+    const to   = from + CHUNK_SIZE - 1;
     const { data: profiles } = await supabase
       .from('profiles')
       .select('username, updated_at, created_at')
@@ -128,6 +149,26 @@ export default async function sitemap(props) {
       url: url(`/profile/${u.username}`),
       lastModified: (u.updated_at || u.created_at) ? new Date(u.updated_at || u.created_at) : now,
       changeFrequency: 'weekly',
+      priority: 0.9, // boosted — profiles are the primary person-search target
+    }));
+  }
+
+  // --- BLOGS (paginated) ---
+  if (typeof id === 'string' && id.startsWith('blogs-')) {
+    const page = parseInt(id.replace('blogs-', ''), 10);
+    if (Number.isNaN(page) || page < 0) return [];
+    const from = page * CHUNK_SIZE;
+    const to   = from + CHUNK_SIZE - 1;
+    const { data: blogs } = await supabase
+      .from('blogs')
+      .select('slug, published_at, updated_at, author:profiles!author_id(username)')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
+      .range(from, to);
+    return (blogs || []).filter((b) => b.author?.username).map((b) => ({
+      url: url(`/${b.author.username}/blog/${b.slug}`),
+      lastModified: (b.updated_at || b.published_at) ? new Date(b.updated_at || b.published_at) : now,
+      changeFrequency: 'monthly',
       priority: 0.7,
     }));
   }

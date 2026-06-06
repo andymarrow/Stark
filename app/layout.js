@@ -32,8 +32,8 @@ export const metadata = {
     "design engineers",
     "frontend community"
   ],
-  authors: [{ name: "Your Name", url: "https://twitter.com/yourhandle" }],
-  creator: "Stark Network",
+  authors: [{ name: "Stark Network", url: "https://stark.et" }],
+  creator: "Stark",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -55,7 +55,7 @@ export const metadata = {
     title: "Stark | The Creator Hub",
     description: "Don't just look at pixels. Inspect the code.",
     images: ["/og-image.png"], 
-    creator: "@yourhandle",
+    creator: "@StarkNetwork",
   },
   icons: {
     icon: [

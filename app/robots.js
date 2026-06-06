@@ -1,7 +1,3 @@
-/**
- * Dynamic robots.txt for Stark (stark.et).
- * Points crawlers to the sitemap and disallows auth/admin paths.
- */
 function getBaseUrl() {
   return process.env.NEXT_PUBLIC_SITE_URL || 'https://stark.et';
 }
@@ -15,12 +11,14 @@ export default function robots() {
         allow: [
           '/',
           '/explore',
+          '/trending',
+          '/about',
+          '/blog',
           '/project/',
           '/profile/',
           '/contests',
           '/contests/',
-          '/trending',
-          '/about',
+          '/events/',
           '/legal/',
         ],
         disallow: [
@@ -31,7 +29,16 @@ export default function robots() {
           '/forgot-password',
           '/update-password',
           '/dashboard',
+          '/create',
+          '/chat',
           '/api/',
+          '/events/*/dashboard',
+          '/contests/*/dashboard',
+          '/contests/*/judge',
+          '/project/*/edit',
+          '/blog/write',
+          '/blog/studio',
+          '/profile/report',
         ],
       },
     ],

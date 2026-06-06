@@ -5,9 +5,24 @@ import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://stark.et';
+
 export const metadata = {
   title: "Events Hub | Stark",
-  description: "Global Event Registry and Personal Terminal.",
+  description: "Discover global creator events, hackathons, and showcases on Stark. Submit your projects and connect with the community.",
+  alternates: { canonical: `${BASE_URL}/events` },
+  openGraph: {
+    title: "Events Hub | Stark",
+    description: "Discover global creator events, hackathons, and showcases on Stark.",
+    url: `${BASE_URL}/events`,
+    siteName: "Stark",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Events Hub | Stark",
+    description: "Discover global creator events, hackathons, and showcases on Stark.",
+  },
 };
 
 export default async function EventsHubPage() {

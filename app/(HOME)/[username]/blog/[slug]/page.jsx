@@ -35,14 +35,17 @@ export async function generateMetadata({ params }) {
   const pageTitle = `${blog.title} | Stark Intel`;
   const pageDesc = blog.excerpt || `Intelligence report by @${username}.`;
 
+  const canonicalUrl = `${BASE_URL}/${username}/blog/${slug}`;
+
   return {
     title: pageTitle,
     description: pageDesc,
+    alternates: { canonical: canonicalUrl },
     openGraph: {
         title: pageTitle,
         description: pageDesc,
-        url: `${BASE_URL}/${username}/blog/${slug}`,
-        siteName: 'Stark Network',
+        url: canonicalUrl,
+        siteName: 'Stark',
         images: [{ url: ogUrl, width: 1200, height: 630, alt: blog.title }],
         type: 'article',
     },

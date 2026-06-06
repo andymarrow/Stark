@@ -26,6 +26,11 @@ export async function generateMetadata({ params }) {
     user.bio ||
     `View ${displayName}'s profile on Stark – portfolio, projects, and bio.`;
 
+  // Split name for og:profile first/last name signals
+  const nameParts = displayName.trim().split(' ');
+  const firstName = nameParts[0];
+  const lastName = nameParts.slice(1).join(' ') || undefined;
+
   return {
     title,
     description,
@@ -40,10 +45,13 @@ export async function generateMetadata({ params }) {
           url: ogUrl,
           width: 1200,
           height: 630,
-          alt: `${username}'s profile`,
+          alt: `${displayName} – creator profile on Stark`,
         },
       ],
       type: "profile",
+      firstName,
+      lastName,
+      username,
     },
     twitter: {
       card: "summary_large_image",
@@ -199,16 +207,30 @@ export default async function ProfilePage({ params }) {
   if (s.twitter) sameAs.push(s.twitter);
   if (s.linkedin) sameAs.push(s.linkedin);
 
+  const personName = profileData.full_name || username;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "ProfilePage",
+        "@id": `${profileUrl}#profile-page`,
+        name: `${personName} on Stark`,
+        url: profileUrl,
+        ...(profileData.created_at && { dateCreated: profileData.created_at }),
+        ...(profileData.updated_at && { dateModified: profileData.updated_at }),
         mainEntity: {
           "@type": "Person",
-          name: profileData.full_name || username,
+          "@id": `${profileUrl}#person`,
+          name: personName,
+          alternateName: `@${username}`,
           url: profileUrl,
-          image: profileData.avatar_url,
+          ...(profileData.avatar_url && {
+            image: {
+              "@type": "ImageObject",
+              url: profileData.avatar_url,
+              contentUrl: profileData.avatar_url,
+            },
+          }),
           description: (profileData.bio || "").substring(0, 500),
           identifier: profileUrl,
           ...(sameAs.length > 0 && { sameAs }),
@@ -219,7 +241,7 @@ export default async function ProfilePage({ params }) {
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
           { "@type": "ListItem", position: 2, name: "Creators", item: `${BASE_URL}/explore` },
-          { "@type": "ListItem", position: 3, name: profileData.full_name || username, item: profileUrl },
+          { "@type": "ListItem", position: 3, name: personName, item: profileUrl },
         ],
       },
     ],

@@ -2,9 +2,24 @@
 import { createClient } from "@/utils/supabase/server";
 import BlogFeedClient from "./_components/BlogFeedClient";
 
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://stark.et';
+
 export const metadata = {
   title: "Intelligence Reports | Stark",
   description: "Explore technical deployments, architectural breakdowns, and engineering insights from the Stark network.",
+  alternates: { canonical: `${BASE_URL}/blog` },
+  openGraph: {
+    title: "Intelligence Reports | Stark",
+    description: "Technical deployments, architectural breakdowns, and engineering insights from the Stark creator network.",
+    url: `${BASE_URL}/blog`,
+    siteName: "Stark",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Intelligence Reports | Stark",
+    description: "Technical deployments, architectural breakdowns, and engineering insights from the Stark creator network.",
+  },
 };
 
 export default async function GlobalBlogPage() {
