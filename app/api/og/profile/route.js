@@ -22,7 +22,7 @@ export async function GET(request) {
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', user.id)
     ]);
 
-    return new ImageResponse(
+    const imgResponse = new ImageResponse(
       (
         <div style={{
           height: '100%',
@@ -123,6 +123,8 @@ export async function GET(request) {
       ),
       { width: 1200, height: 630 }
     );
+    imgResponse.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    return imgResponse;
   } catch (e) {
     return new Response(`Failed to generate image`, { status: 500 });
   }

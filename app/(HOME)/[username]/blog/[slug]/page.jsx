@@ -2,11 +2,12 @@
 import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
-import Image from "next/image"; 
+import Image from "next/image";
 import BlogReader from "../_components/BlogReader";
+import JsonLd from "@/components/JsonLd";
 import { Loader2 } from "lucide-react";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
 // --- DYNAMIC METADATA (SEO & SOCIAL CARDS) ---
 export async function generateMetadata({ params }) {
@@ -15,12 +16,11 @@ export async function generateMetadata({ params }) {
   
   const supabase = await createClient();
 
-  // Fetch only what's needed for the preview
   const { data: blog } = await supabase
     .from('blogs')
-    .select('title, excerpt')
+    .select('title, excerpt, published_at, updated_at, cover_image, tags')
     .eq('slug', slug)
-    .eq('status', 'published') // Critical: ensure it's a public report
+    .eq('status', 'published')
     .single();
 
   // If RLS blocks this or it's a draft, return a generic but clean title
@@ -40,6 +40,7 @@ export async function generateMetadata({ params }) {
   return {
     title: pageTitle,
     description: pageDesc,
+    ...(blog.tags?.length > 0 && { keywords: blog.tags }),
     alternates: { canonical: canonicalUrl },
     openGraph: {
         title: pageTitle,
@@ -48,6 +49,10 @@ export async function generateMetadata({ params }) {
         siteName: 'Stark',
         images: [{ url: ogUrl, width: 1200, height: 630, alt: blog.title }],
         type: 'article',
+        ...(blog.published_at && { publishedTime: blog.published_at }),
+        ...(blog.updated_at && { modifiedTime: blog.updated_at }),
+        authors: [`${BASE_URL}/profile/${username}`],
+        ...(blog.tags?.length > 0 && { tags: blog.tags }),
     },
     twitter: {
         card: 'summary_large_image',
@@ -203,15 +208,55 @@ async function BlogContent({ username, slug }) {
       networkRelated = trendingData || [];
   }
 
+  const blogUrl = `${BASE_URL}/${username}/blog/${blog.slug}`;
+  const authorProfileUrl = `${BASE_URL}/profile/${author.username}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        headline: blog.title,
+        description: (blog.excerpt || "").substring(0, 200),
+        url: blogUrl,
+        mainEntityOfPage: blogUrl,
+        ...(blog.cover_image && { image: blog.cover_image }),
+        ...(blog.published_at && { datePublished: blog.published_at }),
+        ...(blog.updated_at && { dateModified: blog.updated_at }),
+        author: {
+          "@type": "Person",
+          name: author.full_name || author.username,
+          url: authorProfileUrl,
+          ...(author.avatar_url && { image: author.avatar_url }),
+        },
+        publisher: {
+          "@type": "Organization",
+          name: "Stark",
+          url: BASE_URL,
+          logo: { "@type": "ImageObject", url: `${BASE_URL}/og-image.png` },
+        },
+        ...(blog.tags?.length > 0 && { keywords: blog.tags.join(", ") }),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Intelligence Reports", item: `${BASE_URL}/blog` },
+          { "@type": "ListItem", position: 3, name: `@${author.username}`, item: authorProfileUrl },
+          { "@type": "ListItem", position: 4, name: blog.title, item: blogUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background pt-20 pb-32">
-      
+      <JsonLd data={jsonLd} strict />
       {/* THE MAIN INTERACTIVE READER */}
-      <BlogReader 
-        blog={blog} 
-        versions={versions} 
-        author={author} 
-        currentUser={currentUser} 
+      <BlogReader
+        blog={blog}
+        versions={versions}
+        author={author}
+        currentUser={currentUser}
       />
 
       {/* --- FOOTER: RELATED INTELLIGENCE SECTION --- */}

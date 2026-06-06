@@ -4,10 +4,24 @@ import ArenaClient from "./_components/ArenaClient";
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
 export const metadata = {
-  title: "Contests",
+  title: "Contests | Stark",
   description:
-    "Design and dev contests on Stark. Compete, submit projects, and win.",
+    "Design and dev contests on Stark. Compete, submit your projects, get ranked, and win recognition from the creator community.",
   alternates: { canonical: `${BASE_URL}/contests` },
+  openGraph: {
+    title: "Contests | Stark",
+    description: "Design and dev contests on Stark. Compete, submit your projects, and win.",
+    url: `${BASE_URL}/contests`,
+    siteName: "Stark",
+    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: "Stark Contests" }],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Contests | Stark",
+    description: "Design and dev contests on Stark. Compete, submit your projects, and win.",
+    images: [`${BASE_URL}/og-image.png`],
+  },
 };
 
 export default async function ContestsPage() {

@@ -1,6 +1,7 @@
 // app/(HOME)/blog/page.jsx
 import { createClient } from "@/utils/supabase/server";
 import BlogFeedClient from "./_components/BlogFeedClient";
+import JsonLd from "@/components/JsonLd";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://stark.et';
 
@@ -42,11 +43,32 @@ export default async function GlobalBlogPage() {
   // 4. Fetch Recommended Nodes (Influence Algorithm)
   const { data: recommendedNodes } = await supabase.rpc('get_recommended_bloggers');
 
+  const blogUrl = `${BASE_URL}/blog`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: "Intelligence Reports | Stark",
+        description: "Technical deployments, architectural breakdowns, and engineering insights from the Stark creator network.",
+        url: blogUrl,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Intelligence Reports", item: blogUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background pt-16 md:pt-20 pb-32">
-      <BlogFeedClient 
-        currentUser={user} 
-        initialPosts={initialPosts || []} 
+      <JsonLd data={jsonLd} />
+      <BlogFeedClient
+        currentUser={user}
+        initialPosts={initialPosts || []}
         carouselPosts={carouselPosts || []}
         recommendedNodes={recommendedNodes || []}
       />

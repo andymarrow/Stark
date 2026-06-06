@@ -1,6 +1,7 @@
 import { getEventsHubData } from "@/app/actions/getEventsHubData";
 import { redirect } from "next/navigation";
 import EventsHubClient from "./_components/EventsHubClient";
+import JsonLd from "@/components/JsonLd";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -44,11 +45,32 @@ export default async function EventsHubPage() {
     );
   }
 
+  const eventsUrl = `${BASE_URL}/events`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: "Events Hub | Stark",
+        description: "Discover global creator events, hackathons, and showcases on Stark.",
+        url: eventsUrl,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Stark", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Events", item: eventsUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <EventsHubClient 
-        initialHosted={data.hosted} 
-        initialSubmissions={data.submissions} 
+      <JsonLd data={jsonLd} />
+      <EventsHubClient
+        initialHosted={data.hosted}
+        initialSubmissions={data.submissions}
         initialRadar={data.radar}
       />
     </div>

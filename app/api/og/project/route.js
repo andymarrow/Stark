@@ -32,7 +32,7 @@ export async function GET(request) {
         imageSource = 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200';
     }
 
-    return new ImageResponse(
+    const imgResponse = new ImageResponse(
       (
         <div style={{
           height: '100%',
@@ -161,6 +161,8 @@ export async function GET(request) {
       ),
       { width: 1200, height: 630 }
     );
+    imgResponse.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    return imgResponse;
   } catch (e) {
     console.error("OG Generation Error:", e.message);
     return new Response(`Failed to generate image: ${e.message}`, { status: 500 });

@@ -35,7 +35,7 @@ export async function GET(request) {
     const authorDisplayName = b.author?.full_name || authorUsername;
     const authorAvatar = b.author?.avatar_url || `https://ui-avatars.com/api/?name=${authorUsername}&background=09090b&color=ef4444`;
 
-    return new ImageResponse(
+    const imgResponse = new ImageResponse(
       (
         <div style={{
           height: '100%',
@@ -211,6 +211,8 @@ export async function GET(request) {
       ),
       { width: 1200, height: 630 }
     );
+    imgResponse.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    return imgResponse;
   } catch (e) {
     console.error("Blog OG Generation Error:", e.message);
     return new Response(`Failed to generate image`, { status: 500 });
