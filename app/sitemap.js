@@ -38,39 +38,44 @@ function staticEntries() {
 }
 
 export async function generateSitemaps() {
-  const supabase = getSitemapSupabase();
+  try {
+    const supabase = getSitemapSupabase();
 
-  const [
-    { count: projectCount },
-    { count: profileCount },
-    { count: blogCount },
-  ] = await Promise.all([
-    supabase
-      .from('projects')
-      .select('slug', { count: 'exact', head: true })
-      .eq('status', 'published')
-      .eq('is_contest_entry', false),
-    supabase
-      .from('profiles')
-      .select('username', { count: 'exact', head: true }),
-    supabase
-      .from('blogs')
-      .select('slug', { count: 'exact', head: true })
-      .eq('status', 'published'),
-  ]);
+    const [
+      { count: projectCount },
+      { count: profileCount },
+      { count: blogCount },
+    ] = await Promise.all([
+      supabase
+        .from('projects')
+        .select('slug', { count: 'exact', head: true })
+        .eq('status', 'published')
+        .eq('is_contest_entry', false),
+      supabase
+        .from('profiles')
+        .select('username', { count: 'exact', head: true }),
+      supabase
+        .from('blogs')
+        .select('slug', { count: 'exact', head: true })
+        .eq('status', 'published'),
+    ]);
 
-  const nProjectChunks = Math.ceil(Math.max(0, projectCount || 0) / CHUNK_SIZE);
-  const nProfileChunks = Math.ceil(Math.max(0, profileCount || 0) / CHUNK_SIZE);
-  const nBlogChunks    = Math.ceil(Math.max(0, blogCount    || 0) / CHUNK_SIZE);
+    const nProjectChunks = Math.ceil(Math.max(0, projectCount || 0) / CHUNK_SIZE);
+    const nProfileChunks = Math.ceil(Math.max(0, profileCount || 0) / CHUNK_SIZE);
+    const nBlogChunks    = Math.ceil(Math.max(0, blogCount    || 0) / CHUNK_SIZE);
 
-  const ids = [{ id: 'static' }];
-  for (let i = 0; i < nProjectChunks; i++) ids.push({ id: `projects-${i}` });
-  for (let i = 0; i < nProfileChunks; i++) ids.push({ id: `profiles-${i}` });
-  for (let i = 0; i < nBlogChunks;    i++) ids.push({ id: `blogs-${i}` });
-  ids.push({ id: 'contests' });
-  ids.push({ id: 'events' });
+    const ids = [{ id: 'static' }];
+    for (let i = 0; i < nProjectChunks; i++) ids.push({ id: `projects-${i}` });
+    for (let i = 0; i < nProfileChunks; i++) ids.push({ id: `profiles-${i}` });
+    for (let i = 0; i < nBlogChunks;    i++) ids.push({ id: `blogs-${i}` });
+    ids.push({ id: 'contests' });
+    ids.push({ id: 'events' });
 
-  return ids;
+    return ids;
+  } catch (err) {
+    console.error('[sitemap] generateSitemaps failed, falling back to static only:', err);
+    return [{ id: 'static' }];
+  }
 }
 
 export default async function sitemap(props) {
