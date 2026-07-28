@@ -8,6 +8,7 @@ import { MessageSquareDashed, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import LoginRequiredState from "@/components/LoginRequiredState";
+import { useVoiceCommand } from "@/lib/voiceBridge";
 
 function ChatContent() {
   const { user, loading: authLoading } = useAuth();
@@ -120,6 +121,54 @@ function ChatContent() {
   useEffect(() => {
     if (chatIdFromUrl && user) handleSelectChat(chatIdFromUrl);
   }, [chatIdFromUrl, user?.id]);
+
+  // --- VOICE CONTROL: open OR start a direct message with anyone by name ---
+  // Mirrors ChatSidebar.handleStartChat: try an existing sidebar chat first,
+  // otherwise look the person up in profiles and either open the existing DM
+  // (via RPC) or begin a virtual handshake, so the first message creates the
+  // conversation. This is what makes "message <someone new>" work by voice.
+  useVoiceCommand("chat.open", async ({ name } = {}) => {
+    const q = (name || "").trim();
+    if (!q || !user) return;
+    const lower = q.toLowerCase();
+
+    // 1. Existing conversation already in the sidebar list.
+    const local = conversations.find(
+      (c) => c.name?.toLowerCase().includes(lower) || c.title?.toLowerCase().includes(lower)
+    );
+    if (local) {
+      handleSelectChat(local.id);
+      return;
+    }
+
+    // 2. Look the person up and open (or start) a direct message.
+    const { data: matches } = await supabase
+      .from("profiles")
+      .select("id, username, full_name, avatar_url")
+      .or(`username.ilike.%${q}%,full_name.ilike.%${q}%`)
+      .neq("id", user.id)
+      .limit(1);
+    const target = matches?.[0];
+    if (!target) return; // agent will report it couldn't find that person
+
+    const { data: existingId } = await supabase.rpc("get_conversation_id_by_user", {
+      target_user_id: target.id,
+    });
+    if (existingId) {
+      handleSelectChat(existingId);
+      return;
+    }
+
+    // No prior DM — open a virtual conversation (first send persists it).
+    handleSelectChat({
+      id: "virtual-" + target.id,
+      isVirtual: true,
+      type: "direct",
+      name: target.full_name || target.username,
+      avatar: target.avatar_url,
+      targetId: target.id,
+    });
+  });
 
   // --- 3. REALTIME SYNC HUB ---
   useEffect(() => {

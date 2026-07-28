@@ -7,6 +7,7 @@ import AdminMentionManager from "./_components/AdminMentionManager";
 import MentionFilterBar from "./_components/MentionFilterBar";
 import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { useVoiceCommand } from "@/lib/voiceBridge";
 
 export default function ExplorePage() {
   const { user, loading: authLoading } = useAuth();
@@ -44,6 +45,14 @@ export default function ExplorePage() {
     setViewMode(mode);
     localStorage.setItem("stark_explore_view", mode);
   };
+
+  // --- VOICE CONTROL: Explore layout view + spotlight mention ---
+  // (category/tech/sort filters live in GridContainer, driven by "explore.data")
+  useVoiceCommand("explore.view", ({ view, mention, ensureGrid } = {}) => {
+    if (ensureGrid) toggleView("grid");
+    else if (view === "grid" || view === "feed") toggleView(view);
+    if (mention !== undefined) setActiveMention(mention ? mention : null);
+  });
 
   if (authLoading) return (
     <div className="min-h-screen flex items-center justify-center">

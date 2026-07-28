@@ -7,6 +7,7 @@ import { useAuth } from "@/app/_context/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { projectSchema } from "@/lib/validations";
+import { useVoiceCommand } from "@/lib/voiceBridge";
 import { submitToEvent } from "@/app/actions/submitToEvent";
 import { getPublicFolders } from "@/app/actions/getPublicFolders";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,6 +62,15 @@ function CreateForm() {
     collaborators: [],
     readme: '',
     stats: { stars: 0, forks: 0 }
+  });
+
+  // --- VOICE CONTROL: pre-fill the create form from a voice request ---
+  useVoiceCommand("create.prefill", ({ title, type } = {}) => {
+    setFormData((prev) => ({
+      ...prev,
+      ...(title ? { title } : {}),
+      ...(type ? { type } : {}),
+    }));
   });
 
   useEffect(() => {

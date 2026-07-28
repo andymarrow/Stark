@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from './_context/AuthContext';
 import BadgeListener from "@/components/BadgeListener";
 import KonamiListener from "@/components/KonamiListener";
+import Assistant from "@/components/Assistant";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -100,6 +101,7 @@ export default function RootLayout({ children }) {
             <BadgeListener />
             <KonamiListener />
             {children}
+            <Assistant />
             <OfflineStatus />
             <Toaster />
           </ThemeProvider>

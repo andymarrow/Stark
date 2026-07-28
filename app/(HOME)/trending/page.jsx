@@ -8,7 +8,11 @@ import LeaderboardRow from "./_components/LeaderboardRow";
 import TrendingToggle from "./_components/TrendingToggle";
 import CreatorCard from "./_components/CreatorCard";
 import ProjectCard from "../_components/ProjectCard";
-import TrendingSortBar from "./_components/TrendingSortBar"; 
+import TrendingSortBar from "./_components/TrendingSortBar";
+import { useVoiceCommand } from "@/lib/voiceBridge";
+
+// Friendly voice metric names -> internal state values (UI labels: Traffic/Stars/Hype)
+const TREND_METRIC = { traffic: "views", views: "views", stars: "likes", likes: "likes", hype: "hype" };
 
 // --- HELPER: EXTRACT YOUTUBE THUMBNAIL ---
 const getThumbnail = (url) => {
@@ -39,6 +43,15 @@ export default function TrendingPage() {
 
   const [projects, setProjects] = useState([]);
   const [creators, setCreators] = useState([]);
+
+  // --- VOICE CONTROL: switch Projects/Creators + ranking metric ---
+  useVoiceCommand("trending.control", ({ view: v, metric } = {}) => {
+    if (v === "projects" || v === "creators") setView(v);
+    if (metric) {
+      const m = TREND_METRIC[String(metric).toLowerCase()];
+      if (m) setPopularMetric(m);
+    }
+  });
 
   useEffect(() => {
     const fetchData = async () => {

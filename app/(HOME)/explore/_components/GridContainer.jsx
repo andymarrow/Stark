@@ -11,6 +11,7 @@ import FilterSheet from "./FilterSheet";
 import Pagination from "@/components/ui/Pagination";
 import { COUNTRIES } from "@/constants/options";
 import ExploreTrendingBanner from "./ExploreTrendingBanner";
+import { useVoiceCommand } from "@/lib/voiceBridge";
 
 const ITEMS_PER_PAGE = 6;
 
@@ -40,6 +41,22 @@ export default function GridContainer({ activeMention, featuredUsernames = [] })
 
   const [sortOrder, setSortOrder] = useState("latest");
   const [popularMetric, setPopularMetric] = useState("hype");
+
+  // --- VOICE CONTROL: apply category/tech/sort filters by voice ---
+  useVoiceCommand("explore.data", ({ category, tech, sort, search, clear } = {}) => {
+    if (clear) {
+      setFilters({ region: null, stack: [], category: [], search: "", minQuality: 0, forHire: false });
+      setSortOrder("latest");
+      return;
+    }
+    setFilters((prev) => ({
+      ...prev,
+      ...(category ? { category: [category] } : {}),
+      ...(tech ? { stack: [tech] } : {}),
+      ...(search !== undefined ? { search } : {}),
+    }));
+    if (sort) setSortOrder(sort);
+  });
 
   useEffect(() => {
     setCurrentPage(1);

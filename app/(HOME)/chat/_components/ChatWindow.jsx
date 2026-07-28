@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import ChatHeader from "./ChatHeader";
 import MessageBubble from "./MessageBubble";
 import ChatInput from "./ChatInput";
+import { useVoiceCommand } from "@/lib/voiceBridge";
 import RequestBanner from "./RequestBanner";
 import ChatPinnedMessage from "./ChatPinnedMessage"; 
 
@@ -251,6 +252,12 @@ export default function ChatWindow({ convId, onBack, initialData }) {
       toast.error("Transmission Error", { description: "The node rejected the signal packet." });
     }
   };
+
+  // --- VOICE CONTROL: send a message in the currently open conversation ---
+  useVoiceCommand("chat.send", ({ text } = {}) => {
+    const body = (text || "").trim();
+    if (body) handleSend(body);
+  });
 
   const handleJoin = async () => {
     try {
