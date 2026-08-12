@@ -74,6 +74,28 @@ function go(route) {
 
 const like = (s) => `%${String(s ?? "").trim()}%`;
 
+// Tally rows by a key (e.g. count badges per user_id). Returns [[id, count], ...] desc.
+function topCounts(rows, key, n = 5) {
+  const counts = new Map();
+  for (const r of rows || []) {
+    const id = r?.[key];
+    if (id == null) continue;
+    counts.set(id, (counts.get(id) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
+// Sum a numeric field by a key (e.g. total project views per owner_id). Returns [[id, sum], ...] desc.
+function topSums(rows, key, valKey, n = 5) {
+  const sums = new Map();
+  for (const r of rows || []) {
+    const id = r?.[key];
+    if (id == null) continue;
+    sums.set(id, (sums.get(id) || 0) + (Number(r?.[valKey]) || 0));
+  }
+  return [...sums.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+}
+
 // ---- capability registry ----------------------------------------------------
 
 function registerCapabilities(ai) {
@@ -295,6 +317,162 @@ function registerCapabilities(ai) {
           .limit(1);
         if (!data?.length) return { status: "not_found", message: `No contest matching "${title}".` };
         return { status: "ok", opened: go(`/contests/${data[0].slug}`), title: data[0].title };
+      },
+    },
+
+    // === Analytics / leaderboards =========================================
+    topProjects: {
+      description:
+        "Find the top projects by 'views' or 'stars' (likes). scope 'mine' = only the signed-in user's own projects (use for 'my most-viewed project'); 'all' = the whole platform. Set open=true to jump straight to the #1 project.",
+      params: {
+        metric: { type: "string", description: "Ranking metric.", enum: ["views", "stars"] },
+        scope: { type: "string", description: "Whose projects.", enum: ["mine", "all"] },
+        open: { type: "boolean", description: "Open the #1 project." },
+      },
+      handler: async ({ metric = "views", scope = "all", open = false }) => {
+        const col = metric === "stars" ? "likes_count" : "views";
+        if (scope === "mine" && !ctx.user)
+          return { status: "unauthenticated", message: "Sign in to see your own projects." };
+        let q = supabase
+          .from("projects")
+          .select("title, slug, views, likes_count, owner_id")
+          .eq("status", "published");
+        if (scope === "mine") q = q.eq("owner_id", ctx.user.id);
+        const { data } = await q.order(col, { ascending: false }).limit(open ? 1 : 5);
+        if (!data?.length)
+          return {
+            status: "not_found",
+            message: scope === "mine" ? "You have no published projects yet." : "No projects found.",
+          };
+        const top = data.map((p) => ({
+          name: p.title,
+          views: p.views,
+          stars: p.likes_count,
+          open: `/project/${p.slug}`,
+        }));
+        if (open) go(top[0].open);
+        return { status: "ok", scope, metric, top, opened: open ? top[0].open : undefined };
+      },
+    },
+
+    topBlogs: {
+      description:
+        "Find the best-performing blog posts by 'views' or 'stars' (likes). Set open=true to open the #1 post — use this for 'open the best performing blog'.",
+      params: {
+        metric: { type: "string", description: "Ranking metric.", enum: ["views", "stars"] },
+        open: { type: "boolean", description: "Open the #1 blog post." },
+      },
+      handler: async ({ metric = "views", open = false }) => {
+        const col = metric === "stars" ? "likes_count" : "views";
+        const { data } = await supabase
+          .from("blogs")
+          .select("title, slug, views, likes_count, author:profiles!author_id(username)")
+          .eq("status", "published")
+          .order(col, { ascending: false })
+          .limit(open ? 1 : 5);
+        if (!data?.length) return { status: "not_found", message: "No published blogs found." };
+        const top = data.map((b) => ({
+          name: b.title,
+          views: b.views,
+          stars: b.likes_count,
+          open: b.author?.username ? `/${b.author.username}/blog/${b.slug}` : undefined,
+        }));
+        if (open && top[0].open) go(top[0].open);
+        return { status: "ok", metric, top, opened: open ? top[0]?.open : undefined };
+      },
+    },
+
+    topUsers: {
+      description:
+        "Rank users across all of Stark by a metric: 'badges' (most achievements unlocked), 'views' (highest total views across their published projects), or 'followers' (most followed). Set open=true to open the #1 user's profile. Use for questions like 'who has the most badges' or 'which creator has the most views'.",
+      params: {
+        metric: { type: "string", required: true, description: "How to rank users.", enum: ["badges", "views", "followers"] },
+        open: { type: "boolean", description: "Open the #1 user's profile." },
+      },
+      handler: async ({ metric, open = false }) => {
+        const rpcName =
+          metric === "badges"
+            ? "get_top_users_by_badges"
+            : metric === "followers"
+            ? "get_top_users_by_followers"
+            : "get_top_users_by_project_views";
+
+        let leaderboard = null;
+
+        // Preferred path: database leaderboard RPC (accurate + fast).
+        const { data: rpc, error: rpcErr } = await supabase.rpc(rpcName, { p_limit: 5 });
+        if (!rpcErr && Array.isArray(rpc) && rpc.length) {
+          leaderboard = rpc.map((r) => ({
+            name: r.full_name || r.username || "Unknown",
+            username: r.username,
+            score: Number(r.score) || 0,
+            open: r.username ? `/profile/${r.username}` : undefined,
+          }));
+        } else {
+          // Fallback: client-side aggregation (works before the SQL migration
+          // is applied; capped by PostgREST's row limit on large datasets).
+          let ranked = [];
+          if (metric === "badges") {
+            const { data } = await supabase.from("user_achievements").select("user_id").limit(5000);
+            ranked = topCounts(data, "user_id");
+          } else if (metric === "followers") {
+            const { data } = await supabase.from("follows").select("following_id").limit(5000);
+            ranked = topCounts(data, "following_id");
+          } else {
+            const { data } = await supabase
+              .from("projects")
+              .select("owner_id, views")
+              .eq("status", "published")
+              .limit(5000);
+            ranked = topSums(data, "owner_id", "views");
+          }
+          if (ranked.length) {
+            const ids = ranked.map(([id]) => id);
+            const { data: profs } = await supabase
+              .from("profiles")
+              .select("id, username, full_name")
+              .in("id", ids);
+            const byId = new Map((profs || []).map((p) => [p.id, p]));
+            leaderboard = ranked.map(([id, score]) => {
+              const p = byId.get(id);
+              return {
+                name: p?.full_name || p?.username || "Unknown",
+                username: p?.username,
+                score,
+                open: p?.username ? `/profile/${p.username}` : undefined,
+              };
+            });
+          }
+        }
+
+        if (!leaderboard?.length) return { status: "no_data", message: "Not enough data to rank users yet." };
+        if (open && leaderboard[0]?.open) go(leaderboard[0].open);
+        return { status: "ok", metric, leaderboard, opened: open ? leaderboard[0]?.open : undefined };
+      },
+    },
+
+    myStats: {
+      description:
+        "Report the signed-in user's own stats: total views and stars across their published projects, number of badges/achievements, and follower count.",
+      handler: async () => {
+        const uid = ctx.user?.id;
+        if (!uid) return { status: "unauthenticated", message: "Sign in to see your stats." };
+        const [proj, badges, followers] = await Promise.all([
+          supabase.from("projects").select("views, likes_count").eq("owner_id", uid).eq("status", "published").limit(5000),
+          supabase.from("user_achievements").select("id", { count: "exact", head: true }).eq("user_id", uid),
+          supabase.from("follows").select("id", { count: "exact", head: true }).eq("following_id", uid),
+        ]);
+        const projects = proj.data || [];
+        const totalViews = projects.reduce((n, p) => n + (Number(p.views) || 0), 0);
+        const totalStars = projects.reduce((n, p) => n + (Number(p.likes_count) || 0), 0);
+        return {
+          status: "ok",
+          projects: projects.length,
+          totalViews,
+          totalStars,
+          badges: badges.count || 0,
+          followers: followers.count || 0,
+        };
       },
     },
 
