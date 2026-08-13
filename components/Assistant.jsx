@@ -96,6 +96,25 @@ function topSums(rows, key, valKey, n = 5) {
   return [...sums.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 
+// Strip HTML/rich-text down to readable plain text so the agent can speak it.
+function toPlainText(html, max = 3000) {
+  if (!html) return "";
+  const text = String(html)
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/(p|div|h[1-6]|li|br)>/gi, ". ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .replace(/\s*\.\s*\.\s*/g, ". ")
+    .trim();
+  return text.length > max ? text.slice(0, max).trimEnd() + "…" : text;
+}
+
 // ---- capability registry ----------------------------------------------------
 
 function registerCapabilities(ai) {
@@ -317,6 +336,127 @@ function registerCapabilities(ai) {
           .limit(1);
         if (!data?.length) return { status: "not_found", message: `No contest matching "${title}".` };
         return { status: "ok", opened: go(`/contests/${data[0].slug}`), title: data[0].title };
+      },
+    },
+
+    // === Content / read-aloud =============================================
+    describeProject: {
+      description:
+        "Explain what a project is or does by reading its description. Give a `title`, plus an optional `author` name to disambiguate (e.g. 'OmniOptimize by Andy Marrow'). If no title is given and the user is on a project page, describe THAT project. Use for 'what does this project do' or 'what does <project> do'.",
+      params: {
+        title: { type: "string", description: "Project title (omit to describe the project currently open)." },
+        author: { type: "string", description: "Optional creator name or username to pick the right project." },
+      },
+      handler: async ({ title, author }) => {
+        const sel =
+          "title, slug, description, tags, demo_link, author:profiles!projects_owner_id_fkey(username, full_name)";
+        let proj = null;
+        const onProject = (ctx.pathname || "").match(/^\/project\/([^/?#]+)/);
+        if (title) {
+          const { data } = await supabase
+            .from("projects")
+            .select(sel)
+            .ilike("title", like(title))
+            .eq("status", "published")
+            .limit(6);
+          const rows = data || [];
+          if (author) {
+            const a = author.toLowerCase();
+            proj =
+              rows.find(
+                (r) =>
+                  (r.author?.username || "").toLowerCase().includes(a) ||
+                  (r.author?.full_name || "").toLowerCase().includes(a)
+              ) || rows[0];
+          } else {
+            proj = rows[0];
+          }
+        } else if (onProject) {
+          const { data } = await supabase.from("projects").select(sel).eq("slug", decodeURIComponent(onProject[1])).limit(1);
+          proj = data?.[0];
+        }
+        if (!proj)
+          return {
+            status: "not_found",
+            message: title
+              ? `I couldn't find a project called "${title}".`
+              : "Open a project first, or tell me the project's name.",
+          };
+        return {
+          status: "ok",
+          title: proj.title,
+          by: proj.author?.full_name || proj.author?.username,
+          description: toPlainText(proj.description, 2000) || "(No description provided.)",
+          tags: proj.tags || undefined,
+          demo: proj.demo_link || undefined,
+          open: `/project/${proj.slug}`,
+        };
+      },
+    },
+
+    readBlog: {
+      description:
+        "Read or summarize a blog post aloud. Give a `title`, or set latest=true (or omit the title) for the most recent post, or omit everything while on a blog page to read the one that's open. Returns the caption plus the article text. Use for 'read this blog', 'read out this blog', or 'tell me about the latest blog'.",
+      params: {
+        title: { type: "string", description: "Blog title (omit for the latest or currently-open post)." },
+        latest: { type: "boolean", description: "Force the most recent published post." },
+      },
+      handler: async ({ title, latest }) => {
+        const sel =
+          "title, slug, excerpt, content, reading_time, published_at, author:profiles!author_id(username, full_name)";
+        let blog = null;
+        const onBlog = (ctx.pathname || "").match(/^\/[^/]+\/blog\/([^/?#]+)/);
+        if (title) {
+          const { data } = await supabase.from("blogs").select(sel).ilike("title", like(title)).eq("status", "published").limit(1);
+          blog = data?.[0];
+        } else if (onBlog && !latest) {
+          const { data } = await supabase.from("blogs").select(sel).eq("slug", decodeURIComponent(onBlog[1])).eq("status", "published").limit(1);
+          blog = data?.[0];
+        } else {
+          const { data } = await supabase
+            .from("blogs")
+            .select(sel)
+            .eq("status", "published")
+            .order("published_at", { ascending: false })
+            .limit(1);
+          blog = data?.[0];
+        }
+        if (!blog)
+          return { status: "not_found", message: title ? `I couldn't find a blog called "${title}".` : "There's no blog to read." };
+        const full = toPlainText(blog.content, 1_000_000);
+        return {
+          status: "ok",
+          title: blog.title,
+          by: blog.author?.full_name || blog.author?.username,
+          caption: blog.excerpt || undefined,
+          readingTime: blog.reading_time || undefined,
+          content: full.length > 3000 ? full.slice(0, 3000).trimEnd() + "…" : full,
+          truncated: full.length > 3000,
+          open: blog.author?.username ? `/${blog.author.username}/blog/${blog.slug}` : undefined,
+        };
+      },
+    },
+
+    featuredBlogs: {
+      description:
+        "List the featured blog posts with their captions (excerpts). On Stark the blog home features the most recent posts. Use for 'what are the featured blogs' or 'read the captions of the featured blogs'.",
+      params: { count: { type: "number", description: "How many to list (default 5, max 10)." } },
+      handler: async ({ count }) => {
+        const n = Math.min(Math.max(Number(count) || 5, 1), 10);
+        const { data } = await supabase
+          .from("blogs")
+          .select("title, slug, excerpt, author:profiles!author_id(username)")
+          .eq("status", "published")
+          .order("published_at", { ascending: false })
+          .limit(n);
+        const blogs = (data || []).map((b) => ({
+          title: b.title,
+          caption: b.excerpt || "(no caption)",
+          by: b.author?.username,
+          open: b.author?.username ? `/${b.author.username}/blog/${b.slug}` : undefined,
+        }));
+        if (!blogs.length) return { status: "not_found", message: "No published blogs yet." };
+        return { status: "ok", blogs };
       },
     },
 
