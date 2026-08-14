@@ -13,19 +13,17 @@ export default function ArenaFeed() {
   const [hasMore, setHasMore] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  const fetchFeed = async (isNewFilter = false) => {
+  const fetchFeed = async (targetPage, isNewFilter = false) => {
     setLoading(true);
-    const currentPage = isNewFilter ? 1 : page;
-    const res = await getArenaFeed({ filter, page: currentPage });
-    
-    if (isNewFilter) setItems(res.data);
-    else setItems(prev => [...prev, ...res.data]);
-    
+    const res = await getArenaFeed({ filter, page: targetPage });
+
+    setItems((prev) => (isNewFilter ? res.data : [...prev, ...res.data]));
     setHasMore(res.hasMore);
+    setPage(targetPage);
     setLoading(false);
   };
 
-  useEffect(() => { fetchFeed(true); }, [filter]);
+  useEffect(() => { fetchFeed(1, true); }, [filter]);
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
@@ -54,8 +52,8 @@ export default function ArenaFeed() {
             )}
 
             {!loading && hasMore && (
-                <button 
-                    onClick={() => { setPage(p => p + 1); fetchFeed(); }}
+                <button
+                    onClick={() => fetchFeed(page + 1)}
                     className="w-full py-4 border border-dashed border-border text-[10px] font-mono text-muted-foreground hover:text-foreground uppercase transition-colors"
                 >
                     <Terminal size={14} className="inline mr-2" /> Load_More_Entries()

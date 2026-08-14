@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import ArenaClient from "./_components/ArenaClient";
+import { getContestGrid } from "@/app/actions/getContestGrid";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
@@ -78,23 +79,18 @@ export default async function ContestsPage() {
     .order('rank', { ascending: true }) // Rank 1 first
     .limit(10);
 
-  // 4. Fetch Feed (Latest Submissions)
-  const { data: feed } = await supabase
-    .from('contest_submissions')
-    .select(`
-        id, final_score, rank,
-        project:projects!inner(title, slug, thumbnail_url, likes_count, views, owner:profiles!projects_owner_id_fkey(username)),
-        contest:contests!inner(title)
-    `)
-    .order('submitted_at', { ascending: false })
-    .limit(20);
+  // 4. Fetch the FIRST PAGE of the grid feed. Further pages are loaded on
+  //    demand via the "Load More" button (getContestGrid), so we never render
+  //    hundreds/thousands of entries up front.
+  const { data: feed, hasMore: feedHasMore } = await getContestGrid({ page: 1 });
 
   return (
-    <ArenaClient 
-        initialContests={contestsWithStats} 
+    <ArenaClient
+        initialContests={contestsWithStats}
         activeContest={featuredContest} // Pass the calculated hero
         hallOfFame={topRanked || []}
         initialFeed={feed || []}
+        initialHasMore={feedHasMore}
     />
   );
 }

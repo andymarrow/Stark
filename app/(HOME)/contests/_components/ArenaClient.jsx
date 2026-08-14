@@ -1,20 +1,26 @@
 "use client";
 import { useState } from "react";
-import { Zap, Trophy, RefreshCw, Grid, List, Plus, Swords, Cpu } from "lucide-react";
+import { Zap, Trophy, RefreshCw, Grid, List, Plus, Swords, Cpu, Loader2, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 import ArenaHero from "./ArenaHero";
 import CyberCard from "./CyberCard";
 import HallOfFame from "./HallOfFame";
-import ArenaFeed from "./ArenaFeed"; 
+import ArenaFeed from "./ArenaFeed";
 import ContestListModal from "./ContestListModal";
+import { getContestGrid } from "@/app/actions/getContestGrid";
 
-export default function ArenaClient({ initialContests, activeContest, hallOfFame, initialFeed }) {
+export default function ArenaClient({ initialContests, activeContest, hallOfFame, initialFeed, initialHasMore = false }) {
   const [viewMode, setViewMode] = useState("grid");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [feed, setFeed] = useState(initialFeed);
   const [isShuffling, setIsShuffling] = useState(false);
+
+  // Grid pagination — load more entries on demand instead of up front.
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const handleShuffle = () => {
     setIsShuffling(true);
@@ -22,6 +28,17 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
         setFeed([...feed].sort(() => 0.5 - Math.random()));
         setIsShuffling(false);
     }, 600);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = page + 1;
+    const res = await getContestGrid({ page: next });
+    setFeed((prev) => [...prev, ...res.data]);
+    setHasMore(res.hasMore);
+    setPage(next);
+    setLoadingMore(false);
   };
 
   return (
@@ -58,8 +75,24 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
 
                     <AnimatePresence mode="wait">
                         {viewMode === 'grid' ? (
-                            <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                                {feed.map((entry) => <CyberCard key={entry.id} entry={entry} />)}
+                            <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {feed.map((entry) => <CyberCard key={entry.id} entry={entry} />)}
+                                </div>
+
+                                {hasMore && (
+                                    <button
+                                        onClick={loadMore}
+                                        disabled={loadingMore}
+                                        className="w-full mt-4 py-4 border border-dashed border-border text-[10px] font-mono text-muted-foreground hover:text-foreground uppercase transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+                                    >
+                                        {loadingMore ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                            <><Terminal size={14} /> Load_More_Entries()</>
+                                        )}
+                                    </button>
+                                )}
                             </motion.div>
                         ) : (
                             <motion.div key="feed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
