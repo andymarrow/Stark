@@ -8,7 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from './_context/AuthContext';
 import BadgeListener from "@/components/BadgeListener";
 import KonamiListener from "@/components/KonamiListener";
-import Assistant from "@/components/Assistant";
+// import Assistant from "@/components/Assistant"; // TEMP: disabled for demo — re-enable to show Voxide integration
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -101,7 +101,7 @@ export default function RootLayout({ children }) {
             <BadgeListener />
             <KonamiListener />
             {children}
-            <Assistant />
+            {/* <Assistant /> */}{/* TEMP: disabled for demo — re-enable to show Voxide integration */}
             <OfflineStatus />
             <Toaster />
           </ThemeProvider>
