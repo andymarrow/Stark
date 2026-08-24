@@ -877,7 +877,6 @@ export function Assistant() {
       client={ai}
       accentColor="#FF0000"
       title="Stark Assistant"
-      position="bottom-right"
       theme="auto"
     />
   );
