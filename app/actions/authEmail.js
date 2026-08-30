@@ -84,7 +84,7 @@ export async function signUpWithEmail({ email, password, username, origin }) {
     });
 
     if (error) {
-      if (!/already registered|already exists/i.test(error.message)) {
+      if (!/already.*(registered|exists)/i.test(error.message)) {
         return { status: "error", message: error.message };
       }
 
