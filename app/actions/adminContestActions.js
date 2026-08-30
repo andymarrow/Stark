@@ -1,6 +1,7 @@
 "use server";
 import { Resend } from 'resend';
 import { createClient } from "@/utils/supabase/server";
+import { renderEmail } from "@/lib/emailTemplate";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = 'Stark Admin <admin@stark.et>';
@@ -53,15 +54,14 @@ export async function deleteContestAsAdmin(contestId, reason) {
           from: SENDER_EMAIL,
           to: [creatorEmail],
           subject: `Notice: Contest Deletion (${contest.title})`,
-          html: `
-            <div style="font-family: monospace; color: #000;">
-              <h1>ADMINISTRATIVE ACTION</h1>
-              <p>Your contest <strong>${contest.title}</strong> has been removed from Stark.</p>
-              <p><strong>Reason:</strong> ${reason}</p>
-              <hr />
-              <p>If you believe this is an error, reply to this email.</p>
-            </div>
-          `
+          html: renderEmail({
+            tag: "MODERATION",
+            intro: [
+              `Your contest <strong style="color: #ffffff;">${contest.title}</strong> has been removed from Stark.`,
+              `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+            ],
+            footerNote: "If you believe this is an error, reply to this email.",
+          }),
         });
         if (resendError) console.error(" [Admin] Creator Email Failed:", resendError);
         else console.log(" [Admin] Creator Email Sent.");
@@ -75,14 +75,14 @@ export async function deleteContestAsAdmin(contestId, reason) {
                   from: SENDER_EMAIL,
                   to: [email],
                   subject: `Notice: Contest Cancelled (${contest.title})`,
-                  html: `
-                    <div style="font-family: monospace; color: #000;">
-                      <h2>CONTEST TERMINATED</h2>
-                      <p>The contest <strong>${contest.title}</strong> you submitted to has been removed by our moderation team.</p>
-                      <p><strong>Reason:</strong> ${reason}</p>
-                      <p>Your project submission has been delinked. You can make it public from your dashboard.</p>
-                    </div>
-                  `
+                  html: renderEmail({
+                    tag: "MODERATION",
+                    intro: [
+                      `The contest <strong style="color: #ffffff;">${contest.title}</strong> you submitted to has been removed by our moderation team.`,
+                      `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+                      `Your project submission has been delinked. You can make it public again from your dashboard.`,
+                    ],
+                  }),
               });
               if (error) console.error(` [Admin] Failed to email ${email}:`, error);
           }));
@@ -119,12 +119,13 @@ export async function removeJudgeAsAdmin(judgeId, reason, contestTitle, creatorE
         from: SENDER_EMAIL,
         to: [creatorEmail],
         subject: `Admin Action: Judge Removed`,
-        html: `
-            <div style="font-family: monospace;">
-                <p>A judge was removed from your contest <strong>${contestTitle}</strong> by an administrator.</p>
-                <p><strong>Reason:</strong> ${reason}</p>
-            </div>
-        `
+        html: renderEmail({
+            tag: "MODERATION",
+            intro: [
+              `A judge was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
+              `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+            ],
+        }),
     });
   }
   return { success: true };
@@ -146,13 +147,13 @@ export async function removeSponsorAsAdmin(contestId, sponsorName, reason, conte
         from: SENDER_EMAIL,
         to: [creatorEmail],
         subject: `Admin Action: Sponsor Removed (${contestTitle})`,
-        html: `
-            <div style="font-family: monospace;">
-                <h1>MODERATION ALERT</h1>
-                <p>The sponsor <strong>${sponsorName}</strong> was removed from your contest <strong>${contestTitle}</strong> by an administrator.</p>
-                <p><strong>Reason:</strong> ${reason}</p>
-            </div>
-        `
+        html: renderEmail({
+            tag: "MODERATION",
+            intro: [
+              `The sponsor <strong style="color: #ffffff;">${sponsorName}</strong> was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
+              `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+            ],
+        }),
     });
   }
   return { success: true };
