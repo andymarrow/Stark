@@ -70,25 +70,57 @@ export async function signUpWithEmail({ email, password, username, origin }) {
 
   try {
     const admin = getAdminClient();
+    const redirectTo = `${origin}/auth/callback?next=/onboarding`;
+    const metadata = {
+      full_name: username,
+      username: String(username || "").toLowerCase().replace(/\s+/g, "_"),
+    };
 
-    const { data, error } = await admin.auth.admin.generateLink({
+    let { data, error } = await admin.auth.admin.generateLink({
       type: "signup",
       email,
       password,
-      options: {
-        data: {
-          full_name: username,
-          username: String(username || "").toLowerCase().replace(/\s+/g, "_"),
-        },
-        redirectTo: `${origin}/auth/callback?next=/onboarding`,
-      },
+      options: { data: metadata, redirectTo },
     });
 
     if (error) {
-      const message = /already registered|already exists/i.test(error.message)
-        ? "An account with that email already exists."
-        : error.message;
-      return { status: "error", message };
+      if (!/already registered|already exists/i.test(error.message)) {
+        return { status: "error", message: error.message };
+      }
+
+      // The account already exists — that's only a real dead end if it's
+      // already verified. For a still-unverified account (the common case:
+      // their first confirmation email never arrived), fall through and
+      // resend a fresh link instead of blocking them here. A magiclink
+      // works for existing users (unlike the signup type) and its response
+      // tells us whether the email is confirmed.
+      const retryLink = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: { redirectTo },
+      });
+
+      if (retryLink.error || !retryLink.data?.properties?.action_link) {
+        return { status: "error", message: "An account with that email already exists." };
+      }
+
+      if (retryLink.data.user?.email_confirmed_at) {
+        return {
+          status: "error",
+          message: "An account with that email already exists. Try logging in instead.",
+        };
+      }
+
+      // Still unverified — keep whatever password/username they just typed,
+      // in case they're retrying signup because they forgot the originals.
+      if (retryLink.data.user?.id) {
+        await admin.auth.admin.updateUserById(retryLink.data.user.id, {
+          password,
+          user_metadata: metadata,
+        });
+      }
+
+      data = retryLink.data;
     }
 
     const actionLink = data?.properties?.action_link;
