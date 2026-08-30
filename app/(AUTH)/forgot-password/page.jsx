@@ -5,8 +5,8 @@ import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthShell from "../_components/AuthShell";
-import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
+import { sendPasswordReset } from "@/app/actions/authEmail";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -18,12 +18,10 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            // Redirect to a page where they can enter new password
-            redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
-        });
-
-        if (error) throw error;
+        // Routed through Resend (see app/actions/authEmail.js) — Supabase's
+        // own mailer was the reason these links never arrived.
+        const result = await sendPasswordReset({ email, origin: window.location.origin });
+        if (result.status !== "sent") throw new Error(result.message);
 
         setIsSubmitted(true);
         toast.success("Recovery Sequence Initiated");

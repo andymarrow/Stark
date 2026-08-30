@@ -7,6 +7,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { signUpWithEmail } from "@/app/actions/authEmail";
 
 export default function AuthForm({ view = "login" }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -24,27 +25,20 @@ export default function AuthForm({ view = "login" }) {
 
     try {
       if (view === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        // Routed through Resend (see app/actions/authEmail.js) — Supabase's
+        // own mailer was the reason verification emails never arrived.
+        const result = await signUpWithEmail({
           email,
           password,
-          options: {
-            data: {
-              full_name: username, 
-              username: username.toLowerCase().replace(/\s+/g, '_')
-            },
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`
-          }
+          username,
+          origin: window.location.origin,
         });
 
-        if (error) throw error;
+        if (result.status !== "sent") throw new Error(result.message);
 
-        if (data.session) {
-            router.push("/onboarding");
-        } else {
-            setIsEmailSent(true); // Transition UI to "Check Email"
-            toast.success("Verification Link Dispatched");
-        }
-        
+        setIsEmailSent(true); // Transition UI to "Check Email"
+        toast.success("Verification Link Dispatched");
+
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
