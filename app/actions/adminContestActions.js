@@ -5,6 +5,39 @@ import { renderEmail } from "@/lib/emailTemplate";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = 'Stark Admin <admin@stark.et>';
+const MAX_FEATURED_CONTESTS = 2; // The hero on /contests only has 2 spotlight slots.
+
+// The contests page hero spotlights at most MAX_FEATURED_CONTESTS contests,
+// so featuring a 3rd needs a clear "unfeature one first" instead of doing
+// nothing visible. We also re-select the row after the write and treat zero
+// rows back as a failure (instead of the client's previous fire-and-forget
+// update, which reported success even when RLS silently blocked it).
+export async function toggleContestFeatured(contestId, nextValue) {
+  const supabase = await createClient();
+
+  if (nextValue) {
+    const { count, error: countError } = await supabase
+      .from('contests')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_featured', true)
+      .neq('id', contestId);
+
+    if (countError) return { error: countError.message };
+    if ((count || 0) >= MAX_FEATURED_CONTESTS) {
+      return { error: `Only ${MAX_FEATURED_CONTESTS} contests can be featured at once. Unfeature one first.` };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('contests')
+    .update({ is_featured: nextValue })
+    .eq('id', contestId)
+    .select('id, is_featured')
+    .single();
+
+  if (error) return { error: error.message || "Update was blocked — check your admin permissions." };
+  return { success: true, isFeatured: data.is_featured };
+}
 
 export async function deleteContestAsAdmin(contestId, reason) {
   const supabase = await createClient();

@@ -30,6 +30,8 @@ export default function ContestControlPage() {
 
   useEffect(() => { fetchContests(); }, []);
 
+  const featuredCount = contests.filter((c) => c.is_featured).length;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
         
@@ -39,7 +41,13 @@ export default function ContestControlPage() {
                 <h1 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
                     <Trophy className="text-yellow-500" /> Contest Control
                 </h1>
-                <p className="text-zinc-500 font-mono text-xs">GLOBAL_EVENTS: {contests.length}</p>
+                <p className="text-zinc-500 font-mono text-xs flex items-center gap-3">
+                    <span>GLOBAL_EVENTS: {contests.length}</span>
+                    <span className="text-zinc-700">|</span>
+                    <span className={featuredCount >= 2 ? "text-green-500" : ""}>
+                        FEATURED_SLOTS: {featuredCount}/2
+                    </span>
+                </p>
             </div>
             {/* Search (Simplified) */}
             <div className="relative">

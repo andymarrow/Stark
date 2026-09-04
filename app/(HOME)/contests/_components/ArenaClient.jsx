@@ -9,13 +9,19 @@ import CyberCard from "./CyberCard";
 import HallOfFame from "./HallOfFame";
 import ArenaFeed from "./ArenaFeed";
 import ContestListModal from "./ContestListModal";
+import ContestRail from "./ContestRail";
 import { getContestGrid } from "@/app/actions/getContestGrid";
 
-export default function ArenaClient({ initialContests, activeContest, hallOfFame, initialFeed, initialHasMore = false }) {
+export default function ArenaClient({ initialContests, heroContests = [], hallOfFame, initialFeed, initialHasMore = false }) {
   const [viewMode, setViewMode] = useState("grid");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [feed, setFeed] = useState(initialFeed);
   const [isShuffling, setIsShuffling] = useState(false);
+
+  // Everything not already spotlighted in the hero — surfaced in the rail
+  // below it so people don't have to hunt for "other contests" at all.
+  const heroIds = new Set(heroContests.map((c) => c.id));
+  const otherContests = initialContests.filter((c) => !heroIds.has(c.id));
 
   // Grid pagination — load more entries on demand instead of up front.
   const [page, setPage] = useState(1);
@@ -43,7 +49,9 @@ export default function ArenaClient({ initialContests, activeContest, hallOfFame
 
   return (
     <div className="min-h-screen bg-background pb-20">
-        <ArenaHero activeContest={activeContest} />
+        <ArenaHero contests={heroContests} />
+
+        <ContestRail contests={otherContests} onViewAll={() => setIsModalOpen(true)} />
 
         <div className="container mx-auto px-4 max-w-[1400px] mt-8">
             <div className="flex flex-col lg:flex-row gap-8">

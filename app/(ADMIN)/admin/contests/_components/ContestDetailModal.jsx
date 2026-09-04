@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { deleteContestAsAdmin, removeJudgeAsAdmin } from "@/app/actions/adminContestActions";
+import { deleteContestAsAdmin, removeJudgeAsAdmin, toggleContestFeatured } from "@/app/actions/adminContestActions";
 
 // --- SUB-COMPONENTS (Internal for organization) ---
 import PersonnelTab from "./PersonnelTab";
@@ -22,13 +22,24 @@ export default function ContestDetailModal({ contest, isOpen, onClose }) {
   // Local state for immediate UI updates
   const [isFeatured, setIsFeatured] = useState(contest.is_featured);
   const [isVerified, setIsVerified] = useState(contest.is_verified);
+  const [isTogglingFeatured, setIsTogglingFeatured] = useState(false);
 
   // Toggle Handlers
   const toggleFeatured = async () => {
+    if (isTogglingFeatured) return;
     const newVal = !isFeatured;
-    setIsFeatured(newVal);
-    await supabase.from('contests').update({ is_featured: newVal }).eq('id', contest.id);
-    toast.success(newVal ? "Contest Featured" : "Contest Unfeatured");
+    setIsTogglingFeatured(true);
+    setIsFeatured(newVal); // optimistic
+
+    const result = await toggleContestFeatured(contest.id, newVal);
+
+    if (result.error) {
+      setIsFeatured(!newVal); // revert — the write didn't actually go through
+      toast.error("Couldn't update Featured", { description: result.error });
+    } else {
+      toast.success(newVal ? "Contest Featured" : "Contest Unfeatured");
+    }
+    setIsTogglingFeatured(false);
   };
 
   const toggleVerified = async () => {
@@ -76,9 +87,10 @@ export default function ContestDetailModal({ contest, isOpen, onClose }) {
                     >
                         <Shield size={12} /> Verified
                     </button>
-                    <button 
+                    <button
                         onClick={toggleFeatured}
-                        className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono uppercase border transition-colors
+                        disabled={isTogglingFeatured}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono uppercase border transition-colors disabled:opacity-50
                             ${isFeatured ? 'bg-green-900/20 border-green-500 text-green-400' : 'bg-black border-zinc-800 text-zinc-500 hover:border-zinc-600'}
                         `}
                     >

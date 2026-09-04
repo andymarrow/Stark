@@ -64,8 +64,16 @@ export default async function ContestsPage() {
   // Sort by Hype (Most Likes) -> Then Newest
   contestsWithStats.sort((a, b) => b.hype_score - a.hype_score || new Date(b.created_at) - new Date(a.created_at));
 
-  // The Winner becomes the Hero (Most Hype Active Contest)
-  const featuredContest = contestsWithStats[0];
+  // The hero spotlights up to 2 contests. Admin picks (is_featured, set from
+  // /admin/contests) always win the slots; if fewer than 2 are marked
+  // featured, the highest-hype remaining contests fill the rest so the hero
+  // is never empty. Each pick carries whether it's a real curator's choice
+  // or just a hype fallback, so the hero can badge them honestly.
+  const featuredPicks = contestsWithStats.filter((c) => c.is_featured).slice(0, 2);
+  const fillers = contestsWithStats.filter((c) => !c.is_featured);
+  const heroContests = [...featuredPicks, ...fillers]
+    .slice(0, 2)
+    .map((c) => ({ ...c, is_featured: !!c.is_featured }));
 
   // 3. Fetch Hall of Fame (Top Ranked Submissions of All Time)
   const { data: topRanked } = await supabase
@@ -87,7 +95,7 @@ export default async function ContestsPage() {
   return (
     <ArenaClient
         initialContests={contestsWithStats}
-        activeContest={featuredContest} // Pass the calculated hero
+        heroContests={heroContests}
         hallOfFame={topRanked || []}
         initialFeed={feed || []}
         initialHasMore={feedHasMore}
