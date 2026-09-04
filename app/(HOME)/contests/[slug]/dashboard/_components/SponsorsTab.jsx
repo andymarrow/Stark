@@ -1,181 +1,123 @@
 "use client";
-import { useState, useRef } from "react";
-import { Plus, Trash2, UploadCloud, Link as LinkIcon, Twitter, Linkedin, Instagram, Globe } from "lucide-react";
-import Image from "next/image";
+import { useState } from "react";
+import { Plus, Trash2, Pencil, Globe, Twitter, Linkedin, Instagram, ImageIcon, Handshake } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import SponsorEditorModal from "./SponsorEditorModal";
+
+const LINK_ICONS = { web: Globe, x: Twitter, linkedin: Linkedin, instagram: Instagram };
+
+const TIER_STYLE = {
+  title: "bg-accent/10 text-accent border-accent/30",
+  gold: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-500/30",
+  silver: "bg-zinc-400/10 text-zinc-500 border-zinc-400/30",
+  partner: "bg-secondary/20 text-muted-foreground border-border",
+};
 
 export default function SponsorsTab({ contest }) {
-  const [sponsors, setSponsors] = useState(contest.sponsors || []);
-  const [isSaving, setIsSaving] = useState(false);
-  const fileInputRef = useRef(null);
+  const [sponsors, setSponsors] = useState((contest.sponsors || []).filter((s) => typeof s === "object" && s?.name));
+  const [editorState, setEditorState] = useState(null); // { sponsor, index } | { sponsor: null } for create | null for closed
 
-  const [newSponsor, setNewSponsor] = useState({ 
-    name: "", 
-    logo: null, 
-    preview: null,
-    links: { web: "", x: "", linkedin: "", instagram: "", stark: "" }
-  });
-
-  const handleLogoSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-        setNewSponsor(prev => ({ ...prev, logo: file, preview: URL.createObjectURL(file) }));
-    }
-  };
-
-  const handleAddSponsor = async () => {
-    if (!newSponsor.name || !newSponsor.logo) {
-        toast.error("Missing Data", { description: "Name and Logo are required." });
-        return;
-    }
-
-    setIsSaving(true);
-    try {
-        const fileExt = newSponsor.logo.name.split('.').pop();
-        const fileName = `sponsors/${contest.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, newSponsor.logo);
-        
-        if (uploadError) throw uploadError;
-        
-        const { data: { publicUrl } } = supabase.storage.from('project-assets').getPublicUrl(fileName);
-
-        const sponsorObj = { 
-            name: newSponsor.name, 
-            logo_url: publicUrl,
-            links: newSponsor.links 
-        };
-
-        const updatedSponsors = [...sponsors, sponsorObj];
-
-        const { error: dbError } = await supabase
-            .from('contests')
-            .update({ sponsors: updatedSponsors })
-            .eq('id', contest.id);
-
-        if (dbError) throw dbError;
-
-        setSponsors(updatedSponsors);
-        setNewSponsor({ name: "", logo: null, preview: null, links: { web: "", x: "", linkedin: "", instagram: "", stark: "" } });
-        toast.success("Sponsor Added");
-
-    } catch (error) {
-        toast.error("Failed to add sponsor");
-    } finally {
-        setIsSaving(false);
-    }
+  const handleSaved = (updatedSponsors) => {
+    setSponsors(updatedSponsors);
   };
 
   const handleRemove = async (index) => {
-    const updatedSponsors = sponsors.filter((_, i) => i !== index);
-    const { error } = await supabase.from('contests').update({ sponsors: updatedSponsors }).eq('id', contest.id);
+    if (!confirm(`Remove ${sponsors[index].name}? This can't be undone.`)) return;
+    const updated = sponsors.filter((_, i) => i !== index);
+    const { error } = await supabase.from("contests").update({ sponsors: updated }).eq("id", contest.id);
     if (!error) {
-        setSponsors(updatedSponsors);
-        toast.success("Removed");
+      setSponsors(updated);
+      toast.success("Sponsor Removed");
+    } else {
+      toast.error("Failed to remove sponsor");
     }
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 pb-20">
-        
-        {/* ADD SPONSOR FORM */}
-        <div className="bg-secondary/5 border border-border p-6 flex flex-col md:flex-row gap-8 items-start">
-            
-            {/* Logo Upload */}
-            <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="w-32 h-32 border-2 border-dashed border-border hover:border-accent/50 flex flex-col items-center justify-center cursor-pointer bg-background flex-shrink-0 relative overflow-hidden group transition-all"
-            >
-                <input type="file" ref={fileInputRef} onChange={handleLogoSelect} className="hidden" accept="image/*" />
-                {newSponsor.preview ? (
-                    <Image src={newSponsor.preview} alt="Preview" fill className="object-cover p-2" />
-                ) : (
-                    <div className="text-center text-muted-foreground group-hover:text-accent">
-                        <UploadCloud size={24} className="mx-auto mb-2" />
-                        <span className="text-[10px] font-mono uppercase">Upload Logo</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Fields */}
-            <div className="flex-1 w-full space-y-4">
-                <div className="space-y-1">
-                    <label className="text-[10px] font-mono uppercase text-muted-foreground">Entity Name</label>
-                    <Input 
-                        placeholder="e.g. Vercel" 
-                        value={newSponsor.name}
-                        onChange={(e) => setNewSponsor({...newSponsor, name: e.target.value})}
-                        className="h-10 rounded-none bg-background border-border"
-                    />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <SocialInput icon={Globe} placeholder="Website URL" value={newSponsor.links.web} onChange={(v) => setNewSponsor(p => ({...p, links: {...p.links, web: v}}))} />
-                    <SocialInput icon={Twitter} placeholder="X Profile" value={newSponsor.links.x} onChange={(v) => setNewSponsor(p => ({...p, links: {...p.links, x: v}}))} />
-                    <SocialInput icon={Linkedin} placeholder="LinkedIn" value={newSponsor.links.linkedin} onChange={(v) => setNewSponsor(p => ({...p, links: {...p.links, linkedin: v}}))} />
-                    <SocialInput icon={Instagram} placeholder="Instagram" value={newSponsor.links.instagram} onChange={(v) => setNewSponsor(p => ({...p, links: {...p.links, instagram: v}}))} />
-                </div>
-
-                <Button 
-                    onClick={handleAddSponsor}
-                    disabled={isSaving}
-                    className="h-10 px-8 bg-accent hover:bg-accent/90 text-white uppercase font-mono text-xs w-full md:w-auto mt-2"
-                >
-                    {isSaving ? "Adding..." : "Add Sponsor"}
-                </Button>
-            </div>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 pb-20">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-bold uppercase text-sm tracking-widest flex items-center gap-2 text-foreground">
+            <Handshake size={16} className="text-accent" /> Sponsors
+          </h3>
+          <p className="text-[10px] font-mono text-muted-foreground uppercase mt-1">
+            Shown on a dedicated public tab — logo, blurb, links, and a full image/video gallery per sponsor.
+          </p>
         </div>
+        <Button
+          onClick={() => setEditorState({ sponsor: null })}
+          className="h-9 px-5 bg-accent hover:bg-accent/90 text-white uppercase font-mono text-xs"
+        >
+          <Plus size={14} className="mr-2" /> Add Sponsor
+        </Button>
+      </div>
 
-        {/* LIST */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {sponsors.map((sponsor, i) => (
-                <div key={i} className="border border-border bg-card p-5 relative group flex items-center gap-4">
-                    <div className="relative h-12 w-12 flex-shrink-0 grayscale group-hover:grayscale-0 transition-all">
-                        <Image src={sponsor.logo_url} alt={sponsor.name} fill className="object-contain" />
-                    </div>
-                    
-                    <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold truncate mb-2">{sponsor.name}</div>
-                        <div className="flex gap-2">
-                            {sponsor.links?.web && <SocialIconLink href={sponsor.links.web} icon={Globe} />}
-                            {sponsor.links?.x && <SocialIconLink href={sponsor.links.x} icon={Twitter} />}
-                            {sponsor.links?.linkedin && <SocialIconLink href={sponsor.links.linkedin} icon={Linkedin} />}
-                        </div>
-                    </div>
-
-                    <button 
-                        onClick={() => handleRemove(i)}
-                        className="absolute top-2 right-2 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <Trash2 size={16} />
-                    </button>
-                </div>
-            ))}
+      {sponsors.length === 0 ? (
+        <div className="border border-dashed border-border py-16 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Handshake size={32} className="opacity-30" />
+          <p className="text-xs font-mono uppercase tracking-widest">No sponsors yet</p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {sponsors.map((sponsor, i) => (
+            <div key={i} className="border border-border bg-card p-5 relative group flex flex-col gap-3">
+              <div className="flex items-center gap-4">
+                <div className="relative h-14 w-14 flex-shrink-0 border border-border bg-secondary/10 overflow-hidden">
+                  <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain p-1.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold truncate">{sponsor.name}</div>
+                  <span className={`inline-block mt-1 text-[8px] font-mono uppercase px-1.5 py-0.5 border ${TIER_STYLE[sponsor.tier] || TIER_STYLE.partner}`}>
+                    {sponsor.tier || "partner"}
+                  </span>
+                </div>
+              </div>
 
+              {sponsor.tagline && <p className="text-[11px] text-muted-foreground line-clamp-2">{sponsor.tagline}</p>}
+
+              <div className="flex items-center justify-between mt-auto pt-3 border-t border-dashed border-border">
+                <div className="flex gap-2">
+                  {Object.entries(sponsor.links || {}).map(([key, url]) => {
+                    const Icon = LINK_ICONS[key];
+                    if (!url || !Icon) return null;
+                    return (
+                      <a key={key} href={url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-accent transition-colors">
+                        <Icon size={13} />
+                      </a>
+                    );
+                  })}
+                  {Array.isArray(sponsor.gallery) && sponsor.gallery.length > 0 && (
+                    <span className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground">
+                      <ImageIcon size={11} /> {sponsor.gallery.length}
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => setEditorState({ sponsor, index: i })} className="p-1.5 text-muted-foreground hover:text-accent transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => handleRemove(i)} className="p-1.5 text-muted-foreground hover:text-red-500 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editorState && (
+        <SponsorEditorModal
+          contest={contest}
+          sponsor={editorState.sponsor}
+          sponsorIndex={editorState.index}
+          isOpen={!!editorState}
+          onClose={() => setEditorState(null)}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   );
 }
-
-const SocialInput = ({ icon: Icon, placeholder, value, onChange }) => (
-    <div className="relative">
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-            <Icon size={14} />
-        </div>
-        <Input 
-            placeholder={placeholder} 
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="pl-9 h-9 rounded-none bg-background border-border text-xs"
-        />
-    </div>
-);
-
-const SocialIconLink = ({ href, icon: Icon }) => (
-    <a href={href} target="_blank" className="text-muted-foreground hover:text-accent transition-colors">
-        <Icon size={14} />
-    </a>
-);

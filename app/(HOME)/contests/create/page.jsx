@@ -59,10 +59,11 @@ export default function CreateContestPage() {
 
   const [formData, setFormData] = useState({
     title: "",
-    cover_preview: null, 
-    cover_file: null,    
-    gallery_files: [], 
-    description: "", 
+    cover_preview: null,
+    cover_file: null,
+    gallery_files: [],
+    gallery_raw_files: [], // Raw File objects behind any blob: preview in gallery_files — needed to actually upload them
+    description: "",
     start_date: "",
     submission_deadline: "",
     winner_announce_date: "",
@@ -88,13 +89,20 @@ export default function CreateContestPage() {
     setFormData(prev => ({ ...prev, cover_preview: null, cover_file: null }));
   };
 
-  // StepMedia Handler
+  // StepMedia Handler — "files" holds display URLs (blob: previews or real links),
+  // "rawFiles" holds the actual File objects behind any blob: preview, needed to
+  // upload them for real before submit (StepMedia only reports blob previews
+  // for display; without rawFiles those previews would die with the tab).
   const handleGalleryUpdate = (key, value) => {
-    if (value.length > 3) {
-        toast.error("Limit Reached", { description: "Maximum 3 gallery assets allowed." });
-        return;
+    if (key === "files") {
+        if (value.length > 3) {
+            toast.error("Limit Reached", { description: "Maximum 3 gallery assets allowed." });
+            return;
+        }
+        setFormData(prev => ({ ...prev, gallery_files: value }));
+    } else if (key === "rawFiles") {
+        setFormData(prev => ({ ...prev, gallery_raw_files: value }));
     }
-    setFormData(prev => ({ ...prev, gallery_files: value }));
   };
 
   const handleCreate = async () => {
@@ -152,13 +160,32 @@ export default function CreateContestPage() {
             coverUrl = data.publicUrl;
         }
 
+        // Upload Gallery — StepMedia only ever hands back blob: preview URLs for
+        // new images (YouTube links pass through as-is); resolve each blob
+        // against its real File and upload it, or it dies with this tab.
+        const galleryUrls = await Promise.all(formData.gallery_files.map(async (url) => {
+            if (url.startsWith('blob:')) {
+                const rawEntry = formData.gallery_raw_files.find(r => r.preview === url);
+                if (rawEntry?.file) {
+                    const fileExt = rawEntry.file.name.split('.').pop();
+                    const fileName = `contests/${user.id}/gallery-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+                    const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, rawEntry.file);
+                    if (uploadError) throw uploadError;
+                    const { data } = supabase.storage.from('project-assets').getPublicUrl(fileName);
+                    return data.publicUrl;
+                }
+            }
+            return url;
+        }));
+
         // Insert Contest
         const { error } = await supabase.from('contests').insert({
             creator_id: user.id,
             title: formData.title,
             slug: slug,
             cover_image: coverUrl,
-            sponsors: formData.gallery_files, 
+            media_urls: galleryUrls,
+            sponsors: [],
             description: { type: "markdown", text: formData.description },
             start_date: new Date(formData.start_date),
             submission_deadline: new Date(formData.submission_deadline),
@@ -243,8 +270,8 @@ export default function CreateContestPage() {
                         <label className="text-[10px] font-mono uppercase text-muted-foreground mb-2 block">
                             Additional Gallery / Trailer (Max 3)
                         </label>
-                        <StepMedia 
-                            data={{ files: formData.gallery_files, demo_link: null }}
+                        <StepMedia
+                            data={{ files: formData.gallery_files, rawFiles: formData.gallery_raw_files, demo_link: null }}
                             updateData={handleGalleryUpdate}
                         />
                     </div>

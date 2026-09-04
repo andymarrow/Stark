@@ -1,6 +1,6 @@
 "use client";
 import ReactMarkdown from "react-markdown";
-import { Globe, Twitter, Linkedin, Gavel, ExternalLink, PlayCircle } from "lucide-react";
+import { Gavel, ExternalLink, Handshake, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
@@ -19,23 +19,18 @@ const getThumbnail = (url) => {
     return url;
 };
 
-export default function RulesTab({ contest, judges }) {
+export default function RulesTab({ contest, judges, onViewSponsors }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // Safe extraction of description
   const content = typeof contest?.description === 'object' ? contest.description.text : contest?.description;
 
-  // Extract Assets (Note: We stored assets in 'sponsors' column temporarily during creation flow. 
-  // If you fixed the backend to use 'media_urls', use that instead. 
-  // Based on previous code, we used 'sponsors' for assets in CreateContestPage.)
-  // Let's check if 'sponsors' contains strings (assets) or objects (actual sponsors).
-  
-  const rawAssets = Array.isArray(contest.sponsors) ? contest.sponsors : [];
-  
-  // Separate real sponsors (Objects) from asset URLs (Strings)
-  const galleryAssets = rawAssets.filter(item => typeof item === 'string');
-  const validSponsors = rawAssets.filter(item => typeof item === 'object' && item.name);
+  // Gallery/trailer assets live in media_urls — sponsors get their own tab.
+  const galleryAssets = Array.isArray(contest.media_urls) ? contest.media_urls : [];
+  const sponsors = (Array.isArray(contest.sponsors) ? contest.sponsors : []).filter(
+    (s) => typeof s === "object" && s?.name
+  );
 
   const openLightbox = (index) => {
       setLightboxIndex(index);
@@ -150,28 +145,34 @@ export default function RulesTab({ contest, judges }) {
                 </div>
             </div>
 
-            {validSponsors.length > 0 && (
-                <div className="bg-background border border-border p-6">
-                    <h3 className="font-bold uppercase text-[10px] tracking-[0.2em] mb-6 border-b border-border pb-2 text-muted-foreground">Sponsored By</h3>
-                    <div className="space-y-3">
-                        {validSponsors.map((sponsor, i) => (
-                            <div key={i} className="group border border-border bg-secondary/10 p-4 transition-all hover:border-accent/50">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="relative w-8 h-8 flex-shrink-0">
-                                            <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain grayscale group-hover:grayscale-0 transition-all" />
-                                        </div>
-                                        <span className="text-xs font-bold uppercase tracking-tight">{sponsor.name}</span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {sponsor.links?.web && <a href={sponsor.links.web} target="_blank" className="p-1.5 bg-background border border-border hover:text-accent transition-colors"><Globe size={12} /></a>}
-                                        {sponsor.links?.x && <a href={sponsor.links.x} target="_blank" className="p-1.5 bg-background border border-border hover:text-accent transition-colors"><Twitter size={12} /></a>}
-                                    </div>
-                                </div>
+            {/* Sponsors get real estate of their own now — this is just a
+                pointer to it, with a peek at the logos so it doesn't read
+                as a dead end. */}
+            {sponsors.length > 0 && onViewSponsors && (
+                <button
+                    onClick={onViewSponsors}
+                    className="w-full text-left bg-background border border-border p-6 group hover:border-accent/50 transition-all"
+                >
+                    <h3 className="font-bold uppercase text-[10px] tracking-[0.2em] mb-4 border-b border-border pb-2 text-muted-foreground flex items-center gap-2">
+                        <Handshake size={12} className="text-accent" /> Backed By
+                    </h3>
+                    <div className="flex items-center -space-x-2 mb-4">
+                        {sponsors.slice(0, 6).map((sponsor, i) => (
+                            <div key={i} className="relative w-9 h-9 rounded-full border-2 border-background bg-secondary overflow-hidden flex-shrink-0" style={{ zIndex: 6 - i }}>
+                                <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-cover" />
                             </div>
                         ))}
+                        {sponsors.length > 6 && (
+                            <div className="relative w-9 h-9 rounded-full border-2 border-background bg-secondary flex items-center justify-center text-[9px] font-mono font-bold text-muted-foreground">
+                                +{sponsors.length - 6}
+                            </div>
+                        )}
                     </div>
-                </div>
+                    <span className="text-xs font-bold uppercase tracking-tight text-foreground group-hover:text-accent transition-colors flex items-center gap-1.5">
+                        View {sponsors.length} Sponsor{sponsors.length > 1 ? "s" : ""}
+                        <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                </button>
             )}
         </div>
 

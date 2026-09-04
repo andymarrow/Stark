@@ -84,9 +84,10 @@ export default function SettingsTab({ contest }) {
     metrics: contest.metrics_config || [],
     
     // MEDIA LOGIC: Separated from sponsors
-    cover_preview: contest.cover_image, 
-    cover_file: null, 
+    cover_preview: contest.cover_image,
+    cover_file: null,
     gallery_files: contest.media_urls || [], // <--- Use new column
+    gallery_raw_files: [], // Raw File objects behind any blob: preview in gallery_files
   });
 
   // 1. Fetch Locking Constraints
@@ -117,8 +118,15 @@ export default function SettingsTab({ contest }) {
     setFormData(prev => ({ ...prev, cover_preview: URL.createObjectURL(file), cover_file: file }));
   };
 
+  // "files" holds display URLs (blob: previews or real links); "rawFiles"
+  // holds the actual File objects behind any blob: preview — needed to
+  // upload them for real before saving, or the preview dies with this tab.
   const handleGalleryUpdate = (key, value) => {
-    setFormData(prev => ({ ...prev, gallery_files: value }));
+    if (key === "rawFiles") {
+        setFormData(prev => ({ ...prev, gallery_raw_files: value }));
+    } else {
+        setFormData(prev => ({ ...prev, gallery_files: value }));
+    }
   };
 
   /**
@@ -139,6 +147,24 @@ export default function SettingsTab({ contest }) {
             coverUrl = data.publicUrl;
         }
 
+        // Upload Gallery — StepMedia only ever hands back blob: preview URLs for
+        // new images (YouTube links pass through as-is); resolve each blob
+        // against its real File and upload it, or it dies with this tab.
+        const galleryUrls = await Promise.all(formData.gallery_files.map(async (url) => {
+            if (url.startsWith('blob:')) {
+                const rawEntry = formData.gallery_raw_files.find(r => r.preview === url);
+                if (rawEntry?.file) {
+                    const fileExt = rawEntry.file.name.split('.').pop();
+                    const fileName = `contests/${contest.creator_id}/gallery-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+                    const { error: uploadError } = await supabase.storage.from('project-assets').upload(fileName, rawEntry.file);
+                    if (uploadError) throw uploadError;
+                    const { data } = supabase.storage.from('project-assets').getPublicUrl(fileName);
+                    return data.publicUrl;
+                }
+            }
+            return url;
+        }));
+
         // 🛡️ SECURITY: We omit 'sponsors' from this update entirely.
         const { error } = await supabase
             .from('contests')
@@ -151,11 +177,16 @@ export default function SettingsTab({ contest }) {
                 prizes: formData.prizes,
                 metrics_config: formData.metrics,
                 cover_image: coverUrl,
-                media_urls: formData.gallery_files // Gallery goes here
+                media_urls: galleryUrls // Gallery goes here
             })
             .eq('id', contest.id);
 
         if (error) throw error;
+
+        // Swap the resolved real URLs in so re-saving without touching the
+        // gallery again doesn't write stale blob: previews back over them.
+        setFormData(prev => ({ ...prev, cover_preview: coverUrl, cover_file: null, gallery_files: galleryUrls, gallery_raw_files: [] }));
+
         toast.success("Protocol Synced", { description: "Global timestamps and assets updated." });
         router.refresh();
 
@@ -245,8 +276,8 @@ export default function SettingsTab({ contest }) {
 
                 <div className="space-y-1.5">
                     <label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest block mb-2">Secondary Gallery (Max 3)</label>
-                    <StepMedia 
-                        data={{ files: formData.gallery_files, demo_link: null }}
+                    <StepMedia
+                        data={{ files: formData.gallery_files, rawFiles: formData.gallery_raw_files, demo_link: null }}
                         updateData={handleGalleryUpdate}
                     />
                     <p className="text-[9px] text-zinc-600 font-mono mt-2 uppercase tracking-tighter italic">

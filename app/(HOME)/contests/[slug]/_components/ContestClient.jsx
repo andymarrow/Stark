@@ -1,15 +1,21 @@
 "use client";
 import { useState } from "react";
-import { FileText, Layers, Megaphone, Grid, List } from "lucide-react"; // Added Icons
+import { FileText, Layers, Megaphone, Grid, List, Handshake } from "lucide-react"; // Added Icons
 import ContestHero from "./ContestHero";
 import EntriesGrid from "./EntriesGrid";
 import ContestFeed from "./ContestFeed"; // <--- NEW COMPONENT
 import RulesTab from "./RulesTab";
 import UpdatesTab from "./UpdatesTab";
+import SponsorsShowcase from "./SponsorsShowcase";
 
 export default function ContestClient({ contest, userEntry, judges }) {
   const [activeTab, setActiveTab] = useState("details");
   const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'feed'
+
+  // Sponsors only earn a tab when there's something to show in it.
+  const sponsors = (Array.isArray(contest.sponsors) ? contest.sponsors : []).filter(
+    (s) => typeof s === "object" && s?.name
+  );
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -30,6 +36,11 @@ export default function ContestClient({ contest, userEntry, judges }) {
                 <button onClick={() => setActiveTab("updates")} className={`px-6 py-3 text-xs font-mono uppercase border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === "updates" ? "border-accent text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                     <Megaphone size={14} /> Announcements
                 </button>
+                {sponsors.length > 0 && (
+                    <button onClick={() => setActiveTab("sponsors")} className={`px-6 py-3 text-xs font-mono uppercase border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === "sponsors" ? "border-accent text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                        <Handshake size={14} /> Sponsors
+                    </button>
+                )}
             </div>
 
             {/* View Switcher (Only visible on Entries tab) */}
@@ -47,17 +58,21 @@ export default function ContestClient({ contest, userEntry, judges }) {
 
         {/* Tab Content */}
         <div className="min-h-[400px]">
-            {activeTab === "details" && <RulesTab contest={contest} judges={judges} />}
-            
+            {activeTab === "details" && (
+                <RulesTab contest={contest} judges={judges} onViewSponsors={sponsors.length > 0 ? () => setActiveTab("sponsors") : undefined} />
+            )}
+
             {activeTab === "entries" && (
                 viewMode === 'grid' ? (
                     <EntriesGrid contestId={contest.id} />
                 ) : (
-                    <ContestFeed contestId={contest.id} /> 
+                    <ContestFeed contestId={contest.id} />
                 )
             )}
-            
+
             {activeTab === "updates" && <UpdatesTab announcements={contest.announcements} />}
+
+            {activeTab === "sponsors" && <SponsorsShowcase sponsors={sponsors} />}
         </div>
 
       </div>
