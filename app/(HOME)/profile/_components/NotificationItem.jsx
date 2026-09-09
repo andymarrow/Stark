@@ -24,6 +24,17 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const isBlogBroadcast = notification.type === 'system' && notification.message?.toLowerCase().includes('intelligence report');
   const isBlogComment = notification.type === 'new_message' && notification.link?.includes('/blog/');
 
+  // A collab invite is only "resolved" once its message has been rewritten
+  // by an actual Accept/Decline (see handleAcceptCollab/handleRejectCollab)
+  // — not merely by being marked read. Gating on that instead of `isRead`
+  // means the plain "Acknowledge" checkmark can never quietly dismiss an
+  // invite without a real decision, and it also self-heals any invite that
+  // got stuck that way before this fix (its message is still the original
+  // "invited you to collaborate" text, so the buttons reappear).
+  const isUnresolvedCollabInvite =
+    notification.type === 'collab_invite' &&
+    !/you (accepted|declined)/i.test(notification.message || '');
+
   // --- ACTIONS ---
   const handleFollowBack = async () => {
     setProcessing(true);
@@ -54,8 +65,17 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         const { data: project, error: fetchError } = await supabase.from('projects').select('id').eq('slug', slug).single();
         if (fetchError || !project) throw new Error("Project Node not found.");
 
-        const { error: updateError } = await supabase.from('collaborations').update({ status: 'accepted' }).eq('project_id', project.id).eq('user_id', currentUserId);
+        // .select() after the update so an RLS-blocked write (0 rows
+        // actually changed) surfaces as a real failure instead of a silent
+        // no-op that leaves the invite pending forever.
+        const { data: updated, error: updateError } = await supabase
+            .from('collaborations')
+            .update({ status: 'accepted' })
+            .eq('project_id', project.id)
+            .eq('user_id', currentUserId)
+            .select('id');
         if (updateError) throw updateError;
+        if (!updated?.length) throw new Error("Invite was already resolved or removed.");
 
         toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
         onRead(notification.id); 
@@ -72,17 +92,28 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     try {
         const match = notification.link?.match(/\/project\/([^\/\?]+)/);
         const slug = match ? match[1] : null;
+        if (!slug) throw new Error("Outdated protocol invite.");
 
-        if (slug) {
-            const { data: project } = await supabase.from('projects').select('id').eq('slug', slug).single();
-            if (project) {
-                await supabase.from('collaborations').delete().eq('project_id', project.id).eq('user_id', currentUserId);
-            }
-        }
+        const { data: project, error: fetchError } = await supabase.from('projects').select('id').eq('slug', slug).single();
+        if (fetchError || !project) throw new Error("Project Node not found.");
+
+        // .select() after the delete so an RLS-blocked delete (0 rows
+        // actually removed) surfaces as a real failure instead of a silent
+        // no-op that leaves the invite pending forever.
+        const { data: deleted, error: deleteError } = await supabase
+            .from('collaborations')
+            .delete()
+            .eq('project_id', project.id)
+            .eq('user_id', currentUserId)
+            .select('id');
+        if (deleteError) throw deleteError;
+        if (!deleted?.length) throw new Error("Invite was already resolved or removed.");
+
         toast.info("Invite Terminated");
         onRead(notification.id);
+        onUpdateState(notification.id, { is_read: true, message: "You declined the collaboration invite." });
     } catch (err) {
-        toast.error("Command Failed");
+        toast.error("Command Failed", { description: err.message });
     } finally {
         setProcessing(false);
     }
@@ -133,8 +164,9 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         );
     }
 
-    // Collab Binary
-    if (notification.type === 'collab_invite' && !isRead) {
+    // Collab Binary — stays up until an actual Accept/Decline resolves it,
+    // regardless of read state (see isUnresolvedCollabInvite above).
+    if (isUnresolvedCollabInvite) {
         return (
             <div className="flex gap-2">
                 <Button onClick={handleAcceptCollab} disabled={processing} className="h-7 text-[10px] uppercase font-mono bg-accent hover:bg-red-700 text-white rounded-none">
@@ -255,8 +287,12 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
                 
                 <div className="flex items-center gap-2 shrink-0">
                     {getAction()}
-                    {!isRead && (
-                        <button 
+                    {/* Not for unresolved collab invites — this is a "mark as
+                        read" shortcut, not a decision, and letting it dismiss
+                        an invite silently left the collaboration stuck
+                        "pending" forever with no way back to Accept/Decline. */}
+                    {!isRead && !isUnresolvedCollabInvite && (
+                        <button
                             onClick={() => onRead(notification.id)}
                             className="text-zinc-400 hover:text-accent transition-colors p-1"
                             title="Acknowledge Signal"

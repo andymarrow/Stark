@@ -46,6 +46,7 @@ export default function CollaboratorManager({ collaborators, onAdd, onRemove }) 
       id: user.id,
       username: user.username,
       avatar_url: user.avatar_url,
+      email: user.email, // Needed to actually email them the invite
       status: 'pending'
     });
     

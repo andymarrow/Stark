@@ -305,9 +305,13 @@ export default function BlogReader({ blog, versions, author, currentUser }) {
     initEngagement();
     setMounted(true);
 
+    // registerView's RPC already dedupes by a per-visitor hash, permanently
+    // — no author-specific block needed here either (see ProjectSidebar.jsx
+    // for the same fix): it was stopping the author's legitimate first view
+    // too, not just repeat refreshes.
     if (!hasViewedRef.current) {
         hasViewedRef.current = true;
-        if (currentUser?.id !== blog.author_id) registerView('blog', blog.id).catch(console.error);
+        registerView('blog', blog.id).catch(console.error);
     }
 
     const handleScroll = () => {

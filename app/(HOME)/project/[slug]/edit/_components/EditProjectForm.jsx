@@ -284,11 +284,15 @@ export default function EditProjectForm({ project }) {
 
             const { error: collabError } = await supabase.from('collaborations').insert(collabRows);
             if (!collabError) {
-                const ghostInvites = newCollaborators.filter(c => c.type === 'ghost');
-                ghostInvites.forEach(async (ghost) => {
-                    const inviterName = user.user_metadata?.full_name || user.email;
-                    await sendCollaboratorInvite(ghost.email, formData.title, inviterName);
-                });
+                // Email every invite we have an address for — registered
+                // users included. The in-app notification alone isn't
+                // enough; most people don't have Stark open when this fires.
+                const inviterName = user.user_metadata?.full_name || user.email;
+                newCollaborators
+                    .filter((c) => c.email)
+                    .forEach((c) => {
+                        sendCollaboratorInvite(c.email, formData.title, inviterName);
+                    });
             }
         }
 

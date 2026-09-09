@@ -10,6 +10,7 @@ import { projectSchema } from "@/lib/validations";
 import { useVoiceCommand } from "@/lib/voiceBridge";
 import { submitToEvent } from "@/app/actions/submitToEvent";
 import { getPublicFolders } from "@/app/actions/getPublicFolders";
+import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import CreateStepper from "./_components/CreateStepper";
@@ -225,9 +226,21 @@ function CreateForm() {
           project_id: projectData.id,
           user_id: c.type === 'user' ? c.user_id : null,
           invite_email: c.type === 'ghost' ? c.email : null,
-          status: 'pending' 
+          status: 'pending'
         }));
-        await supabase.from('collaborations').insert(collabRows);
+        const { error: collabError } = await supabase.from('collaborations').insert(collabRows);
+
+        // Email every invite we have an address for — registered users
+        // included. The in-app notification alone isn't enough; most people
+        // don't have Stark open when this fires.
+        if (!collabError) {
+          const inviterName = user.user_metadata?.full_name || user.email;
+          formData.collaborators
+            .filter((c) => c.email)
+            .forEach((c) => {
+              sendCollaboratorInvite(c.email, formData.title, inviterName);
+            });
+        }
       }
 
       const extractedTokens = extractMentionIdentifiers(formData.description);

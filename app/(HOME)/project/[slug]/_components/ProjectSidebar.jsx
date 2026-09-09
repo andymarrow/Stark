@@ -122,11 +122,15 @@ export default function ProjectSidebar({ project }) {
   }, [user, project.id, project.stats.stars]);
 
   // 2. --- VIEW COUNTING LOGIC ---
+  // registerView's own RPC already dedupes by a per-visitor hash (IP + user
+  // agent), permanently — a repeat call with the same hash is a no-op. That
+  // means the owner never needed a special-case block here: it was stopping
+  // their legitimate first view too, not just repeat refreshes. Removing it
+  // just lets the owner's viewer hash go through the same dedup as anyone
+  // else's — one real view, then silently ignored on every refresh after.
   useEffect(() => {
     const incrementView = async () => {
       if (hasCountedRef.current) return;
-      
-      if (user?.id === project.author.id) return;
 
       hasCountedRef.current = true;
       const res = await registerView('project', project.id);
@@ -136,7 +140,7 @@ export default function ProjectSidebar({ project }) {
     };
 
     if(project?.id) incrementView();
-  }, [project.id, user, project.author.id]);
+  }, [project.id]);
 
   // 3. --- DYNAMIC RANK CALCULATION ---
   useEffect(() => {

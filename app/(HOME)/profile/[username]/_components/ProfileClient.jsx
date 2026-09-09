@@ -52,11 +52,13 @@ export default function ProfileClient({
   const [currentPage, setCurrentPage] = useState(1);
   const hasCountedRef = useRef(false);
 
-  // 1. View Counting Logic
+  // 1. View Counting Logic — registerView's RPC already dedupes by a
+  // per-visitor hash, permanently, so no owner-specific block is needed
+  // here either (see ProjectSidebar.jsx for the same fix): it was stopping
+  // the owner's legitimate first view too, not just repeat refreshes.
   useEffect(() => {
     if (!initialProfile?.id) return;
     if (hasCountedRef.current) return;
-    if (currentUser?.id === initialProfile.id) return;
 
     hasCountedRef.current = true;
     const increment = async () => {
