@@ -19,13 +19,16 @@ export default function CollaboratorManager({ collaborators, onAdd, onRemove }) 
         return;
       }
       setIsSearching(true);
-      
+
+      // Match on email too — otherwise typing an existing member's email
+      // never finds them and falls through to an external "ghost" invite
+      // even though they're already on Stark.
       const { data } = await supabase
         .from('profiles')
         .select('id, username, full_name, avatar_url, email')
-        .ilike('username', `%${query}%`)
+        .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(5);
-        
+
       setResults(data || []);
       setIsSearching(false);
     };
