@@ -275,7 +275,7 @@ export default function SettingsTab({ contest }) {
                 </div>
 
                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest block mb-2">Secondary Gallery (Max 3)</label>
+                    <label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest block mb-2">Secondary Gallery</label>
                     <StepMedia
                         data={{ files: formData.gallery_files, rawFiles: formData.gallery_raw_files, demo_link: null }}
                         updateData={handleGalleryUpdate}

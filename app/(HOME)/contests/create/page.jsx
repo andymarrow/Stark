@@ -95,10 +95,6 @@ export default function CreateContestPage() {
   // for display; without rawFiles those previews would die with the tab).
   const handleGalleryUpdate = (key, value) => {
     if (key === "files") {
-        if (value.length > 3) {
-            toast.error("Limit Reached", { description: "Maximum 3 gallery assets allowed." });
-            return;
-        }
         setFormData(prev => ({ ...prev, gallery_files: value }));
     } else if (key === "rawFiles") {
         setFormData(prev => ({ ...prev, gallery_raw_files: value }));
@@ -268,7 +264,7 @@ export default function CreateContestPage() {
                     </div>
                     <div className="space-y-1.5 pt-4 border-t border-dashed border-border">
                         <label className="text-[10px] font-mono uppercase text-muted-foreground mb-2 block">
-                            Additional Gallery / Trailer (Max 3)
+                            Additional Gallery / Trailer
                         </label>
                         <StepMedia
                             data={{ files: formData.gallery_files, rawFiles: formData.gallery_raw_files, demo_link: null }}
