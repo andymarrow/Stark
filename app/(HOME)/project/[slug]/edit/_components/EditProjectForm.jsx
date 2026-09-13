@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from "framer-motion"; // Added for Reordering
 import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor"; 
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
 import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
+import { getContestLockInfo } from "@/lib/contestLock";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -221,6 +222,16 @@ export default function EditProjectForm({ project }) {
 
   // --- 6. SAVE LOGIC ---
   const handleSave = async () => {
+    // Defense in depth: the edit page already blocks entry once locked, but
+    // this catches a tab left open across the deadline while judging starts.
+    const lock = await getContestLockInfo(project.id);
+    if (lock.locked) {
+      toast.error("Entry Locked", {
+        description: `Submissions for ${lock.contestTitle} have closed while this tab was open — refresh to see the locked view.`,
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
         // A. Upload New Images (Blobs)
@@ -339,6 +350,15 @@ export default function EditProjectForm({ project }) {
   };
 
   const handleDelete = async () => {
+    const lock = await getContestLockInfo(project.id);
+    if (lock.locked) {
+      toast.error("Entry Locked", {
+        description: `Submissions for ${lock.contestTitle} have closed — this project can no longer be deleted.`,
+      });
+      setDeleteDialogOpen(false);
+      return;
+    }
+
     setIsDeleting(true);
     try {
         const { error } = await supabase.from('projects').delete().eq('id', project.id);

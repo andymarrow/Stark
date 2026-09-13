@@ -23,6 +23,7 @@ import {
 import { toggleSubmissionPublic } from "@/app/actions/toggleSubmissionPublic";
 import { withdrawSubmission } from "@/app/actions/submissionManagement";
 import SubmitToEventModal from "./SubmitToEventModal"; // NEW IMPORT
+import { getContestLockInfo } from "@/lib/contestLock";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -186,6 +187,22 @@ export default function MyProjectsManager({ user, onRefresh }) {
     setIsDeleting(true);
     try {
       const table = activeTab === 'hosting' ? 'contests' : 'projects';
+
+      // FAIRNESS CHECK: a project submitted to a contest freezes the moment
+      // that contest's submission window closes — no deleting it out from
+      // under judges either.
+      if (table === 'projects') {
+        const lock = await getContestLockInfo(itemToDelete.id);
+        if (lock.locked) {
+          toast.error("Entry Locked", {
+            description: `Submissions for ${lock.contestTitle} have closed — this project can no longer be deleted.`,
+          });
+          setItemToDelete(null);
+          setIsDeleting(false);
+          return;
+        }
+      }
+
       const { error } = await supabase.from(table).delete().eq('id', itemToDelete.id);
       
       if (error) throw error;

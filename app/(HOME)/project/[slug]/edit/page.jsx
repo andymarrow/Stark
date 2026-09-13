@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter, notFound } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
-import { Loader2, ShieldAlert, ArrowLeft } from "lucide-react";
+import { Loader2, ShieldAlert, ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditProjectForm from "./_components/EditProjectForm";
+import { getContestLockInfo } from "@/lib/contestLock";
 
 export default function EditProjectPage({ params }) {
   const { slug } = use(params);
@@ -16,6 +17,7 @@ export default function EditProjectPage({ params }) {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [lockInfo, setLockInfo] = useState(null);
 
   useEffect(() => {
     // Wait for auth to be ready
@@ -45,6 +47,16 @@ export default function EditProjectPage({ params }) {
         // SECURITY CHECK: Verify Ownership
         if (data.owner_id !== user.id) {
             setIsUnauthorized(true);
+            setLoading(false);
+            return;
+        }
+
+        // FAIRNESS CHECK: A project submitted to a contest freezes the
+        // moment that contest's submission window closes, so nobody can
+        // keep changing their entry while judges are actively scoring it.
+        const lock = await getContestLockInfo(data.id);
+        if (lock.locked) {
+            setLockInfo(lock);
             setLoading(false);
             return;
         }
@@ -102,6 +114,32 @@ export default function EditProjectPage({ params }) {
                     </Button>
                 </Link>
             </div>
+        </div>
+    );
+  }
+
+  // --- CONTEST-LOCKED STATE ---
+  if (lockInfo) {
+    return (
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center animate-in fade-in zoom-in-95 duration-300">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-full mb-6">
+                <Lock size={48} className="text-yellow-500" />
+            </div>
+
+            <div className="space-y-2 mb-8">
+                <h1 className="text-3xl font-black uppercase tracking-tight">Entry Locked</h1>
+                <p className="text-muted-foreground font-mono text-sm max-w-md mx-auto">
+                    Submissions for <strong className="text-foreground">{lockInfo.contestTitle}</strong> closed on{" "}
+                    {new Date(lockInfo.deadline).toLocaleDateString()}. To keep judging fair, this project can no
+                    longer be edited, changelogged, or deleted.
+                </p>
+            </div>
+
+            <Link href={`/project/${slug}`}>
+                <Button variant="outline" className="h-12 rounded-none border-border font-mono text-xs uppercase tracking-wider">
+                    <ArrowLeft size={14} className="mr-2" /> Return to Viewer
+                </Button>
+            </Link>
         </div>
     );
   }

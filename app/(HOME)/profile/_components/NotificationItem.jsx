@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { getAvatar } from "@/constants/assets";
+import { acceptCollabInvite, declineCollabInvite } from "@/app/actions/collaborationActions";
 
 export default function NotificationItem({ notification, onRead, onUpdateState, currentUserId }) {
   const [processing, setProcessing] = useState(false);
@@ -62,23 +63,14 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         const slug = match ? match[1] : null;
         if (!slug) throw new Error("Outdated protocol invite.");
 
-        const { data: project, error: fetchError } = await supabase.from('projects').select('id').eq('slug', slug).single();
-        if (fetchError || !project) throw new Error("Project Node not found.");
-
-        // .select() after the update so an RLS-blocked write (0 rows
-        // actually changed) surfaces as a real failure instead of a silent
-        // no-op that leaves the invite pending forever.
-        const { data: updated, error: updateError } = await supabase
-            .from('collaborations')
-            .update({ status: 'accepted' })
-            .eq('project_id', project.id)
-            .eq('user_id', currentUserId)
-            .select('id');
-        if (updateError) throw updateError;
-        if (!updated?.length) throw new Error("Invite was already resolved or removed.");
+        // Server-side (service role) — see collaborationActions.js for why:
+        // the client-side anon-key version falsely reported success writes
+        // as failures because RLS blocked reading the row back afterward.
+        const result = await acceptCollabInvite(slug);
+        if (result.error) throw new Error(result.error);
 
         toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
-        onRead(notification.id); 
+        onRead(notification.id);
         onUpdateState(notification.id, { is_read: true, message: "You accepted the collaboration invite." });
     } catch (err) {
         toast.error("Handshake Failed", { description: err.message });
@@ -94,20 +86,8 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         const slug = match ? match[1] : null;
         if (!slug) throw new Error("Outdated protocol invite.");
 
-        const { data: project, error: fetchError } = await supabase.from('projects').select('id').eq('slug', slug).single();
-        if (fetchError || !project) throw new Error("Project Node not found.");
-
-        // .select() after the delete so an RLS-blocked delete (0 rows
-        // actually removed) surfaces as a real failure instead of a silent
-        // no-op that leaves the invite pending forever.
-        const { data: deleted, error: deleteError } = await supabase
-            .from('collaborations')
-            .delete()
-            .eq('project_id', project.id)
-            .eq('user_id', currentUserId)
-            .select('id');
-        if (deleteError) throw deleteError;
-        if (!deleted?.length) throw new Error("Invite was already resolved or removed.");
+        const result = await declineCollabInvite(slug);
+        if (result.error) throw new Error(result.error);
 
         toast.info("Invite Terminated");
         onRead(notification.id);

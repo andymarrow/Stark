@@ -14,6 +14,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion"; 
 import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor"; 
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
+import { getContestLockInfo } from "@/lib/contestLock";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -91,6 +92,19 @@ export default function EditChangelogPage({ params }) {
             router.push(`/project/${slug}`);
             return;
         }
+
+        // FAIRNESS CHECK: locked the moment a contest this project entered
+        // has closed submissions — no editing or deleting changelog entries
+        // once judges are actively scoring it.
+        const lock = await getContestLockInfo(projectData.id);
+        if (lock.locked) {
+            toast.error("Entry Locked", {
+                description: `Submissions for ${lock.contestTitle} have closed — this project's changelog can no longer be modified.`,
+            });
+            router.push(`/project/${slug}`);
+            return;
+        }
+
         setProject(projectData);
 
         const { data: logData, error: logError } = await supabase

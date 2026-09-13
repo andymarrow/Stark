@@ -14,7 +14,8 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor"; 
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
-import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator"; 
+import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
+import { getContestLockInfo } from "@/lib/contestLock";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -92,6 +93,18 @@ export default function CreateChangelogPage({ params }) {
         
         if (data.owner_id !== user.id) {
             toast.error("Unauthorized");
+            router.push(`/project/${slug}`);
+            return;
+        }
+
+        // FAIRNESS CHECK: locked the moment a contest this project entered
+        // has closed submissions — no new changelog entries once judges are
+        // actively scoring it.
+        const lock = await getContestLockInfo(data.id);
+        if (lock.locked) {
+            toast.error("Entry Locked", {
+                description: `Submissions for ${lock.contestTitle} have closed — this project can no longer be changelogged.`,
+            });
             router.push(`/project/${slug}`);
             return;
         }
