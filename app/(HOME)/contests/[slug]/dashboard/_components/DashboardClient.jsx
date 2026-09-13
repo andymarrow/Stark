@@ -110,11 +110,12 @@ export default function DashboardClient({ contest, currentUser }) {
                 {activeTab === 'matrix' && <ResultsMatrix contest={contest} />}
 
                 {activeTab === 'judges' && (
-                    <JudgesTab 
-                        contestId={contest.id} 
+                    <JudgesTab
+                        contestId={contest.id}
                         contestTitle={contest.title}
                         contestSlug={contest.slug}
                         creatorName={currentUser?.user_metadata?.full_name || currentUser?.email}
+                        defaultMetrics={contest.metrics_config || []}
                     />
                 )}
                 

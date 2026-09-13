@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
-import { FileText, Layers, Megaphone, Grid, List, Handshake } from "lucide-react"; // Added Icons
+import { FileText, Layers, Megaphone, Grid, List, Handshake, Gavel } from "lucide-react"; // Added Icons
 import ContestHero from "./ContestHero";
 import EntriesGrid from "./EntriesGrid";
 import ContestFeed from "./ContestFeed"; // <--- NEW COMPONENT
 import RulesTab from "./RulesTab";
 import UpdatesTab from "./UpdatesTab";
 import SponsorsShowcase from "./SponsorsShowcase";
+import JudgesShowcase from "./JudgesShowcase";
 
 export default function ContestClient({ contest, userEntry, judges }) {
   const [activeTab, setActiveTab] = useState("details");
@@ -16,6 +17,7 @@ export default function ContestClient({ contest, userEntry, judges }) {
   const sponsors = (Array.isArray(contest.sponsors) ? contest.sponsors : []).filter(
     (s) => typeof s === "object" && s?.name
   );
+  const hasJudges = Array.isArray(judges) && judges.length > 0;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -41,6 +43,11 @@ export default function ContestClient({ contest, userEntry, judges }) {
                         <Handshake size={14} /> Sponsors
                     </button>
                 )}
+                {hasJudges && (
+                    <button onClick={() => setActiveTab("judges")} className={`px-6 py-3 text-xs font-mono uppercase border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === "judges" ? "border-accent text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+                        <Gavel size={14} /> Judges
+                    </button>
+                )}
             </div>
 
             {/* View Switcher (Only visible on Entries tab) */}
@@ -59,7 +66,12 @@ export default function ContestClient({ contest, userEntry, judges }) {
         {/* Tab Content */}
         <div className="min-h-[400px]">
             {activeTab === "details" && (
-                <RulesTab contest={contest} judges={judges} onViewSponsors={sponsors.length > 0 ? () => setActiveTab("sponsors") : undefined} />
+                <RulesTab
+                    contest={contest}
+                    judges={judges}
+                    onViewSponsors={sponsors.length > 0 ? () => setActiveTab("sponsors") : undefined}
+                    onViewJudges={hasJudges ? () => setActiveTab("judges") : undefined}
+                />
             )}
 
             {activeTab === "entries" && (
@@ -73,6 +85,8 @@ export default function ContestClient({ contest, userEntry, judges }) {
             {activeTab === "updates" && <UpdatesTab announcements={contest.announcements} />}
 
             {activeTab === "sponsors" && <SponsorsShowcase sponsors={sponsors} />}
+
+            {activeTab === "judges" && <JudgesShowcase judges={judges} contestMetrics={contest.metrics_config} />}
         </div>
 
       </div>

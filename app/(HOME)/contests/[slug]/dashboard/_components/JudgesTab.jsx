@@ -1,26 +1,28 @@
 "use client";
 import { useState, useEffect } from "react";
-import { 
-  UserPlus, Mail, Copy, Trash2, ShieldCheck, 
-  Loader2, RefreshCw 
+import {
+  UserPlus, Mail, Copy, Trash2, ShieldCheck,
+  Loader2, RefreshCw, SlidersHorizontal
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { sendJudgeInvite } from "@/app/actions/inviteJudge"; 
+import { sendJudgeInvite } from "@/app/actions/inviteJudge";
+import JudgeMetricsModal from "./JudgeMetricsModal";
 
 /**
  * COMPONENT: JudgesTab
  * Manages the roster of evaluators for a specific contest.
  * Generates secure access codes and dispatches emails via Resend.
  */
-export default function JudgesTab({ contestId, contestTitle, contestSlug, creatorName }) {
+export default function JudgesTab({ contestId, contestTitle, contestSlug, creatorName, defaultMetrics = [] }) {
   const [judges, setJudges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [isInviting, setIsInviting] = useState(false);
+  const [metricsJudge, setMetricsJudge] = useState(null);
 
   // --- 1. DATA FETCHING ---
   const fetchJudges = async () => {
@@ -193,14 +195,22 @@ export default function JudgesTab({ contestId, contestTitle, contestSlug, creato
 
                         {/* Actions & Code */}
                         <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-                            <div 
+                            <button
+                                onClick={() => setMetricsJudge(judge)}
+                                title="Configure this judge's own scoring rubric"
+                                className={`flex items-center gap-1.5 px-3 py-2 border text-[10px] font-mono uppercase transition-colors
+                                    ${judge.metrics_config ? 'border-accent/40 text-accent bg-accent/5' : 'border-border text-muted-foreground hover:border-accent hover:text-accent'}`}
+                            >
+                                <SlidersHorizontal size={12} /> {judge.metrics_config ? 'Custom Rubric' : 'Rubric'}
+                            </button>
+                            <div
                                 onClick={() => copyCode(judge.access_code)}
                                 title="Click to copy code"
                                 className="flex-1 sm:flex-none text-center px-4 py-2 bg-secondary/20 border border-border cursor-pointer hover:border-accent hover:text-accent transition-colors text-xs font-mono tracking-widest font-bold"
                             >
                                 {judge.access_code}
                             </div>
-                            <button 
+                            <button
                                 onClick={() => handleRemove(judge.id)}
                                 className="p-2 text-zinc-600 hover:text-red-500 transition-colors"
                                 title="Revoke Access"
@@ -214,6 +224,17 @@ export default function JudgesTab({ contestId, contestTitle, contestSlug, creato
             </div>
         )}
       </div>
+
+      {metricsJudge && (
+        <JudgeMetricsModal
+          judge={metricsJudge}
+          contestId={contestId}
+          defaultMetrics={defaultMetrics}
+          isOpen={!!metricsJudge}
+          onClose={() => setMetricsJudge(null)}
+          onSaved={(updated) => setJudges((prev) => prev.map((j) => (j.id === updated.id ? updated : j)))}
+        />
+      )}
     </div>
   );
 }

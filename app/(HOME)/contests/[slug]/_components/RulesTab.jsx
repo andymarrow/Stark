@@ -1,10 +1,8 @@
 "use client";
 import ReactMarkdown from "react-markdown";
-import { Gavel, ExternalLink, Handshake, ArrowRight } from "lucide-react";
-import Link from "next/link";
+import { Gavel, Handshake, ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ImageLightbox from "@/app/(HOME)/project/[slug]/_components/ImageLightbox"; // Reuse existing lightbox
 
 // YouTube Helper
@@ -19,7 +17,7 @@ const getThumbnail = (url) => {
     return url;
 };
 
-export default function RulesTab({ contest, judges, onViewSponsors }) {
+export default function RulesTab({ contest, judges, onViewSponsors, onViewJudges }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
@@ -78,50 +76,45 @@ export default function RulesTab({ contest, judges, onViewSponsors }) {
                 </div>
             </section>
 
-            {/* Judges */}
-            {judges && judges.length > 0 && (
-                <section className="border-t border-border pt-8">
-                    <h3 className="font-bold uppercase text-xs tracking-widest mb-6 flex items-center gap-2 text-muted-foreground">
-                        <Gavel size={14} className="text-accent" /> Judged By
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {judges.map((judge) => {
-                            const hasProfile = !!judge?.profile?.username;
-                            const displayName = judge?.profile?.full_name || judge?.email || "Anonymous Judge";
-                            const fallbackChar = (judge?.profile?.username || judge?.email || "?").charAt(0).toUpperCase();
-
-                            const Content = (
-                                <div className={`flex items-center gap-4 p-4 border transition-all group h-full
-                                    ${hasProfile ? 'bg-card border-border hover:border-accent/50 cursor-pointer' : 'bg-secondary/5 border-border/50 opacity-70 cursor-default'}`}>
-                                    <Avatar className="h-10 w-10 rounded-none border border-border group-hover:border-accent transition-colors">
-                                        <AvatarImage src={judge?.profile?.avatar_url} />
-                                        <AvatarFallback className="rounded-none bg-secondary font-mono">{fallbackChar}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="min-w-0 flex-1">
-                                        <div className="font-bold text-sm truncate flex items-center gap-2">
-                                            {displayName}
-                                            {hasProfile && <ExternalLink size={10} className="text-accent opacity-0 group-hover:opacity-100 transition-opacity" />}
-                                        </div>
-                                        <div className="text-[9px] font-mono text-muted-foreground uppercase tracking-tighter">
-                                            {hasProfile ? `@${judge.profile.username}` : "Unlinked_node"}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-
-                            return hasProfile ? (
-                                <Link key={judge.id} href={`/profile/${judge.profile.username}`}>{Content}</Link>
-                            ) : (
-                                <div key={judge.id}>{Content}</div>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
         </div>
 
         {/* RIGHT: Sidebar */}
         <div className="lg:col-span-4 space-y-8">
+            {/* Judging detail now lives in its own tab — this points there,
+                with a peek at who's on the panel. */}
+            {judges?.length > 0 && onViewJudges && (
+                <button
+                    onClick={onViewJudges}
+                    className="w-full text-left bg-background border border-border p-6 group hover:border-accent/50 transition-all"
+                >
+                    <h3 className="font-bold uppercase text-[10px] tracking-[0.2em] mb-4 border-b border-border pb-2 text-muted-foreground flex items-center gap-2">
+                        <Gavel size={12} className="text-accent" /> Judged By
+                    </h3>
+                    <div className="flex items-center -space-x-2 mb-4">
+                        {judges.slice(0, 6).map((judge, i) => (
+                            <div key={judge.id || i} className="relative w-9 h-9 rounded-full border-2 border-background bg-secondary overflow-hidden flex-shrink-0" style={{ zIndex: 6 - i }}>
+                                {judge.profile?.avatar_url ? (
+                                    <img src={judge.profile.avatar_url} alt={judge.profile?.username || judge.email} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-muted-foreground">
+                                        {(judge.profile?.username || judge.email || "?").charAt(0).toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {judges.length > 6 && (
+                            <div className="relative w-9 h-9 rounded-full border-2 border-background bg-secondary flex items-center justify-center text-[9px] font-mono font-bold text-muted-foreground">
+                                +{judges.length - 6}
+                            </div>
+                        )}
+                    </div>
+                    <span className="text-xs font-bold uppercase tracking-tight text-foreground group-hover:text-accent transition-colors flex items-center gap-1.5">
+                        See the Judging Panel & Criteria
+                        <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                </button>
+            )}
+
             <div className="bg-secondary/5 border border-border p-6 relative overflow-hidden">
                 <h3 className="font-bold uppercase text-[10px] tracking-[0.2em] mb-6 border-b border-border pb-2 text-muted-foreground">Prize Pool</h3>
                 <div className="space-y-6">

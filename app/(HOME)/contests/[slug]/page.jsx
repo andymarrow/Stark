@@ -74,11 +74,13 @@ export default async function PublicContestPage({ params }) {
   if (error || !contest) return notFound();
 
   // 2. FETCH JUDGING PANEL
+  // `*` (not naming metrics_config explicitly) so this keeps working even
+  // before the per-judge-metrics migration has been applied — PostgREST
+  // errors the whole query on a genuinely missing column.
   const { data: judges } = await supabase
     .from('contest_judges')
     .select(`
-        id,
-        status,
+        *,
         profile:profiles(id, full_name, username, avatar_url, bio, socials)
     `)
     .eq('contest_id', contest.id);

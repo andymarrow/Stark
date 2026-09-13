@@ -136,7 +136,13 @@ export default function JudgePortalPage({ params }) {
     return <JudgeLogin contestTitle={contest?.title} onVerify={handleVerify} isVerifying={verifying} />;
   }
 
-  const manualMetricNames = contest.metrics_config
+  // This judge's own rubric, if the host set one — otherwise the contest's
+  // shared default. Judges from different backgrounds can be weighted (or
+  // even scored on entirely different criteria) without affecting anyone
+  // else's evaluation.
+  const activeMetrics = judge.metrics_config || contest.metrics_config;
+
+  const manualMetricNames = activeMetrics
     .filter(m => m.type === 'manual')
     .map(m => m.name);
 
@@ -184,7 +190,7 @@ export default function JudgePortalPage({ params }) {
         isOpen={!!selectedEntry}
         onClose={() => setSelectedEntry(null)}
         entry={selectedEntry}
-        metrics={contest.metrics_config}
+        metrics={activeMetrics}
         onSave={handleSaveScore}
         isSaving={isSaving}
       />

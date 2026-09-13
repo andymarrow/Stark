@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { Globe, Twitter, Linkedin, Instagram, X, PlayCircle, ChevronRight, Crown } from "lucide-react";
+import { Globe, Twitter, Linkedin, Instagram, X, PlayCircle, ArrowRight, Crown, Award, Medal, ImageIcon } from "lucide-react";
 import ImageLightbox from "@/app/(HOME)/project/[slug]/_components/ImageLightbox";
 
 const isVideoUrl = (url) => typeof url === "string" && (url.includes("youtube.com") || url.includes("youtu.be"));
@@ -16,20 +16,23 @@ const getYoutubeId = (url) => {
 
 const getThumbnail = (url) => (isVideoUrl(url) ? `https://img.youtube.com/vi/${getYoutubeId(url)}/mqdefault.jpg` : url);
 
-const TIERS = [
-  { id: "title", label: "Title Sponsor", accent: true },
-  { id: "gold", label: "Gold Sponsors" },
-  { id: "silver", label: "Silver Sponsors" },
-  { id: "partner", label: "Partners" },
-];
+// Each tier gets its own identity — color, icon, banner aspect — so the
+// hierarchy reads instantly instead of every sponsor looking the same size.
+const TIERS = {
+  title: { label: "Title Sponsor", icon: Crown, accent: "text-accent", glow: "from-accent/20", border: "border-accent/40", bg: "bg-accent/10" },
+  gold: { label: "Gold Sponsors", icon: Award, accent: "text-yellow-500", glow: "from-yellow-500/15", border: "border-yellow-500/30", bg: "bg-yellow-500/10" },
+  silver: { label: "Silver Sponsors", icon: Medal, accent: "text-zinc-400", glow: "from-zinc-400/10", border: "border-zinc-400/25", bg: "bg-zinc-400/10" },
+  partner: { label: "Partners", icon: Globe, accent: "text-muted-foreground", glow: "from-foreground/5", border: "border-border", bg: "bg-secondary/20" },
+};
+const TIER_ORDER = ["title", "gold", "silver", "partner"];
 
 const LINK_ICONS = { web: Globe, x: Twitter, linkedin: Linkedin, instagram: Instagram };
 
-function LinkRow({ links }) {
+function LinkRow({ links, size = 13 }) {
   const entries = Object.entries(links || {}).filter(([k, v]) => v && LINK_ICONS[k]);
   if (!entries.length) return null;
   return (
-    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+    <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
       {entries.map(([key, url]) => {
         const Icon = LINK_ICONS[key];
         return (
@@ -40,7 +43,7 @@ function LinkRow({ links }) {
             rel="noopener noreferrer"
             className="p-1.5 bg-background border border-border hover:border-accent hover:text-accent transition-colors"
           >
-            <Icon size={12} />
+            <Icon size={size} />
           </a>
         );
       })}
@@ -53,6 +56,7 @@ function SponsorModal({ sponsor, onClose }) {
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const gallery = Array.isArray(sponsor.gallery) ? sponsor.gallery : [];
   const images = gallery.filter((u) => !isVideoUrl(u));
+  const tier = TIERS[sponsor.tier] || TIERS.partner;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in" onClick={onClose}>
@@ -64,31 +68,33 @@ function SponsorModal({ sponsor, onClose }) {
           <X size={16} />
         </button>
 
-        <div className="p-8 border-b border-border flex items-start gap-5">
-          <div className="relative w-16 h-16 flex-shrink-0 border border-border bg-secondary/20 overflow-hidden">
-            <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain p-2" />
-          </div>
-          <div className="min-w-0 flex-1">
-            {sponsor.tier && (
-              <span className="text-[9px] font-mono uppercase tracking-widest text-accent font-bold">{sponsor.tier} Sponsor</span>
-            )}
-            <h2 className="text-2xl font-black uppercase tracking-tight text-foreground leading-tight">{sponsor.name}</h2>
-            {sponsor.tagline && <p className="text-sm text-muted-foreground mt-1">{sponsor.tagline}</p>}
-            <div className="mt-3">
-              <LinkRow links={sponsor.links} />
+        <div className={`relative h-40 bg-gradient-to-br ${tier.glow} to-transparent border-b border-border flex items-end p-8 overflow-hidden`}>
+          <div
+            className="absolute inset-0 opacity-[0.07]"
+            style={{ backgroundImage: "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+          />
+          <div className="relative flex items-end gap-5">
+            <div className="w-20 h-20 flex-shrink-0 border border-border bg-background overflow-hidden shadow-lg">
+              <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain p-2" />
+            </div>
+            <div>
+              <span className={`inline-flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest font-bold ${tier.accent}`}>
+                <tier.icon size={11} /> {sponsor.tier || "partner"} sponsor
+              </span>
+              <h2 className="text-2xl font-black uppercase tracking-tight text-foreground leading-tight">{sponsor.name}</h2>
             </div>
           </div>
         </div>
 
-        {sponsor.description && (
-          <div className="p-8 border-b border-border">
-            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{sponsor.description}</p>
-          </div>
-        )}
+        <div className="p-8 space-y-6">
+          {sponsor.tagline && <p className="text-sm text-foreground/90 font-medium">{sponsor.tagline}</p>}
+          {sponsor.description && <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{sponsor.description}</p>}
+          <LinkRow links={sponsor.links} size={14} />
+        </div>
 
         {gallery.length > 0 && (
-          <div className="p-8">
-            <h3 className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground mb-4">Showcase</h3>
+          <div className="p-8 pt-0">
+            <h3 className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground mb-4 border-t border-border pt-6">Showcase</h3>
             <div className="grid grid-cols-2 gap-3">
               {gallery.map((url, i) => {
                 const video = isVideoUrl(url);
@@ -114,45 +120,90 @@ function SponsorModal({ sponsor, onClose }) {
   );
 }
 
-function SponsorCard({ sponsor, featured, onOpen }) {
+// The title sponsor: a full hero banner, not just a bigger card.
+function TitleSponsorBanner({ sponsor, onOpen }) {
+  const tier = TIERS.title;
+  return (
+    <button onClick={() => onOpen(sponsor)} className="group relative w-full text-left border border-accent/40 bg-card overflow-hidden">
+      <div className={`relative h-56 md:h-64 bg-gradient-to-br ${tier.glow} via-secondary/10 to-transparent overflow-hidden`}>
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{ backgroundImage: "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)", backgroundSize: "28px 28px" }}
+        />
+        <div className="absolute top-0 left-0 bg-accent text-white text-[10px] font-mono font-bold uppercase tracking-widest px-4 py-1.5 flex items-center gap-1.5 z-10">
+          <Crown size={12} /> Title Sponsor
+        </div>
+
+        <div className="relative h-full flex flex-col md:flex-row items-center md:items-end gap-6 p-8">
+          <div className="w-28 h-28 md:w-36 md:h-36 flex-shrink-0 bg-background border border-border shadow-2xl overflow-hidden">
+            <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain p-4" />
+          </div>
+          <div className="flex-1 min-w-0 text-center md:text-left">
+            <h3 className="text-3xl md:text-5xl font-black uppercase tracking-tighter text-foreground leading-none mb-2 group-hover:text-accent transition-colors">
+              {sponsor.name}
+            </h3>
+            {sponsor.tagline && <p className="text-sm md:text-base text-muted-foreground max-w-xl">{sponsor.tagline}</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4 p-5 border-t border-border bg-background">
+        <LinkRow links={sponsor.links} />
+        <div className="flex items-center gap-4">
+          {Array.isArray(sponsor.gallery) && sponsor.gallery.length > 0 && (
+            <span className="text-[10px] font-mono uppercase text-muted-foreground flex items-center gap-1.5">
+              {sponsor.gallery.some(isVideoUrl) ? <PlayCircle size={13} /> : <ImageIcon size={13} />} {sponsor.gallery.length} media
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase text-accent font-bold group-hover:gap-2.5 transition-all">
+            View Profile <ArrowRight size={13} />
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Gold / Silver / Partner — a banner-style card (logo on a tier-tinted
+// backdrop, not a lonely icon floating in whitespace), consistent with the
+// cover-art card language used across the rest of Stark's contest pages.
+function SponsorCard({ sponsor, tierKey, onOpen }) {
+  const tier = TIERS[tierKey] || TIERS.partner;
   return (
     <button
       onClick={() => onOpen(sponsor)}
-      className={`group text-left border bg-card hover:border-accent/60 transition-all relative overflow-hidden w-full
-        ${featured ? "border-accent/40 p-8 flex flex-col md:flex-row items-center gap-8" : "border-border p-6 flex flex-col items-center text-center gap-3"}`}
+      className={`group relative text-left border ${tier.border} bg-card hover:border-accent/60 transition-all overflow-hidden w-full flex flex-col`}
     >
-      {featured && (
-        <div className="absolute top-0 left-0 bg-accent text-white text-[9px] font-mono font-bold uppercase tracking-widest px-3 py-1 flex items-center gap-1.5">
-          <Crown size={10} /> Title Sponsor
-        </div>
-      )}
+      {/* Corner brackets — Stark's brutalist card signature, turns accent on hover */}
+      <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-border group-hover:border-accent transition-colors z-20" />
+      <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-border group-hover:border-accent transition-colors z-20" />
+      <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-border group-hover:border-accent transition-colors z-20" />
+      <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-border group-hover:border-accent transition-colors z-20" />
 
-      <div className={`relative flex-shrink-0 bg-secondary/20 border border-border overflow-hidden ${featured ? "w-28 h-28" : "w-16 h-16"}`}>
-        <img src={sponsor.logo_url} alt={sponsor.name} className="w-full h-full object-contain p-3 grayscale group-hover:grayscale-0 transition-all" />
+      <div className={`relative aspect-[16/10] bg-gradient-to-br ${tier.glow} to-transparent flex items-center justify-center p-8 border-b ${tier.border}`}>
+        <span className={`absolute top-2.5 left-2.5 inline-flex items-center gap-1 text-[8px] font-mono uppercase tracking-widest font-bold ${tier.accent}`}>
+          <tier.icon size={10} /> {tierKey}
+        </span>
+        <img
+          src={sponsor.logo_url}
+          alt={sponsor.name}
+          className="max-h-full max-w-full object-contain grayscale group-hover:grayscale-0 transition-all duration-300"
+        />
       </div>
 
-      <div className={`min-w-0 flex-1 ${featured ? "" : "w-full"}`}>
-        <h3 className={`font-black uppercase tracking-tight text-foreground group-hover:text-accent transition-colors ${featured ? "text-2xl" : "text-sm truncate"}`}>
+      <div className="p-4 flex flex-col gap-2 flex-1">
+        <h3 className="text-sm font-black uppercase tracking-tight text-foreground group-hover:text-accent transition-colors truncate">
           {sponsor.name}
         </h3>
-        {sponsor.tagline && (
-          <p className={`text-muted-foreground mt-1 ${featured ? "text-sm" : "text-[10px] line-clamp-2"}`}>{sponsor.tagline}</p>
-        )}
-        <div className={`mt-3 flex items-center gap-3 ${featured ? "" : "justify-center"}`}>
-          <LinkRow links={sponsor.links} />
-          {Array.isArray(sponsor.gallery) && sponsor.gallery.length > 0 && (
-            <span className="text-[9px] font-mono uppercase text-muted-foreground flex items-center gap-1">
-              {sponsor.gallery.some(isVideoUrl) ? <PlayCircle size={11} /> : null} {sponsor.gallery.length} media
-            </span>
-          )}
+        {sponsor.tagline && <p className="text-[11px] text-muted-foreground line-clamp-2 leading-snug">{sponsor.tagline}</p>}
+
+        <div className="mt-auto pt-2 flex items-center justify-between">
+          <LinkRow links={sponsor.links} size={11} />
+          <span className="text-[9px] font-mono uppercase text-muted-foreground group-hover:text-accent transition-colors flex items-center gap-1">
+            Profile <ArrowRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+          </span>
         </div>
       </div>
-
-      {featured && (
-        <span className="hidden md:flex items-center gap-1 text-[10px] font-mono uppercase text-accent font-bold flex-shrink-0">
-          View Profile <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-        </span>
-      )}
     </button>
   );
 }
@@ -173,21 +224,35 @@ export default function SponsorsShowcase({ sponsors }) {
   }
 
   return (
-    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2">
-      {TIERS.map(({ id, label, accent }) => {
-        const tierSponsors = byTier(id);
+    <div className="space-y-14 animate-in fade-in slide-in-from-bottom-2">
+      {TIER_ORDER.map((tierKey) => {
+        const tierSponsors = byTier(tierKey);
         if (!tierSponsors.length) return null;
+        const tier = TIERS[tierKey];
 
         return (
-          <section key={id}>
-            <h3 className={`font-bold uppercase text-xs tracking-[0.2em] mb-5 pb-2 border-b border-border ${accent ? "text-accent" : "text-muted-foreground"}`}>
-              {label}
-            </h3>
-            <div className={accent ? "space-y-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"}>
-              {tierSponsors.map((sponsor, i) => (
-                <SponsorCard key={sponsor.id || i} sponsor={sponsor} featured={accent} onOpen={setOpenSponsor} />
-              ))}
+          <section key={tierKey}>
+            <div className="flex items-center gap-2.5 mb-5 pb-2.5 border-b border-border">
+              <tier.icon size={14} className={tier.accent} />
+              <h3 className={`font-bold uppercase text-xs tracking-[0.25em] ${tierKey === "title" ? tier.accent : "text-muted-foreground"}`}>
+                {tier.label}
+              </h3>
+              <span className="text-[10px] font-mono text-muted-foreground/60">({tierSponsors.length})</span>
             </div>
+
+            {tierKey === "title" ? (
+              <div className="space-y-4">
+                {tierSponsors.map((sponsor, i) => (
+                  <TitleSponsorBanner key={sponsor.id || i} sponsor={sponsor} onOpen={setOpenSponsor} />
+                ))}
+              </div>
+            ) : (
+              <div className={`grid grid-cols-2 sm:grid-cols-3 gap-4 ${tierKey === "gold" ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
+                {tierSponsors.map((sponsor, i) => (
+                  <SponsorCard key={sponsor.id || i} sponsor={sponsor} tierKey={tierKey} onOpen={setOpenSponsor} />
+                ))}
+              </div>
+            )}
           </section>
         );
       })}
