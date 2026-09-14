@@ -16,12 +16,25 @@
  * still safe: the acting user comes from their own session cookie (can't
  * be spoofed), and every write is scoped to `user_id = that user's id`, so
  * this can only ever touch the caller's own invite.
+ *
+ * Every step below is wrapped in try/catch and always returns
+ * { error: message } rather than throwing — an uncaught throw from a
+ * Server Action gets redacted by Next.js in production ("An error
+ * occurred in the Server Components render... The specific message is
+ * omitted"), which is exactly the unhelpful wall the client saw before
+ * this. Whatever the failure is (missing service-role credentials, a
+ * network blip, anything), it now surfaces as a real, readable message.
  */
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 function getAdmin() {
-  return createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Server is missing Supabase service credentials (SUPABASE_SERVICE_ROLE_KEY).");
+  }
+  return createAdminClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -33,43 +46,53 @@ async function resolveProjectId(admin, slug) {
 }
 
 export async function acceptCollabInvite(projectSlug) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "You need to be signed in." };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "You need to be signed in." };
 
-  const admin = getAdmin();
-  const { projectId, error: resolveError } = await resolveProjectId(admin, projectSlug);
-  if (resolveError) return { error: resolveError };
+    const admin = getAdmin();
+    const { projectId, error: resolveError } = await resolveProjectId(admin, projectSlug);
+    if (resolveError) return { error: resolveError };
 
-  const { data, error } = await admin
-    .from("collaborations")
-    .update({ status: "accepted" })
-    .eq("project_id", projectId)
-    .eq("user_id", user.id)
-    .select("id");
+    const { data, error } = await admin
+      .from("collaborations")
+      .update({ status: "accepted" })
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .select("id");
 
-  if (error) return { error: error.message };
-  if (!data?.length) return { error: "Invite was already resolved or removed." };
-  return { success: true };
+    if (error) return { error: error.message };
+    if (!data?.length) return { error: "Invite was already resolved or removed." };
+    return { success: true };
+  } catch (err) {
+    console.error("[acceptCollabInvite]", err);
+    return { error: err.message || "Something went wrong accepting this invite." };
+  }
 }
 
 export async function declineCollabInvite(projectSlug) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "You need to be signed in." };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "You need to be signed in." };
 
-  const admin = getAdmin();
-  const { projectId, error: resolveError } = await resolveProjectId(admin, projectSlug);
-  if (resolveError) return { error: resolveError };
+    const admin = getAdmin();
+    const { projectId, error: resolveError } = await resolveProjectId(admin, projectSlug);
+    if (resolveError) return { error: resolveError };
 
-  const { data, error } = await admin
-    .from("collaborations")
-    .delete()
-    .eq("project_id", projectId)
-    .eq("user_id", user.id)
-    .select("id");
+    const { data, error } = await admin
+      .from("collaborations")
+      .delete()
+      .eq("project_id", projectId)
+      .eq("user_id", user.id)
+      .select("id");
 
-  if (error) return { error: error.message };
-  if (!data?.length) return { error: "Invite was already resolved or removed." };
-  return { success: true };
+    if (error) return { error: error.message };
+    if (!data?.length) return { error: "Invite was already resolved or removed." };
+    return { success: true };
+  } catch (err) {
+    console.error("[declineCollabInvite]", err);
+    return { error: err.message || "Something went wrong declining this invite." };
+  }
 }
