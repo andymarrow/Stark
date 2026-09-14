@@ -3,7 +3,11 @@ import { Resend } from 'resend';
 import { createClient } from "@/utils/supabase/server";
 import { renderEmail } from "@/lib/emailTemplate";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy — `new Resend(undefined)` throws immediately, and since this ran at
+// module scope, merely importing this file (even without ever calling a
+// function in it) crashed every page whose server bundle happened to pull
+// it in, in any environment missing RESEND_API_KEY.
+const getResend = () => new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = 'Stark Admin <admin@stark.et>';
 const MAX_FEATURED_CONTESTS = 2; // The hero on /contests only has 2 spotlight slots.
 
@@ -83,7 +87,7 @@ export async function deleteContestAsAdmin(contestId, reason) {
       const creatorEmail = contest.creator?.email;
       if (creatorEmail) {
         console.log(" [Admin] Attempting to email creator:", creatorEmail);
-        const { error: resendError } = await resend.emails.send({
+        const { error: resendError } = await getResend().emails.send({
           from: SENDER_EMAIL,
           to: [creatorEmail],
           subject: `Notice: Contest Deletion (${contest.title})`,
@@ -104,7 +108,7 @@ export async function deleteContestAsAdmin(contestId, reason) {
       if (participantEmails.length > 0) {
           console.log(" [Admin] Emailing participants...");
           await Promise.all(participantEmails.map(async (email) => {
-              const { error } = await resend.emails.send({
+              const { error } = await getResend().emails.send({
                   from: SENDER_EMAIL,
                   to: [email],
                   subject: `Notice: Contest Cancelled (${contest.title})`,
@@ -148,18 +152,24 @@ export async function removeJudgeAsAdmin(judgeId, reason, contestTitle, creatorE
   if (error) return { error: error.message };
 
   if (creatorEmail) {
-    await resend.emails.send({
-        from: SENDER_EMAIL,
-        to: [creatorEmail],
-        subject: `Admin Action: Judge Removed`,
-        html: renderEmail({
-            tag: "MODERATION",
-            intro: [
-              `A judge was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
-              `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
-            ],
-        }),
-    });
+    // The judge is already removed above — don't let a Resend hiccup (or a
+    // missing RESEND_API_KEY) turn a successful removal into a crash.
+    try {
+      await getResend().emails.send({
+          from: SENDER_EMAIL,
+          to: [creatorEmail],
+          subject: `Admin Action: Judge Removed`,
+          html: renderEmail({
+              tag: "MODERATION",
+              intro: [
+                `A judge was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
+                `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+              ],
+          }),
+      });
+    } catch (emailError) {
+      console.error(" [Admin] Judge-removal notice email failed:", emailError);
+    }
   }
   return { success: true };
 }
@@ -176,18 +186,24 @@ export async function removeSponsorAsAdmin(contestId, sponsorName, reason, conte
   if (error) return { error: error.message };
 
   if (creatorEmail) {
-    await resend.emails.send({
-        from: SENDER_EMAIL,
-        to: [creatorEmail],
-        subject: `Admin Action: Sponsor Removed (${contestTitle})`,
-        html: renderEmail({
-            tag: "MODERATION",
-            intro: [
-              `The sponsor <strong style="color: #ffffff;">${sponsorName}</strong> was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
-              `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
-            ],
-        }),
-    });
+    // The sponsor is already removed above — don't let a Resend hiccup (or
+    // a missing RESEND_API_KEY) turn a successful removal into a crash.
+    try {
+      await getResend().emails.send({
+          from: SENDER_EMAIL,
+          to: [creatorEmail],
+          subject: `Admin Action: Sponsor Removed (${contestTitle})`,
+          html: renderEmail({
+              tag: "MODERATION",
+              intro: [
+                `The sponsor <strong style="color: #ffffff;">${sponsorName}</strong> was removed from your contest <strong style="color: #ffffff;">${contestTitle}</strong> by an administrator.`,
+                `<strong style="color: #ffffff;">Reason:</strong> ${reason}`,
+              ],
+          }),
+      });
+    } catch (emailError) {
+      console.error(" [Admin] Sponsor-removal notice email failed:", emailError);
+    }
   }
   return { success: true };
 }

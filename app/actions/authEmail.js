@@ -19,7 +19,11 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { renderEmail } from "@/lib/emailTemplate";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy — `new Resend(undefined)` throws immediately, and since this ran at
+// module scope, merely importing this file (even without ever calling a
+// function in it) crashed every page whose server bundle happened to pull
+// it in, in any environment missing RESEND_API_KEY.
+const getResend = () => new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = "Stark <verify@stark.et>";
 
 function getAdminClient() {
@@ -99,7 +103,7 @@ export async function signUpWithEmail({ email, password, username, origin }) {
       return { status: "error", message: "Could not generate a verification link." };
     }
 
-    const { error: sendError } = await resend.emails.send({
+    const { error: sendError } = await getResend().emails.send({
       from: SENDER_EMAIL,
       to: [email],
       subject: "Verify your Stark account",
@@ -151,7 +155,7 @@ export async function sendPasswordReset({ email, origin }) {
       return { status: "error", message: "Could not generate a reset link." };
     }
 
-    const { error: sendError } = await resend.emails.send({
+    const { error: sendError } = await getResend().emails.send({
       from: SENDER_EMAIL,
       to: [email],
       subject: "Reset your Stark password",

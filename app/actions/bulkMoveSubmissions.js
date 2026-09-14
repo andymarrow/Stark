@@ -3,8 +3,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { Resend } from "resend";
 import { renderEmail } from "@/lib/emailTemplate";
 
-// Initialize Resend
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy — `new Resend(undefined)` throws immediately, and since this ran at
+// module scope, merely importing this file (even without ever calling a
+// function in it) crashed every page whose server bundle happened to pull
+// it in, in any environment missing RESEND_API_KEY.
+const getResend = () => new Resend(process.env.RESEND_API_KEY);
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
 export async function broadcastNewBlog(blogId, authorId, authorUsername, blogTitle, blogSlug) {
@@ -79,6 +82,7 @@ export async function broadcastNewBlog(blogId, authorId, authorUsername, blogTit
             }));
 
             // Resend allows max 100 emails per batch request, so we chunk them
+            const resend = getResend();
             for (let i = 0; i < batchPayload.length; i += 100) {
               const batch = batchPayload.slice(i, i + 100);
               await resend.batch.send(batch);

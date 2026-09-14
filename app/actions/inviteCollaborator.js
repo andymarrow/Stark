@@ -2,11 +2,15 @@
 import { Resend } from 'resend';
 import { renderEmail } from '@/lib/emailTemplate';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy — `new Resend(undefined)` throws immediately, and since this ran at
+// module scope, merely importing this file (even without ever calling a
+// function in it) crashed every page whose server bundle happened to pull
+// it in, in any environment missing RESEND_API_KEY.
+const getResend = () => new Resend(process.env.RESEND_API_KEY);
 
 export async function sendCollaboratorInvite(email, projectTitle, inviterName) {
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: 'Stark <invites@stark.et>',
       to: [email],
       subject: `Collaboration Invite: ${projectTitle}`,

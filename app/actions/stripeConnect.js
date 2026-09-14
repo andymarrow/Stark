@@ -4,10 +4,18 @@
 import { createClient } from "@/utils/supabase/server";
 import Stripe from "stripe";
 
-// Initialize Stripe with your secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16", // Use latest stable API version
-});
+// Lazy — `new Stripe(undefined)` throws immediately ("Neither apiKey nor
+// config.authenticator provided"), and since this ran at module scope,
+// merely importing this file — even from a component on a tab nobody is
+// looking at — crashed the *entire* /profile page in any environment
+// missing STRIPE_SECRET_KEY. Next.js bundles every server action reachable
+// from a client page into one server chunk, so this took down every view
+// of /profile (settings, notifications, everything), not just the Stripe
+// Connect flow itself.
+const getStripe = () =>
+  new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: "2023-10-16", // Use latest stable API version
+  });
 
 export async function createStripeConnectLink() {
   const supabase = await createClient();
@@ -16,6 +24,8 @@ export async function createStripeConnectLink() {
   if (!user) return { success: false, error: "Authentication Required" };
 
   try {
+    const stripe = getStripe();
+
     // 1. Check if the user already has a Stripe account linked in our DB
     const { data: existingLink } = await supabase
       .from('creator_payment_links')
