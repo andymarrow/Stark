@@ -17,13 +17,21 @@
  * be spoofed), and every write is scoped to `user_id = that user's id`, so
  * this can only ever touch the caller's own invite.
  *
- * Every step below is wrapped in try/catch and always returns
- * { error: message } rather than throwing — an uncaught throw from a
- * Server Action gets redacted by Next.js in production ("An error
- * occurred in the Server Components render... The specific message is
- * omitted"), which is exactly the unhelpful wall the client saw before
- * this. Whatever the failure is (missing service-role credentials, a
- * network blip, anything), it now surfaces as a real, readable message.
+ * SECOND BUG (Accept button reappearing forever, even after a genuinely
+ * successful accept): the notification's "resolved" state — the thing
+ * that hides the Accept/Decline buttons — was only ever rewritten in local
+ * React state (NotificationItem's onUpdateState), never persisted to the
+ * notifications row itself. So the collaboration really was accepted, but
+ * on the next page load / notification refetch, the notification's
+ * message/type came back exactly as it originally was ("invited you to
+ * collaborate..."), making the UI show Accept/Decline again — forever,
+ * regardless of how many times someone clicked Accept, because each click
+ * genuinely succeeded against an already-accepted row and had nothing new
+ * to change. Fixed by having these actions also flip the *notification's*
+ * type/message in the database, not just the collaboration row, so the
+ * resolved state survives a reload. `notificationId` is optional so older
+ * callers (or a stale client bundle) don't break — it just skips this
+ * step if omitted.
  */
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
@@ -45,7 +53,19 @@ async function resolveProjectId(admin, slug) {
   return { projectId: project.id };
 }
 
-export async function acceptCollabInvite(projectSlug) {
+// Best-effort — a failure here shouldn't undo an already-successful
+// accept/decline, just log it so it's visible.
+async function resolveNotification(admin, notificationId, userId, { type, message }) {
+  if (!notificationId) return;
+  const { error } = await admin
+    .from("notifications")
+    .update({ type, message, is_read: true })
+    .eq("id", notificationId)
+    .eq("receiver_id", userId);
+  if (error) console.error("[resolveNotification]", error);
+}
+
+export async function acceptCollabInvite(projectSlug, notificationId) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -64,6 +84,12 @@ export async function acceptCollabInvite(projectSlug) {
 
     if (error) return { error: error.message };
     if (!data?.length) return { error: "Invite was already resolved or removed." };
+
+    await resolveNotification(admin, notificationId, user.id, {
+      type: "request_accepted",
+      message: "You accepted the collaboration invite.",
+    });
+
     return { success: true };
   } catch (err) {
     console.error("[acceptCollabInvite]", err);
@@ -71,7 +97,7 @@ export async function acceptCollabInvite(projectSlug) {
   }
 }
 
-export async function declineCollabInvite(projectSlug) {
+export async function declineCollabInvite(projectSlug, notificationId) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -90,6 +116,12 @@ export async function declineCollabInvite(projectSlug) {
 
     if (error) return { error: error.message };
     if (!data?.length) return { error: "Invite was already resolved or removed." };
+
+    await resolveNotification(admin, notificationId, user.id, {
+      type: "collab_declined",
+      message: "You declined the collaboration invite.",
+    });
+
     return { success: true };
   } catch (err) {
     console.error("[declineCollabInvite]", err);

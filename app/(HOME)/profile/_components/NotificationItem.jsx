@@ -25,16 +25,17 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
   const isBlogBroadcast = notification.type === 'system' && notification.message?.toLowerCase().includes('intelligence report');
   const isBlogComment = notification.type === 'new_message' && notification.link?.includes('/blog/');
 
-  // A collab invite is only "resolved" once its message has been rewritten
-  // by an actual Accept/Decline (see handleAcceptCollab/handleRejectCollab)
-  // — not merely by being marked read. Gating on that instead of `isRead`
-  // means the plain "Acknowledge" checkmark can never quietly dismiss an
-  // invite without a real decision, and it also self-heals any invite that
-  // got stuck that way before this fix (its message is still the original
-  // "invited you to collaborate" text, so the buttons reappear).
-  const isUnresolvedCollabInvite =
-    notification.type === 'collab_invite' &&
-    !/you (accepted|declined)/i.test(notification.message || '');
+  // A collab invite is only "resolved" once Accept/Decline has actually
+  // flipped its type in the database (see acceptCollabInvite /
+  // declineCollabInvite in collaborationActions.js) — not by is_read, and
+  // not by rewriting the message in local state alone. That second thing
+  // was the actual bug: the old code only ever rewrote the message client
+  // side, so the notification looked resolved for the rest of that
+  // session and then reverted to "invited you to collaborate..." — type
+  // still 'collab_invite' — on the very next fetch, showing Accept/Decline
+  // again forever regardless of how many times someone actually accepted.
+  // Gating on type (now persisted) fixes that permanently.
+  const isUnresolvedCollabInvite = notification.type === 'collab_invite';
 
   // --- ACTIONS ---
   const handleFollowBack = async () => {
@@ -66,12 +67,14 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         // Server-side (service role) — see collaborationActions.js for why:
         // the client-side anon-key version falsely reported success writes
         // as failures because RLS blocked reading the row back afterward.
-        const result = await acceptCollabInvite(slug);
+        // Also persists the notification's resolved state in the same
+        // call, so it doesn't revert to "unresolved" on the next reload.
+        const result = await acceptCollabInvite(slug, notification.id);
         if (result.error) throw new Error(result.error);
 
         toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
+        onUpdateState(notification.id, { is_read: true, type: "request_accepted", message: "You accepted the collaboration invite." });
         onRead(notification.id);
-        onUpdateState(notification.id, { is_read: true, message: "You accepted the collaboration invite." });
     } catch (err) {
         toast.error("Handshake Failed", { description: err.message });
     } finally {
@@ -86,12 +89,12 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
         const slug = match ? match[1] : null;
         if (!slug) throw new Error("Outdated protocol invite.");
 
-        const result = await declineCollabInvite(slug);
+        const result = await declineCollabInvite(slug, notification.id);
         if (result.error) throw new Error(result.error);
 
         toast.info("Invite Terminated");
+        onUpdateState(notification.id, { is_read: true, type: "collab_declined", message: "You declined the collaboration invite." });
         onRead(notification.id);
-        onUpdateState(notification.id, { is_read: true, message: "You declined the collaboration invite." });
     } catch (err) {
         toast.error("Command Failed", { description: err.message });
     } finally {
