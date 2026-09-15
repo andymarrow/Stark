@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import { toast } from "sonner";
 import NotificationItem from "./NotificationItem";
+import { markNotificationRead } from "@/app/actions/notificationActions";
 
 const PAGE_SIZE = 10;
 
@@ -78,9 +79,19 @@ export default function NotificationsView({ onNotificationRead }) {
   }, [filter, fetchNotifications]);
 
   const handleMarkAsSeen = async (id) => {
+    // Optimistic — flips instantly, no waiting on the network. Header badge
+    // (DesktopNavbar) reflects it via its own realtime subscription the
+    // moment the write actually lands.
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    if (!error && onNotificationRead) onNotificationRead();
+    if (onNotificationRead) onNotificationRead();
+
+    const result = await markNotificationRead(id);
+    if (result.error) {
+      // Revert — the write genuinely didn't happen, so don't leave it
+      // looking read when a refresh would just undo it anyway.
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: false } : n));
+      console.error("[markNotificationRead]", result.error);
+    }
   };
 
   const markAllRead = async () => {

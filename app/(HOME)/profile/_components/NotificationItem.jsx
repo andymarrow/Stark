@@ -217,11 +217,27 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     return null;
   };
 
+  // Any interaction with a notification — clicking through a link, hitting
+  // an action button, or just the card itself — counts as "seen it,
+  // handled it." Previously only the explicit checkmark did this, so
+  // acting on a notification (e.g. accepting a collab invite) left it
+  // sitting there looking unread until a *second*, separate click. Safe to
+  // apply unconditionally now: unresolved collab invites keep their
+  // Accept/Decline buttons regardless of read state (see
+  // isUnresolvedCollabInvite above), so marking one read here can never
+  // silently dismiss a decision that still needs to be made.
+  const handleCardInteraction = () => {
+    if (!isRead) onRead(notification.id);
+  };
+
   return (
-    <div className={`
+    <div
+        onClick={handleCardInteraction}
+        className={`
         flex items-start gap-3 p-4 border border-border bg-background transition-all group relative
-        ${!isRead 
-            ? 'border-l-2 border-l-accent bg-accent/[0.02] shadow-[inset_0_0_10px_rgba(0,0,0,0.02)]' 
+        ${!isRead ? "cursor-pointer" : ""}
+        ${!isRead
+            ? 'border-l-2 border-l-accent bg-accent/[0.02] shadow-[inset_0_0_10px_rgba(0,0,0,0.02)]'
             : 'opacity-70 hover:opacity-100'}
     `}>
         <div className="relative mt-1 shrink-0">
