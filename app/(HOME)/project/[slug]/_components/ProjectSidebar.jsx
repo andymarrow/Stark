@@ -17,7 +17,8 @@ import {
   Award,
   Zap,
   CheckCircle,
-  Users // Added for the header icon
+  Users, // Added for the header icon
+  Link2
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -40,6 +41,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { registerView } from "@/app/actions/viewAnalytics"; 
 import FuelButton from "@/app/(HOME)/_components/FuelButton";
+
+// Extra links independent of the type-locked source_link — see
+// EditProjectForm's LINK_TYPE_CONFIG (same set of types/icons).
+const ADDITIONAL_LINK_CONFIG = {
+  github: { label: "GitHub", icon: Github },
+  figma: { label: "Figma", icon: Figma },
+  youtube: { label: "YouTube", icon: Youtube },
+  website: { label: "Website", icon: Globe },
+  other: { label: "Link", icon: Link2 },
+};
 
 export default function ProjectSidebar({ project }) {
   const { user } = useAuth();
@@ -401,6 +412,23 @@ export default function ProjectSidebar({ project }) {
         )}
 
         {renderProjectActions()}
+
+        {Array.isArray(project.additional_links) && project.additional_links.length > 0 && (
+          <div className="grid gap-2">
+            {project.additional_links.map((link, i) => {
+              const config = ADDITIONAL_LINK_CONFIG[link.type] || ADDITIONAL_LINK_CONFIG.other;
+              const Icon = config.icon;
+              return (
+                <a key={i} href={link.url} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" className="w-full h-10 bg-transparent hover:bg-secondary/20 text-foreground font-mono text-xs border border-border hover:border-accent hover:text-accent rounded-none transition-colors justify-start">
+                    <Icon className="mr-2 h-3.5 w-3.5" />
+                    {link.label || config.label}
+                  </Button>
+                </a>
+              );
+            })}
+          </div>
+        )}
 
         {user?.id === project.author.id && (
           <Link href={`/project/${project.slug || project.id}/edit`} className="w-full block">

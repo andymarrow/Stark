@@ -1,15 +1,16 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  UploadCloud, Trash2, AlertTriangle, ArrowLeft, Loader2, Users, 
-  Youtube, GripVertical, Plus, ImageIcon 
+import {
+  UploadCloud, Trash2, AlertTriangle, ArrowLeft, Loader2, Users,
+  Youtube, GripVertical, Plus, ImageIcon, Github, Figma, Globe, X, Link2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
@@ -61,6 +62,17 @@ const generateSlug = (text) => {
     .replace(/-+$/, '');      // Trim - from end of text
 };
 
+// Additional-links config — independent of project.type, so a design
+// project (Figma as its locked source_link) can still list a GitHub repo,
+// a video walkthrough, whatever else.
+const LINK_TYPE_CONFIG = {
+  github: { label: "GitHub", icon: Github, placeholder: "https://github.com/user/repo" },
+  figma: { label: "Figma", icon: Figma, placeholder: "https://figma.com/file/..." },
+  youtube: { label: "YouTube", icon: Youtube, placeholder: "https://youtube.com/watch?v=..." },
+  website: { label: "Website", icon: Globe, placeholder: "https://..." },
+  other: { label: "Other", icon: Link2, placeholder: "https://..." },
+};
+
 export default function EditProjectForm({ project }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -81,6 +93,10 @@ export default function EditProjectForm({ project }) {
     description: project.description || "", 
     source_link: project.source_link || "",
     demo_link: project.demo_link || "",
+    // Extra links independent of the type-locked source_link (GitHub for
+    // code, Figma for design, YouTube for video) — a design project can
+    // also list a GitHub repo, etc.
+    additionalLinks: project.additional_links || [],
     tagsInput: project.techStack ? project.techStack.map(t => t.name || t).join(", ") : "",
     images: project.images || [],
     rawFiles: [], // Stores pending uploads { preview: 'blob...', file: File }
@@ -220,6 +236,28 @@ export default function EditProjectForm({ project }) {
     }
   };
 
+  // --- 5b. ADDITIONAL LINK HANDLERS ---
+  const handleAddLink = () => {
+    setFormData(prev => ({
+        ...prev,
+        additionalLinks: [...prev.additionalLinks, { type: "github", url: "" }]
+    }));
+  };
+
+  const handleUpdateLink = (index, field, value) => {
+    setFormData(prev => ({
+        ...prev,
+        additionalLinks: prev.additionalLinks.map((l, i) => i === index ? { ...l, [field]: value } : l)
+    }));
+  };
+
+  const handleRemoveLink = (index) => {
+    setFormData(prev => ({
+        ...prev,
+        additionalLinks: prev.additionalLinks.filter((_, i) => i !== index)
+    }));
+  };
+
   // --- 6. SAVE LOGIC ---
   const handleSave = async () => {
     // Defense in depth: the edit page already blocks entry once locked, but
@@ -267,6 +305,10 @@ export default function EditProjectForm({ project }) {
         }
 
         // C. Update Project
+        const cleanedLinks = formData.additionalLinks
+            .map(l => ({ ...l, url: l.url.trim() }))
+            .filter(l => l.url);
+
         const { error: projectError } = await supabase
             .from('projects')
             .update({
@@ -275,6 +317,7 @@ export default function EditProjectForm({ project }) {
                 description: formData.description,
                 source_link: formData.source_link,
                 demo_link: formData.demo_link,
+                additional_links: cleanedLinks,
                 tags: tagArray,
                 images: finalImages,
                 thumbnail_url: finalImages[0] || null
@@ -578,6 +621,57 @@ export default function EditProjectForm({ project }) {
                         <label className="text-xs font-bold text-muted-foreground">Live Demo URL</label>
                         <Input value={formData.demo_link} onChange={(e) => setFormData({...formData, demo_link: e.target.value})} className="h-10 rounded-none bg-secondary/5 border-border font-mono text-xs" />
                     </div>
+                </div>
+            </section>
+
+            <section className="bg-background border border-border p-6 space-y-6">
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground">Additional Links</h3>
+                    <span className="text-[9px] font-mono text-muted-foreground/60 uppercase">Not mutually exclusive</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground -mt-2">
+                    The link above is locked to this project's type. Add as many extra links — a repo alongside a Figma file, a demo video, a docs site — as you want.
+                </p>
+                <div className="space-y-3">
+                    {formData.additionalLinks.map((link, i) => {
+                        const config = LINK_TYPE_CONFIG[link.type] || LINK_TYPE_CONFIG.other;
+                        const Icon = config.icon;
+                        return (
+                            <div key={i} className="flex gap-2 items-center">
+                                <div className="w-[104px] flex-shrink-0">
+                                    <Select value={link.type} onValueChange={(val) => handleUpdateLink(i, "type", val)}>
+                                        <SelectTrigger className="h-9 rounded-none bg-secondary/10 border-border text-[10px] uppercase">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {Object.entries(LINK_TYPE_CONFIG).map(([key, cfg]) => (
+                                                <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="relative flex-1">
+                                    <Icon size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                                    <Input
+                                        placeholder={config.placeholder}
+                                        value={link.url}
+                                        onChange={(e) => handleUpdateLink(i, "url", e.target.value)}
+                                        className="h-9 pl-8 rounded-none bg-secondary/5 border-border font-mono text-xs"
+                                    />
+                                </div>
+                                <button onClick={() => handleRemoveLink(i)} className="p-2 text-zinc-600 hover:text-red-500 flex-shrink-0">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        );
+                    })}
+                    <Button
+                        onClick={handleAddLink}
+                        variant="ghost"
+                        className="text-zinc-500 hover:text-accent w-full h-9 text-[10px] border border-dashed border-border uppercase hover:bg-secondary/10 rounded-none"
+                    >
+                        <Plus size={12} className="mr-2" /> Add Link
+                    </Button>
                 </div>
             </section>
 
