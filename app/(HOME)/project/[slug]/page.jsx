@@ -9,6 +9,7 @@ import ProjectSidebar from "./_components/ProjectSidebar";
 import ShareAction from "./_components/ShareAction";
 import ProjectContent from "./_components/ProjectContent";
 import JsonLd from "@/components/JsonLd";
+import { getProjectCollaborators } from "@/app/actions/getProjectCollaborators";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
@@ -64,21 +65,11 @@ export default async function ProjectDetailPage({ params }) {
 
   if (projectError || !projectData) return notFound();
 
-  const { data: collabData } = await supabase
-    .from("collaborations")
-    .select(`role, status, profile:profiles(*)`)
-    .eq("project_id", projectData.id)
-    .not("user_id", "is", null);
-
-  // --- FORMAT DATA ---
-  const collaborators = (collabData || []).map((c) => ({
-    id: c.profile.id,
-    name: c.profile.full_name || c.profile.username,
-    username: c.profile.username,
-    avatar: c.profile.avatar_url,
-    isForHire: c.profile.is_for_hire,
-    role: c.role || "Collaborator",
-  }));
+  // Service-role, accepted-only, public-safe fields — the anon-key query
+  // this used to run returns nothing for anyone but the project owner
+  // (RLS), which made every accepted collaborator invisible to visitors.
+  // See getProjectCollaborators.js for the full story.
+  const collaborators = await getProjectCollaborators(projectData.id);
 
   const project = {
     ...projectData,

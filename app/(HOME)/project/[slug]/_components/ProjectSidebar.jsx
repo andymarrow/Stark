@@ -85,11 +85,23 @@ export default function ProjectSidebar({ project }) {
   // --- 0. FETCH COLLABORATORS & STATUS ---
   useEffect(() => {
     const fetchTeam = async () => {
-        // We fetch directly from DB to get the 'status' (pending/accepted)
+        // Only the project owner can actually see pending invites here —
+        // RLS on `collaborations` returns an empty array (no error) for
+        // anyone else, which used to silently overwrite the correctly
+        // server-fetched accepted-collaborator list from `project.collaborators`
+        // with nothing. So: owners get the fuller pending+accepted view
+        // (useful for tracking their own invites); everyone else just uses
+        // the prop, which is already accepted-only and RLS-safe (fetched
+        // server-side with the service role — see getProjectCollaborators.js).
+        if (user?.id !== project.author?.id) {
+            setCollaborators((project.collaborators || []).map(c => ({ ...c, collaborationStatus: 'accepted' })));
+            return;
+        }
+
         const { data, error } = await supabase
             .from('collaborations')
             .select(`
-                status, 
+                status,
                 user:profiles!user_id(*)
             `)
             .eq('project_id', project.id);
@@ -103,7 +115,7 @@ export default function ProjectSidebar({ project }) {
                     collaborationStatus: item.status // 'pending' or 'accepted'
                 };
             }).filter(Boolean);
-            
+
             setCollaborators(formatted);
         } else if (project.collaborators) {
              // Fallback to props if DB fetch fails, assuming accepted
@@ -112,7 +124,7 @@ export default function ProjectSidebar({ project }) {
     };
 
     fetchTeam();
-  }, [project.id, project.collaborators]);
+  }, [project.id, project.collaborators, user?.id, project.author?.id]);
 
 
   // 1. Check if user liked this project on load
