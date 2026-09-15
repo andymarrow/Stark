@@ -16,6 +16,8 @@ import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor";
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
 import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
 import { getContestLockInfo } from "@/lib/contestLock";
+import { checkProjectAccess } from "@/app/actions/projectAccess";
+import { createChangelogEntry } from "@/app/actions/projectEditActions";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -58,6 +60,7 @@ export default function CreateChangelogPage({ params }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [project, setProject] = useState(null);
+  const [isOwner, setIsOwner] = useState(false);
   
   // Interaction State
   const [youtubeInput, setYoutubeInput] = useState("");
@@ -90,12 +93,16 @@ export default function CreateChangelogPage({ params }) {
           .single();
 
         if (error || !data) throw new Error("Project not found");
-        
-        if (data.owner_id !== user.id) {
+
+        // Owner or an accepted collaborator — collaborators are people
+        // actually working on this project, so they can post changelogs too.
+        const access = await checkProjectAccess(data.id);
+        if (!access.canEdit) {
             toast.error("Unauthorized");
             router.push(`/project/${slug}`);
             return;
         }
+        setIsOwner(access.isOwner);
 
         // FAIRNESS CHECK: locked the moment a contest this project entered
         // has closed submissions — no new changelog entries once judges are
@@ -235,12 +242,15 @@ export default function CreateChangelogPage({ params }) {
 
     setIsSaving(true);
     try {
-        // 1. Create Log Entry
+        // 1. Create Log Entry — server-side (service role, owner-or-
+        // accepted-collaborator check enforced in code), since this table
+        // is almost certainly behind the same owner-only RLS that quietly
+        // blocked collaborators elsewhere in this app (collaborations,
+        // notifications).
         const payload = {
-            project_id: project.id,
             version: formData.version,
             title: formData.title,
-            content: { type: "markdown", text: formData.content }, 
+            content: { type: "markdown", text: formData.content },
             media_urls: formData.files,
             metadata: {
                 demo_link: formData.demo_link,
@@ -249,13 +259,8 @@ export default function CreateChangelogPage({ params }) {
             }
         };
 
-        const { data: logData, error: logError } = await supabase
-            .from("project_logs")
-            .insert(payload)
-            .select()
-            .single();
-
-        if (logError) throw logError;
+        const result = await createChangelogEntry(project.id, payload);
+        if (result.error) throw new Error(result.error);
 
         // 2. Handle New Collaborators
         if (formData.collaborators.length > 0) {
@@ -403,17 +408,19 @@ export default function CreateChangelogPage({ params }) {
                     </div>
                 </div>
 
-                {/* 3. New Collaborators */}
-                <div className="p-5 border border-border bg-secondary/5">
-                    <div className="flex items-center gap-2 mb-4 border-b border-border/50 pb-2">
-                        <Users size={14} className="text-accent" /><label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Add Collaborators</label>
+                {/* 3. New Collaborators — managing the team stays owner-only */}
+                {isOwner && (
+                    <div className="p-5 border border-border bg-secondary/5">
+                        <div className="flex items-center gap-2 mb-4 border-b border-border/50 pb-2">
+                            <Users size={14} className="text-accent" /><label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Add Collaborators</label>
+                        </div>
+                        <CollaboratorManager
+                            collaborators={formData.collaborators}
+                            onAdd={handleAddCollaborator}
+                            onRemove={handleRemoveCollaborator}
+                        />
                     </div>
-                    <CollaboratorManager 
-                        collaborators={formData.collaborators} 
-                        onAdd={handleAddCollaborator} 
-                        onRemove={handleRemoveCollaborator} 
-                    />
-                </div>
+                )}
 
                 {/* 4. Visual Assets (Full Features) */}
                 <div className="p-5 border border-border bg-secondary/5">

@@ -14,6 +14,7 @@ import ProjectComments from "./ProjectComments";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import ImageLightbox from "./ImageLightbox";
+import { deleteChangelogEntry } from "@/app/actions/projectEditActions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -140,17 +141,14 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
   const confirmDelete = async () => {
     if (!logToDelete) return;
     setIsDeleting(true);
-    
-    try {
-        const { error, count } = await supabase
-            .from("project_logs")
-            .delete()
-            .eq("id", logToDelete.id)
-            .select(); 
 
-        if (error) throw new Error(error.message);
-        if (count === 0 && !error) throw new Error("Permission denied or log not found.");
-        
+    try {
+        // Server-side (service role, owner-or-accepted-collaborator check
+        // enforced in code) — the plain client delete sat behind the same
+        // owner-only RLS that quietly blocked collaborators elsewhere.
+        const result = await deleteChangelogEntry(logToDelete.id, projectId);
+        if (result.error) throw new Error(result.error);
+
         // Optimistic UI update
         setLogs(prev => prev.filter(l => l.id !== logToDelete.id));
         toast.success("Log Purged Successfully");

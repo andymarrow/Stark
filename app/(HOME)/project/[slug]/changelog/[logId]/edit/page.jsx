@@ -15,6 +15,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor"; 
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
 import { getContestLockInfo } from "@/lib/contestLock";
+import { checkProjectAccess } from "@/app/actions/projectAccess";
+import { updateChangelogEntry } from "@/app/actions/projectEditActions";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -57,6 +59,7 @@ export default function EditChangelogPage({ params }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [project, setProject] = useState(null);
+  const [isOwner, setIsOwner] = useState(false);
   
   const [youtubeInput, setYoutubeInput] = useState("");
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -87,11 +90,16 @@ export default function EditChangelogPage({ params }) {
           .single();
 
         if (projError || !projectData) throw new Error("Project not found");
-        if (projectData.owner_id !== user.id) {
+
+        // Owner or an accepted collaborator — collaborators are people
+        // actually working on this project, so they can edit changelogs too.
+        const access = await checkProjectAccess(projectData.id);
+        if (!access.canEdit) {
             toast.error("Unauthorized");
             router.push(`/project/${slug}`);
             return;
         }
+        setIsOwner(access.isOwner);
 
         // FAIRNESS CHECK: locked the moment a contest this project entered
         // has closed submissions — no editing or deleting changelog entries
@@ -242,8 +250,10 @@ export default function EditChangelogPage({ params }) {
                 video_link: formData.video_link
             }
         };
-        const { error } = await supabase.from("project_logs").update(payload).eq("id", logId);
-        if (error) throw error;
+        // Server-side (service role, owner-or-accepted-collaborator check
+        // enforced in code) — same reasoning as createChangelogEntry.
+        const result = await updateChangelogEntry(logId, project.id, payload);
+        if (result.error) throw new Error(result.error);
 
         // 2. HANDLE MENTIONS IN DESCRIPTION (The Fix)
         const mentionedUsernames = extractMentions(formData.content);
@@ -338,13 +348,15 @@ export default function EditChangelogPage({ params }) {
                     </div>
                 </div>
 
-                {/* Collaborators */}
-                <div className="p-5 border border-border bg-secondary/5">
-                    <div className="flex items-center gap-2 mb-4 border-b border-border/50 pb-2">
-                        <Users size={14} className="text-accent" /><label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Add Collaborators</label>
+                {/* Collaborators — managing the team stays owner-only */}
+                {isOwner && (
+                    <div className="p-5 border border-border bg-secondary/5">
+                        <div className="flex items-center gap-2 mb-4 border-b border-border/50 pb-2">
+                            <Users size={14} className="text-accent" /><label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Add Collaborators</label>
+                        </div>
+                        <CollaboratorManager collaborators={formData.collaborators} onAdd={handleAddCollaborator} onRemove={handleRemoveCollaborator} />
                     </div>
-                    <CollaboratorManager collaborators={formData.collaborators} onAdd={handleAddCollaborator} onRemove={handleRemoveCollaborator} />
-                </div>
+                )}
 
                 {/* --- ASSETS SECTION (WITH THUMBNAILS) --- */}
                 <div className="p-5 border border-border bg-secondary/5">

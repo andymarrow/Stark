@@ -8,6 +8,7 @@ import { Loader2, ShieldAlert, ArrowLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditProjectForm from "./_components/EditProjectForm";
 import { getContestLockInfo } from "@/lib/contestLock";
+import { checkProjectAccess } from "@/app/actions/projectAccess";
 
 export default function EditProjectPage({ params }) {
   const { slug } = use(params);
@@ -44,8 +45,12 @@ export default function EditProjectPage({ params }) {
            return;
         }
 
-        // SECURITY CHECK: Verify Ownership
-        if (data.owner_id !== user.id) {
+        // SECURITY CHECK: Owner or an accepted collaborator — collaborators
+        // are people actually working on this project, so they get the
+        // same edit access (not team management or deletion — see the
+        // owner-only gates further down in EditProjectForm).
+        const access = await checkProjectAccess(data.id);
+        if (!access.canEdit) {
             setIsUnauthorized(true);
             setLoading(false);
             return;
@@ -63,7 +68,8 @@ export default function EditProjectPage({ params }) {
 
         const formattedProject = {
             ...data,
-            techStack: data.tags || []
+            techStack: data.tags || [],
+            isOwner: access.isOwner,
         };
 
         setProject(formattedProject);

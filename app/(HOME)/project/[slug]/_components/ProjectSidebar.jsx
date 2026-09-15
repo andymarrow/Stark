@@ -442,7 +442,9 @@ export default function ProjectSidebar({ project }) {
           </div>
         )}
 
-        {user?.id === project.author.id && (
+        {/* Owner or an accepted collaborator — collaborators are people
+            actually working on this project, so they get edit access too. */}
+        {(user?.id === project.author.id || collaborators.some(c => c.id === user?.id && c.collaborationStatus === 'accepted')) && (
           <Link href={`/project/${project.slug || project.id}/edit`} className="w-full block">
             <Button variant="outline" className="w-full h-12 mt-3 bg-secondary/5 hover:bg-secondary/20 text-muted-foreground hover:text-foreground font-mono text-xs border border-dashed border-border hover:border-foreground rounded-none transition-colors uppercase tracking-widest">
               <Edit3 className="mr-2 h-4 w-4" />

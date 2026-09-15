@@ -21,6 +21,7 @@ import RichTextEditor from "@/app/(HOME)/create/_components/RichTextEditor";
 import CollaboratorManager from "@/app/(HOME)/create/_components/CollaboratorManager";
 import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
 import { getContestLockInfo } from "@/lib/contestLock";
+import { updateProject } from "@/app/actions/projectEditActions";
 
 // --- HELPERS ---
 const isVideoUrl = (url) => url.includes("youtube.com") || url.includes("youtu.be");
@@ -309,22 +310,24 @@ export default function EditProjectForm({ project }) {
             .map(l => ({ ...l, url: l.url.trim() }))
             .filter(l => l.url);
 
-        const { error: projectError } = await supabase
-            .from('projects')
-            .update({
-                title: formData.title,
-                slug: newSlug, // <--- UPDATE SLUG
-                description: formData.description,
-                source_link: formData.source_link,
-                demo_link: formData.demo_link,
-                additional_links: cleanedLinks,
-                tags: tagArray,
-                images: finalImages,
-                thumbnail_url: finalImages[0] || null
-            })
-            .eq('id', project.id);
+        // Server-side (service role, owner-or-accepted-collaborator check
+        // enforced in code) — the plain client update was almost certainly
+        // sitting behind an owner-only RLS policy, which would have
+        // silently blocked collaborators the same way collaborations and
+        // notifications did elsewhere in this app.
+        const updateResult = await updateProject(project.id, {
+            title: formData.title,
+            slug: newSlug, // <--- UPDATE SLUG
+            description: formData.description,
+            source_link: formData.source_link,
+            demo_link: formData.demo_link,
+            additional_links: cleanedLinks,
+            tags: tagArray,
+            images: finalImages,
+            thumbnail_url: finalImages[0] || null
+        });
 
-        if (projectError) throw projectError;
+        if (updateResult.error) throw new Error(updateResult.error);
 
         // D. Process New Collaborators
         const newCollaborators = formData.collaborators.filter(c => c.isNew);
@@ -393,6 +396,13 @@ export default function EditProjectForm({ project }) {
   };
 
   const handleDelete = async () => {
+    // Defense in depth — the button itself is already owner-only.
+    if (!project.isOwner) {
+      toast.error("Only the project owner can delete it.");
+      setDeleteDialogOpen(false);
+      return;
+    }
+
     const lock = await getContestLockInfo(project.id);
     if (lock.locked) {
       toast.error("Entry Locked", {
@@ -487,23 +497,27 @@ export default function EditProjectForm({ project }) {
                 </div>
             </section>
 
-            {/* COLLABORATORS */}
-            <section className="bg-background border border-border p-6 space-y-6">
-                <div className="flex justify-between items-end border-b border-border pb-2">
-                    <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground">
-                        Team & Access
-                    </h3>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Users size={14} />
-                        {formData.collaborators.length} Members
+            {/* COLLABORATORS — managing the team stays owner-only; a
+                collaborator can edit the project's content, not decide
+                who else is on it. */}
+            {project.isOwner && (
+                <section className="bg-background border border-border p-6 space-y-6">
+                    <div className="flex justify-between items-end border-b border-border pb-2">
+                        <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-muted-foreground">
+                            Team & Access
+                        </h3>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Users size={14} />
+                            {formData.collaborators.length} Members
+                        </div>
                     </div>
-                </div>
-                <CollaboratorManager 
-                    collaborators={formData.collaborators}
-                    onAdd={handleAddCollaborator}
-                    onRemove={handleRemoveCollaborator}
-                />
-            </section>
+                    <CollaboratorManager
+                        collaborators={formData.collaborators}
+                        onAdd={handleAddCollaborator}
+                        onRemove={handleRemoveCollaborator}
+                    />
+                </section>
+            )}
 
             {/* MEDIA MANAGEMENT (NEW & IMPROVED) */}
             <section className="bg-background border border-border p-6 space-y-6">
@@ -690,14 +704,17 @@ export default function EditProjectForm({ project }) {
                 </div>
             </section>
 
-            <section className="border border-destructive/20 bg-destructive/5 p-6 space-y-4">
-                <div className="flex items-center gap-2 text-destructive">
-                    <AlertTriangle size={16} />
-                    <h3 className="text-sm font-bold uppercase tracking-wider">Danger Zone</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">Deleting this project is irreversible.</p>
-                <Button variant="outline" onClick={() => setDeleteDialogOpen(true)} className="w-full border-destructive/50 text-destructive hover:bg-destructive hover:text-white rounded-none h-10 text-xs font-mono uppercase">Delete Project</Button>
-            </section>
+            {/* Deleting the whole project stays owner-only. */}
+            {project.isOwner && (
+                <section className="border border-destructive/20 bg-destructive/5 p-6 space-y-4">
+                    <div className="flex items-center gap-2 text-destructive">
+                        <AlertTriangle size={16} />
+                        <h3 className="text-sm font-bold uppercase tracking-wider">Danger Zone</h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Deleting this project is irreversible.</p>
+                    <Button variant="outline" onClick={() => setDeleteDialogOpen(true)} className="w-full border-destructive/50 text-destructive hover:bg-destructive hover:text-white rounded-none h-10 text-xs font-mono uppercase">Delete Project</Button>
+                </section>
+            )}
         </div>
       </div>
 

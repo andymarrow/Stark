@@ -10,6 +10,7 @@ import ShareAction from "./_components/ShareAction";
 import ProjectContent from "./_components/ProjectContent";
 import JsonLd from "@/components/JsonLd";
 import { getProjectCollaborators } from "@/app/actions/getProjectCollaborators";
+import { checkProjectAccess } from "@/app/actions/projectAccess";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
@@ -95,7 +96,10 @@ export default async function ProjectDetailPage({ params }) {
     },
   };
 
-  const isOwner = user?.id === projectData.owner_id;
+  // Owner or an accepted collaborator — collaborators are people actually
+  // working on this project, so they get the same "Push Update" / edit
+  // access on changelogs as the owner (see ProjectContent/ChangelogTimeline).
+  const { canEdit: isOwner } = await checkProjectAccess(projectData.id);
 
   const profileUrl = `${BASE_URL}/profile/${project.author?.username || "user"}`;
   const projectUrl = `${BASE_URL}/project/${slug}`;
