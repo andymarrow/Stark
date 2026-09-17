@@ -101,7 +101,7 @@ export default function RootLayout({ children }) {
             <BadgeListener />
             <KonamiListener />
             {children}
-            {/* <Assistant /> */}
+            <Assistant />
             <OfflineStatus />
             <Toaster />
           </ThemeProvider>
