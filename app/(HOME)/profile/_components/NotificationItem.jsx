@@ -62,14 +62,20 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     try {
         const match = notification.link?.match(/\/project\/([^\/\?]+)/);
         const slug = match ? match[1] : null;
-        if (!slug) throw new Error("Outdated protocol invite.");
+        // The collaboration row's own immutable id, carried as ?invite=
+        // on the link since it's set — this is what actually identifies
+        // the invite, independent of whatever the project is called or
+        // slugged as by the time someone gets around to answering it (see
+        // collaborationActions.js for the renamed-project bug this fixes).
+        const collaborationId = new URLSearchParams(notification.link?.split('?')[1] || '').get('invite');
+        if (!slug && !collaborationId) throw new Error("Outdated protocol invite.");
 
         // Server-side (service role) — see collaborationActions.js for why:
         // the client-side anon-key version falsely reported success writes
         // as failures because RLS blocked reading the row back afterward.
         // Also persists the notification's resolved state in the same
         // call, so it doesn't revert to "unresolved" on the next reload.
-        const result = await acceptCollabInvite(slug, notification.id);
+        const result = await acceptCollabInvite(slug, notification.id, collaborationId);
         if (result.error) throw new Error(result.error);
 
         toast.success("Collaboration Initialized", { description: "You are now a verified contributor." });
@@ -87,9 +93,10 @@ export default function NotificationItem({ notification, onRead, onUpdateState, 
     try {
         const match = notification.link?.match(/\/project\/([^\/\?]+)/);
         const slug = match ? match[1] : null;
-        if (!slug) throw new Error("Outdated protocol invite.");
+        const collaborationId = new URLSearchParams(notification.link?.split('?')[1] || '').get('invite');
+        if (!slug && !collaborationId) throw new Error("Outdated protocol invite.");
 
-        const result = await declineCollabInvite(slug, notification.id);
+        const result = await declineCollabInvite(slug, notification.id, collaborationId);
         if (result.error) throw new Error(result.error);
 
         toast.info("Invite Terminated");

@@ -228,18 +228,46 @@ function CreateForm() {
           invite_email: c.type === 'ghost' ? c.email : null,
           status: 'pending'
         }));
-        const { error: collabError } = await supabase.from('collaborations').insert(collabRows);
+        // .select() so we can pair each inserted row's own id back up with
+        // its collaborator below — that id is what makes the invite
+        // resolvable later even if this project gets renamed (see the
+        // notification insert just below, and collaborationActions.js).
+        const { data: insertedCollabs, error: collabError } = await supabase
+          .from('collaborations')
+          .insert(collabRows)
+          .select('id, user_id');
 
-        // Email every invite we have an address for — registered users
-        // included. The in-app notification alone isn't enough; most people
-        // don't have Stark open when this fires.
         if (!collabError) {
+          // Email every invite we have an address for — registered users
+          // included. The in-app notification alone isn't enough; most people
+          // don't have Stark open when this fires.
           const inviterName = user.user_metadata?.full_name || user.email;
           formData.collaborators
             .filter((c) => c.email)
             .forEach((c) => {
               sendCollaboratorInvite(c.email, formData.title, inviterName);
             });
+
+          // In-app collab_invite notification, one per registered
+          // collaborator — inserted directly here rather than left to a
+          // database trigger, which on a multi-collaborator invite was
+          // only ever firing for one of them (confirmed live: two
+          // collaborators invited in the same request, only one ever got a
+          // notification). The collaboration row's own id rides along in
+          // the link as ?invite= so Accept/Decline can resolve it directly,
+          // independent of this project's slug ever changing later.
+          const registeredInviteNotifs = (insertedCollabs || [])
+            .filter((row) => row.user_id && row.user_id !== user.id)
+            .map((row) => ({
+              receiver_id: row.user_id,
+              sender_id: user.id,
+              type: 'collab_invite',
+              message: `invited you to collaborate on ${formData.title}`,
+              link: `/project/${slug}?invite=${row.id}`,
+            }));
+          if (registeredInviteNotifs.length > 0) {
+            await supabase.from('notifications').insert(registeredInviteNotifs);
+          }
         }
       }
 
