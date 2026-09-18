@@ -14,7 +14,13 @@ export default function ProjectReadme({ content }) {
   const parsedContent = useMemo(() => {
     if (!content) return "No documentation provided.";
     
-    let processed = content;
+    let processed = content.trim();
+
+    // 0. STRIP A STRAY OUTER CODE FENCE (paste artifact from an AI's whole
+    // markdown-formatted answer, fence and all — otherwise the entire doc
+    // renders as one giant unparsed code block)
+    const fenceMatch = processed.match(/^```[a-zA-Z0-9]*\n([\s\S]*)\n```$/);
+    if (fenceMatch) processed = fenceMatch[1];
 
     // 1. FIX HTML MENTIONS (The code seen in your screenshot)
     // Converts <span data-id="user">@user</span> into Markdown links: [@user](/profile/user)

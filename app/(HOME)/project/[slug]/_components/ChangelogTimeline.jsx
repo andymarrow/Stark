@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Added
+import rehypeRaw from "rehype-raw"; // Renders raw HTML mention spans, matching ProjectReadme
 import Image from "next/image";
 import ProjectComments from "./ProjectComments";
 import { toast } from "sonner";
@@ -60,19 +61,37 @@ const getEmbedUrl = (url) => {
     return url;
 };
 
-// Custom Link Renderer
+// Custom Link Renderer — gives internal profile mentions the same badge
+// treatment as ProjectReadme, everything else keeps a plain underline.
 const LinkRenderer = (props) => {
+  const isMention = props.href?.startsWith("/profile/");
   return (
-    <a 
-      href={props.href} 
-      target="_blank" 
-      rel="noopener noreferrer" 
-      className="text-accent underline decoration-accent/50 underline-offset-2 break-all hover:text-accent/80 hover:decoration-accent transition-colors cursor-pointer"
-      onClick={(e) => e.stopPropagation()} 
+    <a
+      href={props.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`transition-colors cursor-pointer ${
+        isMention
+          ? "bg-accent/10 px-1 border-b border-accent text-accent hover:text-accent/80 no-underline"
+          : "text-accent underline decoration-accent/50 underline-offset-2 break-all hover:text-accent/80 hover:decoration-accent"
+      }`}
+      onClick={(e) => e.stopPropagation()}
     >
       {props.children}
     </a>
   );
+};
+
+// A changelog entry pasted from an AI's whole markdown-formatted answer
+// sometimes arrives wrapped in one outer ```markdown ... ``` fence — react-
+// markdown correctly renders that as a single giant code block, which is
+// what made "IFA +"'s V1.0 log show up as raw, unparsed, horizontally-
+// scrolling text. Strip a fence only when it wraps the ENTIRE content.
+const unwrapFencedContent = (text) => {
+  if (!text) return text;
+  const trimmed = text.trim();
+  const match = trimmed.match(/^```[a-zA-Z0-9]*\n([\s\S]*)\n```$/);
+  return match ? match[1] : text;
 };
 
 export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
@@ -211,10 +230,18 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
         
         // --- PARSE CONTENT ---
         const rawContent = typeof log.content === 'object' ? log.content.text : log.content;
-        const displayContent = rawContent.replace(
-            /@\[([^\]]+)\]\(([^)]+)\)/g, 
-            '[@$1](/profile/$2)'
-        );
+        const unwrappedContent = unwrapFencedContent(rawContent);
+        const displayContent = unwrappedContent
+            // HTML mention spans (Tiptap raw HTML output)
+            .replace(
+                /<span[^>]*data-id="([^"]+)"[^>]*>(@?[^<]+)<\/span>/g,
+                '[$2](/profile/$1)'
+            )
+            // Markdown mention syntax
+            .replace(
+                /@\[([^\]]+)\]\(([^)]+)\)/g,
+                '[@$1](/profile/$2)'
+            );
 
         return (
           <div key={log.id} className="relative pl-10 pb-10 group">
@@ -314,9 +341,20 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
                                 )}
 
                                 {/* 2. Markdown Text with Parsed Mentions */}
-                                <div className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-p:text-muted-foreground prose-a:text-accent prose-code:bg-secondary/50 prose-code:px-1 prose-code:rounded-none prose-code:text-xs">
-                                    <ReactMarkdown 
+                                <div className="prose prose-zinc dark:prose-invert prose-sm max-w-none
+                                    prose-headings:font-bold prose-headings:tracking-tight
+                                    prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                                    prose-p:text-muted-foreground prose-p:leading-relaxed
+                                    prose-a:font-bold
+                                    prose-strong:text-foreground prose-li:text-muted-foreground
+                                    prose-code:text-accent prose-code:bg-secondary/20 prose-code:px-1 prose-code:font-mono prose-code:text-xs prose-code:rounded-none
+                                    prose-pre:bg-black prose-pre:border prose-pre:border-border prose-pre:rounded-none
+                                    prose-img:rounded-none prose-img:border prose-img:border-border
+                                    prose-hr:border-border
+                                ">
+                                    <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
+                                        rehypePlugins={[rehypeRaw]}
                                         components={{ a: LinkRenderer }}
                                     >
                                         {displayContent}
