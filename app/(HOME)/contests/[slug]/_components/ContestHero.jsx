@@ -2,26 +2,36 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Clock, Trophy, Users, Share2, Plus, Award, CheckCircle2 } from "lucide-react";
+import { Clock, Trophy, Users, Share2, Plus, Award, CheckCircle2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function ContestHero({ contest, userEntry }) {
   const [timeLeft, setTimeLeft] = useState("");
-  const [status, setStatus] = useState("upcoming"); // upcoming, active, judging, completed
+  // upcoming, active (new entries open), reviewing (entries closed, but
+  // submitted projects can still be fully edited), judging (fully frozen,
+  // closing date passed), completed (winners revealed)
+  const [status, setStatus] = useState("upcoming");
 
   useEffect(() => {
     const calculateTime = () => {
       const now = new Date().getTime();
       const start = new Date(contest.start_date).getTime();
-      const end = new Date(contest.submission_deadline).getTime();
+      const submissionCutoff = new Date(contest.submission_deadline).getTime();
+      // Contests created before this field existed have no end_date — fall
+      // back to the old single-deadline behavior (closes the instant
+      // submissions do) so nothing changes for them.
+      const end = contest.end_date ? new Date(contest.end_date).getTime() : submissionCutoff;
       const reveal = new Date(contest.winner_announce_date).getTime();
 
       if (now < start) {
         setStatus("upcoming");
         return `Starts in ${formatTime(start - now)}`;
-      } else if (now < end) {
+      } else if (now < submissionCutoff) {
         setStatus("active");
+        return formatTime(submissionCutoff - now);
+      } else if (now < end) {
+        setStatus("reviewing");
         return formatTime(end - now);
       } else if (now < reveal) {
         setStatus("judging");
@@ -33,7 +43,7 @@ export default function ContestHero({ contest, userEntry }) {
     };
 
     const timer = setInterval(() => setTimeLeft(calculateTime()), 1000);
-    setTimeLeft(calculateTime()); 
+    setTimeLeft(calculateTime());
     return () => clearInterval(timer);
   }, [contest]);
 
@@ -77,11 +87,12 @@ export default function ContestHero({ contest, userEntry }) {
                     {/* Floating Status Badge */}
                     <div className="absolute top-3 right-3">
                         <span className={`px-3 py-1 text-[9px] font-mono font-bold uppercase border backdrop-blur-md text-white
-                            ${status === 'active' ? 'bg-green-600/80 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 
-                              status === 'judging' ? 'bg-yellow-600/80 border-yellow-500' : 
+                            ${status === 'active' ? 'bg-green-600/80 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' :
+                              status === 'reviewing' ? 'bg-blue-600/80 border-blue-500' :
+                              status === 'judging' ? 'bg-yellow-600/80 border-yellow-500' :
                               status === 'completed' ? 'bg-accent/80 border-accent' :
                               'bg-zinc-800/80 border-zinc-700'}`}>
-                            {status === 'active' ? 'LIVE_NOW' : status.toUpperCase()}
+                            {status === 'active' ? 'LIVE_NOW' : status === 'reviewing' ? 'SUBMISSIONS_CLOSED' : status.toUpperCase()}
                         </span>
                     </div>
                 </div>
@@ -110,7 +121,7 @@ export default function ContestHero({ contest, userEntry }) {
                     </div>
                     <div>
                         <div className="text-[9px] uppercase text-muted-foreground font-mono tracking-[0.2em] mb-1">
-                            {status === 'completed' ? 'Final_Resolution' : 'Time_Buffer_Remaining'}
+                            {status === 'completed' ? 'Final_Resolution' : status === 'reviewing' ? 'Editing_Window_Remaining' : 'Time_Buffer_Remaining'}
                         </div>
                         <div className={`text-xl md:text-2xl font-black font-mono tracking-tighter 
                             ${status === 'completed' ? 'text-yellow-600 dark:text-yellow-500' : 'text-foreground'}`}>
@@ -139,7 +150,16 @@ export default function ContestHero({ contest, userEntry }) {
                             </Button>
                         </Link>
                     )}
-                    
+
+                    {/* 2b. SUBMISSION WINDOW CLOSED — cutoff passed but the
+                        contest itself hasn't ended yet; nobody new can join,
+                        but this is not the "contest over" state. */}
+                    {(status === 'reviewing' || status === 'judging') && !userEntry && !contest.winners_revealed && (
+                        <Button disabled className="h-14 px-10 bg-secondary text-muted-foreground rounded-none font-mono font-bold uppercase tracking-widest cursor-not-allowed opacity-70">
+                            <Lock size={18} className="mr-2" /> Project Submission Deadline Passed
+                        </Button>
+                    )}
+
                     {/* 3. ENTRY STATUS */}
                     {userEntry && !contest.winners_revealed && (
                         <div className="h-14 px-8 flex items-center bg-green-500/5 border border-green-500/30 text-green-600 dark:text-green-500 text-[10px] font-mono font-bold uppercase tracking-widest">

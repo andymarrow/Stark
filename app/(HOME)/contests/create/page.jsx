@@ -66,6 +66,7 @@ export default function CreateContestPage() {
     description: "",
     start_date: "",
     submission_deadline: "",
+    end_date: "",
     winner_announce_date: "",
     max_participants: "", 
     team_allowed: true,
@@ -126,6 +127,10 @@ export default function CreateContestPage() {
         toast.error("Missing Data", { description: "Submission Deadline is incomplete." });
         return;
     }
+    if (!formData.end_date) {
+        toast.error("Missing Data", { description: "Hackathon Closing date is incomplete." });
+        return;
+    }
     if (!formData.winner_announce_date) {
         toast.error("Missing Data", { description: "Winner Reveal Date is incomplete." });
         return;
@@ -136,8 +141,12 @@ export default function CreateContestPage() {
         toast.error("Logic Error", { description: "Deadline must be after Start Date." });
         return;
     }
-    if (new Date(formData.winner_announce_date) <= new Date(formData.submission_deadline)) {
-        toast.error("Logic Error", { description: "Reveal must be after Deadline." });
+    if (new Date(formData.end_date) < new Date(formData.submission_deadline)) {
+        toast.error("Logic Error", { description: "Hackathon Closing must be on or after the Submission Deadline." });
+        return;
+    }
+    if (new Date(formData.winner_announce_date) < new Date(formData.end_date)) {
+        toast.error("Logic Error", { description: "Winner Reveal must be on or after Hackathon Closing." });
         return;
     }
 
@@ -185,6 +194,7 @@ export default function CreateContestPage() {
             description: { type: "markdown", text: formData.description },
             start_date: new Date(formData.start_date),
             submission_deadline: new Date(formData.submission_deadline),
+            end_date: new Date(formData.end_date),
             winner_announce_date: new Date(formData.winner_announce_date),
             max_participants: formData.max_participants ? parseInt(formData.max_participants) : null,
             team_allowed: formData.team_allowed,
@@ -289,23 +299,32 @@ export default function CreateContestPage() {
                         <h3 className="font-bold uppercase text-sm tracking-widest">Timeline Sequence</h3>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <DateTimePicker 
-                            label="Start Date" 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <DateTimePicker
+                            label="Start Date"
                             value={formData.start_date}
                             onChange={(e) => setFormData({...formData, start_date: e.target.value})}
                         />
-                        <DateTimePicker 
-                            label="Submission Deadline" 
+                        <DateTimePicker
+                            label="Submission Deadline"
                             value={formData.submission_deadline}
                             onChange={(e) => setFormData({...formData, submission_deadline: e.target.value})}
                         />
-                        <DateTimePicker 
-                            label="Winner Reveal" 
+                        <DateTimePicker
+                            label="Hackathon Closing"
+                            value={formData.end_date}
+                            onChange={(e) => setFormData({...formData, end_date: e.target.value})}
+                        />
+                        <DateTimePicker
+                            label="Winner Reveal"
                             value={formData.winner_announce_date}
                             onChange={(e) => setFormData({...formData, winner_announce_date: e.target.value})}
                         />
                     </div>
+                    <p className="text-[10px] font-mono text-muted-foreground leading-relaxed pt-2 border-t border-border/50">
+                        <span className="text-foreground font-bold">Submission Deadline</span> stops new entries — nobody who hasn't submitted by then can join.{" "}
+                        <span className="text-foreground font-bold">Hackathon Closing</span> is when the contest actually ends: everyone already submitted can keep editing their project and posting changelogs right up until that moment, then everything freezes for judging.
+                    </p>
                 </section>
 
             </div>

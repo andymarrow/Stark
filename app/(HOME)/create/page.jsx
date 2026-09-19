@@ -85,14 +85,22 @@ function CreateForm() {
       const fetchContest = async () => {
         const { data } = await supabase
           .from('contests')
-          .select('id, title')
+          .select('id, title, submission_deadline')
           .eq('slug', contestSlug)
           .single();
-        if (data) {
+        if (!data) {
+          toast.error("Contest Not Found");
+        } else if (data.submission_deadline && new Date(data.submission_deadline) < new Date()) {
+          // Client-side navigation already hides the "Initiate Submission"
+          // button once this passes (ContestHero), but someone can still
+          // reach this URL directly (an old bookmark, a shared link) — the
+          // insert itself was never actually gated on the deadline, so
+          // catch it here too rather than silently accepting a late entry.
+          toast.error("Submission Window Closed", { description: `${data.title}'s submission deadline has passed.` });
+          router.push(`/contests/${contestSlug}`);
+        } else {
           setContestData(data);
           toast.info(`Joined: ${data.title}`, { description: "Your project will be submitted to this contest." });
-        } else {
-          toast.error("Contest Not Found");
         }
       };
       fetchContest();

@@ -1,0 +1,13 @@
+-- Splits the single "submission_deadline" into two distinct moments:
+--   submission_deadline: after this, no NEW projects can be submitted to
+--                         the contest — unchanged meaning.
+--   end_date (new):       the contest's real closing point. Everything
+--                         submitted before submission_deadline can still
+--                         be fully edited (project + changelog) right up
+--                         until end_date, then it freezes for judging.
+--
+-- Nullable and backward compatible: contests created before this migration
+-- have no end_date, and application code treats that as "same as
+-- submission_deadline" (lib/contestLock.js), so existing contests keep
+-- their old single-deadline behavior exactly as-is.
+alter table public.contests add column if not exists end_date timestamptz;

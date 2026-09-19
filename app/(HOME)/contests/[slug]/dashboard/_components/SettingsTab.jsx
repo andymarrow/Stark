@@ -79,6 +79,7 @@ export default function SettingsTab({ contest }) {
     description: getInitialDescription(), 
     start_date: toLocalInputFormat(contest.start_date),
     submission_deadline: toLocalInputFormat(contest.submission_deadline),
+    end_date: toLocalInputFormat(contest.end_date),
     winner_announce_date: toLocalInputFormat(contest.winner_announce_date),
     prizes: contest.prizes || [],
     metrics: contest.metrics_config || [],
@@ -134,6 +135,15 @@ export default function SettingsTab({ contest }) {
    * Updates configuration while protecting the 'sponsors' column from data loss.
    */
   const handleUpdate = async () => {
+    if (formData.end_date && formData.submission_deadline && new Date(formData.end_date) < new Date(formData.submission_deadline)) {
+        toast.error("Logic Error", { description: "Hackathon Closing must be on or after the Submission Deadline." });
+        return;
+    }
+    if (formData.end_date && formData.winner_announce_date && new Date(formData.winner_announce_date) < new Date(formData.end_date)) {
+        toast.error("Logic Error", { description: "Winner Reveal must be on or after Hackathon Closing." });
+        return;
+    }
+
     setIsSaving(true);
     try {
         let coverUrl = formData.cover_preview; 
@@ -173,6 +183,7 @@ export default function SettingsTab({ contest }) {
                 description: { type: 'markdown', text: formData.description },
                 start_date: toUTCISOString(formData.start_date),
                 submission_deadline: toUTCISOString(formData.submission_deadline),
+                end_date: toUTCISOString(formData.end_date),
                 winner_announce_date: toUTCISOString(formData.winner_announce_date),
                 prizes: formData.prizes,
                 metrics_config: formData.metrics,
@@ -240,11 +251,15 @@ export default function SettingsTab({ contest }) {
                 />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <DateTimePicker label="Start Sequence" value={formData.start_date} onChange={(e) => setFormData({...formData, start_date: e.target.value})} />
                 <DateTimePicker label="Submission Cutoff" value={formData.submission_deadline} onChange={(e) => setFormData({...formData, submission_deadline: e.target.value})} />
+                <DateTimePicker label="Hackathon Closing" value={formData.end_date} onChange={(e) => setFormData({...formData, end_date: e.target.value})} />
                 <DateTimePicker label="Final Reveal" value={formData.winner_announce_date} onChange={(e) => setFormData({...formData, winner_announce_date: e.target.value})} />
             </div>
+            <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+                <span className="text-foreground font-bold">Submission Cutoff</span> stops new entries. <span className="text-foreground font-bold">Hackathon Closing</span> is the real end — submitted projects can keep being edited and changelogged right up until then. Leave Hackathon Closing blank to keep the old behavior (locks the instant Submission Cutoff passes).
+            </p>
 
             <div className="space-y-1.5">
                 <label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Rules & Intelligence</label>
