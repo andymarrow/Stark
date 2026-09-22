@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { TECH_STACKS } from "@/constants/options";
 
-export default function StepDetails({ data, updateData, errors }) {
+export default function StepDetails({ data, updateData, errors, currentUserId }) {
   
   const handleImportReadme = () => {
     if (!data.readme) {
@@ -51,8 +51,9 @@ export default function StepDetails({ data, updateData, errors }) {
       {/* 2. Collaborator Manager (FIXED PROPS) */}
       <div className="space-y-1.5">
           <label className="text-xs font-mono uppercase text-muted-foreground">Collaborators</label>
-          <CollaboratorManager 
-            collaborators={data.collaborators || []} 
+          <CollaboratorManager
+            collaborators={data.collaborators || []}
+            excludeUserId={currentUserId}
             onAdd={(newCollab) => {
                 const current = data.collaborators || [];
                 updateData("collaborators", [...current, newCollab]);

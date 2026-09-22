@@ -11,6 +11,7 @@ import { useVoiceCommand } from "@/lib/voiceBridge";
 import { submitToEvent } from "@/app/actions/submitToEvent";
 import { getPublicFolders } from "@/app/actions/getPublicFolders";
 import { sendCollaboratorInvite } from "@/app/actions/inviteCollaborator";
+import { inviteCollaborators } from "@/app/actions/inviteCollaborators";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import CreateStepper from "./_components/CreateStepper";
@@ -230,22 +231,18 @@ function CreateForm() {
       }
 
       if (formData.collaborators && formData.collaborators.length > 0) {
-        const collabRows = formData.collaborators.map(c => ({
-          project_id: projectData.id,
-          user_id: c.type === 'user' ? c.user_id : null,
-          invite_email: c.type === 'ghost' ? c.email : null,
-          status: 'pending'
-        }));
-        // .select() so we can pair each inserted row's own id back up with
-        // its collaborator below — that id is what makes the invite
-        // resolvable later even if this project gets renamed (see the
-        // notification insert just below, and collaborationActions.js).
-        const { data: insertedCollabs, error: collabError } = await supabase
-          .from('collaborations')
-          .insert(collabRows)
-          .select('id, user_id');
-
-        if (!collabError) {
+        // Server-side, service role — see inviteCollaborators.js for why:
+        // the client-side anon-key insert().select() round trip was
+        // silently dropping rows on multi-collaborator invites (confirmed
+        // live: a 3-person invite where one collaborator got no
+        // notification at all, though their collaboration row existed
+        // fine), it let the owner add themselves as their own
+        // collaborator, and it left a stray duplicate notification from
+        // something outside this app uncleaned.
+        const inviteResult = await inviteCollaborators(projectData.id, formData.collaborators);
+        if (inviteResult.error) {
+          console.error("[inviteCollaborators]", inviteResult.error);
+        } else {
           // Email every invite we have an address for — registered users
           // included. The in-app notification alone isn't enough; most people
           // don't have Stark open when this fires.
@@ -255,27 +252,6 @@ function CreateForm() {
             .forEach((c) => {
               sendCollaboratorInvite(c.email, formData.title, inviterName);
             });
-
-          // In-app collab_invite notification, one per registered
-          // collaborator — inserted directly here rather than left to a
-          // database trigger, which on a multi-collaborator invite was
-          // only ever firing for one of them (confirmed live: two
-          // collaborators invited in the same request, only one ever got a
-          // notification). The collaboration row's own id rides along in
-          // the link as ?invite= so Accept/Decline can resolve it directly,
-          // independent of this project's slug ever changing later.
-          const registeredInviteNotifs = (insertedCollabs || [])
-            .filter((row) => row.user_id && row.user_id !== user.id)
-            .map((row) => ({
-              receiver_id: row.user_id,
-              sender_id: user.id,
-              type: 'collab_invite',
-              message: `invited you to collaborate on ${formData.title}`,
-              link: `/project/${slug}?invite=${row.id}`,
-            }));
-          if (registeredInviteNotifs.length > 0) {
-            await supabase.from('notifications').insert(registeredInviteNotifs);
-          }
         }
       }
 
@@ -339,7 +315,7 @@ function CreateForm() {
             {step === 1 && <StepSource data={formData} updateData={updateData} errors={errors} />}
             {step === 2 && (
                 <>
-                    <StepDetails data={formData} updateData={updateData} errors={errors} />
+                    <StepDetails data={formData} updateData={updateData} errors={errors} currentUserId={user?.id} />
                     {eventData && publicFolders.length > 0 && (
                         <div className="mt-6 p-4 bg-secondary/5 border border-border">
                             <label className="text-xs font-mono uppercase text-muted-foreground mb-2 flex items-center gap-2">

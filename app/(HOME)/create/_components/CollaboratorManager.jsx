@@ -6,7 +6,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { getAvatar } from "@/constants/assets";
 
-export default function CollaboratorManager({ collaborators, onAdd, onRemove }) {
+export default function CollaboratorManager({ collaborators, onAdd, onRemove, excludeUserId }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -29,7 +29,11 @@ export default function CollaboratorManager({ collaborators, onAdd, onRemove }) 
         .or(`username.ilike.%${query}%,email.ilike.%${query}%`)
         .limit(5);
 
-      setResults(data || []);
+      // You can't collaborate with yourself — without this, searching your
+      // own username/email surfaces your own account and it's addable,
+      // leaving a permanently-pending, self-referential invite (confirmed
+      // live in production).
+      setResults((data || []).filter((u) => u.id !== excludeUserId));
       setIsSearching(false);
     };
 
