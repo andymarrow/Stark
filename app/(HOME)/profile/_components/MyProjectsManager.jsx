@@ -5,7 +5,7 @@ import {
   MoreHorizontal, Eye, Star, Edit3, Trash2,
   ExternalLink, Search, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, BarChart3, Plus, Trophy, Globe, Lock, ShieldCheck,
-  Send, ArrowRight, CheckCircle2, XCircle, Clock, EyeOff, UploadCloud // ADDED UploadCloud
+  Send, ArrowRight, CheckCircle2, XCircle, Clock, EyeOff, UploadCloud, Users // ADDED UploadCloud
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -24,6 +24,7 @@ import { toggleSubmissionPublic } from "@/app/actions/toggleSubmissionPublic";
 import { withdrawSubmission } from "@/app/actions/submissionManagement";
 import SubmitToEventModal from "./SubmitToEventModal"; // NEW IMPORT
 import { getContestLockInfo } from "@/lib/contestLock";
+import { getCollaboratingProjects } from "@/app/actions/getCollaboratingProjects";
 
 const ITEMS_PER_PAGE = 5;
 
@@ -47,7 +48,7 @@ export default function MyProjectsManager({ user, onRefresh }) {
   
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState("standard"); // standard | contest | hosting | event_submissions
+  const [activeTab, setActiveTab] = useState("standard"); // standard | contest | collaborating | hosting | event_submissions
 
   const [itemToDelete, setItemToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -72,6 +73,21 @@ export default function MyProjectsManager({ user, onRefresh }) {
       const to = from + ITEMS_PER_PAGE - 1;
 
       let query;
+
+      // Projects you work on but don't own — fetched server-side, since
+      // `collaborations` isn't reliably readable under the anon key even
+      // for your own rows (see getCollaboratingProjects.js).
+      if (activeTab === 'collaborating') {
+          const { projects, count } = await getCollaboratingProjects({
+            page: currentPage,
+            pageSize: ITEMS_PER_PAGE,
+            search: searchQuery,
+          });
+          setData(projects);
+          setTotalCount(count);
+          setTotalTraffic(0);
+          return;
+      }
 
       if (activeTab === 'standard' || activeTab === 'contest') {
           query = supabase
@@ -266,7 +282,16 @@ export default function MyProjectsManager({ user, onRefresh }) {
                 >
                     <Trophy size={14} /> Contest Entries
                 </button>
-                
+
+                {/* Projects you were added to by someone else — these used to
+                    appear nowhere in your own dashboard at all. */}
+                <button
+                    onClick={() => { setActiveTab("collaborating"); setCurrentPage(1); }}
+                    className={`px-4 py-2 text-xs font-mono uppercase border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === 'collaborating' ? 'border-emerald-500 text-emerald-500' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+                >
+                    <Users size={14} /> Collaborating
+                </button>
+
                 {/* --- EVENT SUBMISSIONS TAB --- */}
                 <button 
                     onClick={() => { setActiveTab("event_submissions"); setCurrentPage(1); }}
@@ -336,10 +361,11 @@ export default function MyProjectsManager({ user, onRefresh }) {
                         );
                     } else {
                         return (
-                            <ProjectRow 
-                                key={item.id} 
-                                project={item} 
+                            <ProjectRow
+                                key={item.id}
+                                project={item}
                                 isContestTab={activeTab === 'contest'}
+                                isCollaboration={activeTab === 'collaborating'}
                                 onDeleteRequest={setItemToDelete}
                                 onTogglePublic={handleToggleProjectPublic}
                                 onUplinkRequest={setProjectToUplink} // NEW: Pass the uplink handler
@@ -348,8 +374,13 @@ export default function MyProjectsManager({ user, onRefresh }) {
                     }
                 })
             ) : (
-                <div className="h-40 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border m-4 bg-secondary/5">
+                <div className="h-40 flex flex-col items-center justify-center gap-2 text-muted-foreground border border-dashed border-border m-4 bg-secondary/5 px-6 text-center">
                     <p className="text-xs font-mono uppercase">NO_DATA_FOUND</p>
+                    {activeTab === 'collaborating' && (
+                        <p className="text-[10px] font-mono uppercase tracking-wider opacity-70">
+                            Projects you're added to appear here once you accept the invite
+                        </p>
+                    )}
                 </div>
             )}
         </div>
@@ -403,7 +434,7 @@ export default function MyProjectsManager({ user, onRefresh }) {
 
 // --- ROW COMPONENTS ---
 
-function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic, onUplinkRequest }) {
+function ProjectRow({ project, isContestTab, isCollaboration, onDeleteRequest, onTogglePublic, onUplinkRequest }) {
     const router = useRouter();
     const submission = project.contest_submissions?.[0];
     const contestData = submission?.contest;
@@ -423,6 +454,14 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic, on
                     <Link href={`/project/${project.slug}`} onClick={(e) => e.stopPropagation()} className="text-sm font-bold truncate text-foreground group-hover:text-accent transition-colors hover:underline">
                         {project.title}
                     </Link>
+                    {isCollaboration && (
+                        <div className="text-[9px] font-mono text-emerald-500 uppercase truncate mt-0.5 flex items-center gap-1">
+                            <Users size={10} /> Collaborator
+                            {project.owner?.username && (
+                                <span className="text-muted-foreground">// @{project.owner.username}</span>
+                            )}
+                        </div>
+                    )}
                     {contestTitle && (
                         <div className="flex items-center gap-2 mt-0.5">
                              <Link href={`/contests/${contestSlug}`} onClick={(e) => e.stopPropagation()} className="text-[9px] font-mono text-accent uppercase truncate flex items-center gap-1 hover:underline">
@@ -452,26 +491,41 @@ function ProjectRow({ project, isContestTab, onDeleteRequest, onTogglePublic, on
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="rounded-none border-border bg-background shadow-xl min-w-[150px] z-[50]">
-                        
+
                         {/* NEW: Submit to Event Option */}
-                        <DropdownMenuItem 
-                            onClick={(e) => { e.stopPropagation(); onUplinkRequest(project); }} 
-                            className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors"
-                        >
-                            <UploadCloud size={12} className="mr-2" /> Submit to Event
-                        </DropdownMenuItem>
+                        {!isCollaboration && (
+                            <DropdownMenuItem
+                                onClick={(e) => { e.stopPropagation(); onUplinkRequest(project); }}
+                                className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-accent focus:text-white transition-colors"
+                            >
+                                <UploadCloud size={12} className="mr-2" /> Submit to Event
+                            </DropdownMenuItem>
+                        )}
 
                         <DropdownMenuItem asChild className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-secondary">
                             <Link href={`/project/${project.slug}/edit`} onClick={(e) => e.stopPropagation()}><Edit3 size={12} className="mr-2" /> Edit</Link>
                         </DropdownMenuItem>
-                        {contestTitle && (
+
+                        {/* Collaborators get edit + changelog, same as the owner.
+                            Deleting the project and managing its team stay
+                            owner-only, so those are hidden here. */}
+                        {isCollaboration && (
+                            <DropdownMenuItem asChild className="text-[10px] font-mono uppercase h-8 cursor-pointer text-foreground focus:bg-secondary">
+                                <Link href={`/project/${project.slug}/changelog/create`} onClick={(e) => e.stopPropagation()}><Plus size={12} className="mr-2" /> Push Update</Link>
+                            </DropdownMenuItem>
+                        )}
+
+                        {contestTitle && !isCollaboration && (
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onTogglePublic(project); }} className={`text-[10px] font-mono uppercase h-8 cursor-pointer focus:text-white ${isHidden ? 'text-accent focus:bg-accent hover:bg-accent' : 'text-zinc-500 focus:bg-zinc-700 hover:bg-zinc-800'}`}>
                                 {isHidden ? <><Globe size={12} className="mr-2" /> Make Public</> : <><Lock size={12} className="mr-2" /> Make Private</>}
                             </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDeleteRequest(project); }} className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-500 focus:text-white focus:bg-red-600 hover:bg-red-600">
-                            <Trash2 size={12} className="mr-2" /> Delete
-                        </DropdownMenuItem>
+
+                        {!isCollaboration && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDeleteRequest(project); }} className="text-[10px] font-mono uppercase h-8 cursor-pointer text-red-500 focus:text-white focus:bg-red-600 hover:bg-red-600">
+                                <Trash2 size={12} className="mr-2" /> Delete
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

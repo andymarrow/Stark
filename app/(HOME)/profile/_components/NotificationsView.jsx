@@ -16,21 +16,27 @@ export default function NotificationsView({ onNotificationRead }) {
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState("all"); 
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   
   const isLoadingRef = useRef(false);
+  // How many rows the database has already handed us. Tracked in a ref
+  // rather than read off state at call time: the old code tried to read the
+  // current length synchronously inside a setNotifications updater, but React
+  // doesn't run that updater until render, so it always still read 0. Every
+  // "Retrieve_Archives" click therefore re-fetched rows 0-9, the dedupe below
+  // discarded all ten as already-present, and the button did nothing at all.
+  const offsetRef = useRef(0);
 
   const fetchNotifications = useCallback(async (isLoadMore = false) => {
     if (!user || isLoadingRef.current) return;
-    
+
     try {
       isLoadingRef.current = true;
-      if (!isLoadMore) setLoading(true);
-      
-      let currentCount = 0;
-      setNotifications(prev => { currentCount = isLoadMore ? prev.length : 0; return prev; });
+      if (isLoadMore) setLoadingMore(true);
+      else setLoading(true);
 
-      const from = currentCount;
+      const from = isLoadMore ? offsetRef.current : 0;
       const to = from + PAGE_SIZE - 1;
 
       let query = supabase
@@ -46,6 +52,11 @@ export default function NotificationsView({ onNotificationRead }) {
       const { data, error } = await query;
       if (error) throw error;
 
+      // Advance by rows the database returned, not rows we chose to keep —
+      // client-side dedupe can drop some, and paging by the kept count would
+      // ask for the same window again forever.
+      offsetRef.current = from + data.length;
+
       setNotifications(prev => {
         if (isLoadMore) {
             const newItems = data.filter(newItem => !prev.some(existing => existing.id === newItem.id));
@@ -59,9 +70,10 @@ export default function NotificationsView({ onNotificationRead }) {
       toast.error("COMM_LINK_FAILURE");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       isLoadingRef.current = false;
     }
-  }, [user, filter]); 
+  }, [user, filter]);
 
   useEffect(() => {
     if (!user) return;
@@ -166,8 +178,8 @@ export default function NotificationsView({ onNotificationRead }) {
 
         {hasMore && (
             <div className="flex justify-center pt-6 pb-12">
-                <Button variant="outline" onClick={() => fetchNotifications(true)} className="rounded-none border-border hover:bg-secondary hover:text-foreground font-mono text-[10px] uppercase tracking-widest px-8 shadow-sm" disabled={loading}>
-                    {loading ? <Loader2 className="animate-spin h-3 w-3" /> : "Retrieve_Archives"}
+                <Button variant="outline" onClick={() => fetchNotifications(true)} className="rounded-none border-border hover:bg-secondary hover:text-foreground font-mono text-[10px] uppercase tracking-widest px-8 shadow-sm" disabled={loading || loadingMore}>
+                    {loadingMore ? <Loader2 className="animate-spin h-3 w-3" /> : "Retrieve_Archives"}
                 </Button>
             </div>
         )}
