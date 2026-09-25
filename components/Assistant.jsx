@@ -26,7 +26,7 @@ import { deliverVoiceCommand, emitVoiceCommand } from "@/lib/voiceBridge";
 // differ per environment without a code change.
 const PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VOXIDE_PUBLIC_KEY ||
-  "vox_pub_f8c1304fd1d5252f8ab0da0143c7eae150e5ce5f8cecaaca";
+  "vox_pub_d076cc59988acd92574460d4453c058d86d973769668e561";
 
 // Live bridge from React-only values (router, theme, auth) to the module-scope
 // capability handlers. The component keeps these fresh on every render.
