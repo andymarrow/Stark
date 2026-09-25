@@ -98,9 +98,15 @@ export default function ProjectGallery({ images }) {
             </motion.div>
             </AnimatePresence>
 
-            <div className="absolute top-4 left-4 z-10 pointer-events-none">
-                <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-mono px-2 py-1 border border-white/10 uppercase tracking-widest">
-                    {isVideo ? "VIDEO_FEED" : `IMG_0${validIndex + 1}`} // PREVIEW_MODE
+            {/* The image is object-contain, so a tall image sits as a narrow
+                centred column with letterbox either side. On desktop this
+                label fits in that letterbox; on a phone the full string is
+                wider than the gap and lands on top of the artwork. Keep the
+                counter, drop the decorative suffix below sm. */}
+            <div className="absolute top-4 left-4 z-10 pointer-events-none max-w-[calc(100%-2rem)]">
+                <span className="inline-block bg-black/50 backdrop-blur-md text-white text-[10px] font-mono px-2 py-1 border border-white/10 uppercase tracking-widest truncate">
+                    {isVideo ? "VIDEO_FEED" : `IMG_${String(validIndex + 1).padStart(2, "0")}`}
+                    <span className="hidden sm:inline"> // PREVIEW_MODE</span>
                 </span>
             </div>
 
