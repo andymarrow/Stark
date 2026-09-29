@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useCallback } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { FileText, Layers, Megaphone, Grid, List, Handshake, Gavel } from "lucide-react"; // Added Icons
 import ContestHero from "./ContestHero";
 import EntriesGrid from "./EntriesGrid";
@@ -9,15 +10,46 @@ import UpdatesTab from "./UpdatesTab";
 import SponsorsShowcase from "./SponsorsShowcase";
 import JudgesShowcase from "./JudgesShowcase";
 
+const VALID_TABS = ["details", "entries", "updates", "sponsors", "judges"];
+
 export default function ContestClient({ contest, userEntry, judges }) {
-  const [activeTab, setActiveTab] = useState("details");
-  const [viewMode, setViewMode] = useState("grid"); // 'grid' | 'feed'
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Sponsors only earn a tab when there's something to show in it.
   const sponsors = (Array.isArray(contest.sponsors) ? contest.sponsors : []).filter(
     (s) => typeof s === "object" && s?.name
   );
   const hasJudges = Array.isArray(judges) && judges.length > 0;
+
+  // Tab and view live in the URL, not in component state, so opening an entry
+  // and hitting back returns you to the tab you were actually on instead of
+  // dumping you on Description & Rules every time.
+  const requestedTab = searchParams.get("tab");
+  const tabExists =
+    VALID_TABS.includes(requestedTab) &&
+    !(requestedTab === "sponsors" && sponsors.length === 0) &&
+    !(requestedTab === "judges" && !hasJudges);
+  const activeTab = tabExists ? requestedTab : "details";
+  const viewMode = searchParams.get("view") === "feed" ? "feed" : "grid"; // 'grid' | 'feed'
+
+  // replace, not push: tab clicks shouldn't stack history entries you then
+  // have to press back through to leave the page. Replacing still updates the
+  // entry the browser returns to.
+  const setParam = useCallback(
+    (key, value, defaultValue) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === defaultValue) params.delete(key);
+      else params.set(key, value);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
+  const setActiveTab = (tab) => setParam("tab", tab, "details");
+  const setViewMode = (mode) => setParam("view", mode, "grid");
 
   return (
     <div className="min-h-screen bg-background pb-20">

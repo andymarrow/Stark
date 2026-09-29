@@ -11,6 +11,8 @@ import ProjectContent from "./_components/ProjectContent";
 import JsonLd from "@/components/JsonLd";
 import { getProjectCollaborators } from "@/app/actions/getProjectCollaborators";
 import { checkProjectAccess } from "@/app/actions/projectAccess";
+import { getContestEntryNavigation } from "@/app/actions/getContestEntryNavigation";
+import ContestEntryNav from "./_components/ContestEntryNav";
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://stark.et";
 
@@ -101,6 +103,11 @@ export default async function ProjectDetailPage({ params }) {
   // access on changelogs as the owner (see ProjectContent/ChangelogTimeline).
   const { canEdit: isOwner } = await checkProjectAccess(projectData.id);
 
+  // Only returns something when this project is a contest entry — lets
+  // judges and mentors walk the entry list without going back and forth
+  // through the contest page.
+  const contestNav = await getContestEntryNavigation(projectData.id);
+
   const profileUrl = `${BASE_URL}/profile/${project.author?.username || "user"}`;
   const projectUrl = `${BASE_URL}/project/${slug}`;
   const jsonLd = {
@@ -162,6 +169,8 @@ export default async function ProjectDetailPage({ params }) {
           </div>
         </div>
       </header>
+
+      <ContestEntryNav nav={contestNav} />
 
       <main className="container mx-auto px-4 py-8">
         {/* CHANGED: Grid starts immediately. Gallery is now inside Left Column. */}

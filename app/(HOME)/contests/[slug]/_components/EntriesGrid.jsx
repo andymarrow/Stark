@@ -3,7 +3,24 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
-import { Loader2, Heart, Eye, Trophy, PlayCircle } from "lucide-react";
+import { Loader2, Heart, Eye, Trophy, PlayCircle, Globe } from "lucide-react";
+
+// "Can I actually try this?" — the dedicated demo field, or a website link
+// added through the extra-links list, which is the same thing by another name.
+const hasLiveDemo = (project) => {
+    if (project?.demo_link) return true;
+    return (Array.isArray(project?.additional_links) ? project.additional_links : [])
+        .some((l) => l?.url && l?.type === "website");
+};
+
+const DemoBadge = () => (
+    <span
+        title="Has a live demo"
+        className="flex items-center gap-1 bg-emerald-500/90 text-black text-[9px] font-mono font-bold px-1.5 py-0.5 uppercase tracking-widest backdrop-blur-sm"
+    >
+        <Globe size={9} strokeWidth={2.5} /> Demo
+    </span>
+);
 
 // Helper for YouTube
 const getThumbnail = (url) => {
@@ -29,8 +46,10 @@ export default function EntriesGrid({ contestId }) {
         .from('contest_submissions')
         .select(`
             id,
+            submitted_at,
             project:projects!inner (
                 id, title, slug, thumbnail_url, likes_count, views, status,
+                demo_link, source_link, additional_links,
                 owner:profiles!projects_owner_id_fkey (username, avatar_url)
             )
         `)
@@ -50,7 +69,7 @@ export default function EntriesGrid({ contestId }) {
   const sortedEntries = [...entries].sort((a, b) => {
       if (filter === 'likes') return b.project.likes_count - a.project.likes_count;
       if (filter === 'views') return b.project.views - a.project.views;
-      return new Date(b.submitted_at) - new Date(a.submitted_at); // Default latest (though DB timestamp missing in client select, assume array order or add field)
+      return new Date(b.submitted_at) - new Date(a.submitted_at);
   });
 
   // Top 3 for Leaderboard (based on Likes for public hype)
@@ -120,6 +139,9 @@ function LeaderboardCard({ entry, rank }) {
             <div className="relative aspect-video bg-black border border-border overflow-hidden">
                 <Image src={thumb} alt={entry.project.title} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
                 {isVideo && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><PlayCircle className="text-white opacity-80" /></div>}
+                {hasLiveDemo(entry.project) && (
+                    <div className="absolute bottom-2 left-2 z-10"><DemoBadge /></div>
+                )}
             </div>
             <div className="mt-3">
                 <h4 className="font-bold text-sm truncate">{entry.project.title}</h4>
@@ -151,6 +173,9 @@ function EntryCard({ entry }) {
                     <div className="absolute top-2 right-2 bg-black/50 p-1 rounded-full backdrop-blur-sm">
                         <PlayCircle size={14} className="text-white" />
                     </div>
+                )}
+                {hasLiveDemo(entry.project) && (
+                    <div className="absolute bottom-2 left-2 z-10"><DemoBadge /></div>
                 )}
             </div>
             <div className="p-4">
