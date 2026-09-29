@@ -31,12 +31,31 @@ export async function middleware(request) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    ({
+      data: { user },
+    } = await supabase.auth.getUser());
+  } catch (err) {
+    // A hiccup reaching the auth service must not take the page down with
+    // it. Carrying on leaves the request unauthenticated for server
+    // components, which the client session then corrects on its own.
+    console.error("[middleware] getUser failed:", err?.message);
+    return response;
+  }
 
   // --- BANNED USER CHECK ---
-  if (user) {
+  // This costs a database round-trip, so it runs on real page navigations
+  // only. It used to run on every single matched request — including each
+  // RSC payload fetch and every link prefetch the router fires on hover —
+  // which meant a signed-in user browsing normally generated a steady
+  // stream of extra queries, on top of the getUser call above, purely to
+  // re-answer a question whose answer almost never changes.
+  const isPrefetch = request.headers.get("next-router-prefetch") === "1";
+  const isRscPayload = request.headers.get("rsc") === "1";
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api");
+
+  if (user && !isPrefetch && !isRscPayload && !isApiRoute) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')

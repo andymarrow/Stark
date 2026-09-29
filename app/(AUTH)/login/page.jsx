@@ -7,16 +7,38 @@ import SocialAuth from "../_components/SocialAuth";
 import MobileSplash from "../_components/MobileSplash";
 import MobileOnboarding from "../_components/MobileOnboarding";
 
+const SEEN_INTRO_KEY = "stark_seen_login_intro";
+
 export default function LoginPage() {
   // State machine: 'splash' | 'onboarding' | 'login'
-  const [viewState, setViewState] = useState("splash"); 
+  const [viewState, setViewState] = useState("splash");
 
   useEffect(() => {
     // If Desktop, skip everything and go straight to login
     if (window.innerWidth >= 1024) {
         setViewState("login");
+        return;
+    }
+
+    // On mobile the splash and the three onboarding slides used to replay on
+    // every single visit, so anyone coming back to sign in had to sit through
+    // a loading bar and then tap through an intro before the form existed at
+    // all. Show it once, then go straight to the form.
+    try {
+        if (localStorage.getItem(SEEN_INTRO_KEY)) setViewState("login");
+    } catch {
+        // Private mode / blocked storage — just show the intro.
     }
   }, []);
+
+  const rememberIntroSeen = () => {
+    try {
+        localStorage.setItem(SEEN_INTRO_KEY, "1");
+    } catch {
+        // Not being able to remember is survivable; it only means the intro
+        // shows again next time.
+    }
+  };
 
   const handleSplashComplete = () => {
     // On mobile, go to onboarding after splash
@@ -25,6 +47,7 @@ export default function LoginPage() {
 
   const handleOnboardingComplete = () => {
     // After onboarding, show login
+    rememberIntroSeen();
     setViewState("login");
   };
 

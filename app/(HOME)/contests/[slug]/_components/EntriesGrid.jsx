@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
-import { Loader2, Heart, Eye, Trophy, PlayCircle, Globe } from "lucide-react";
+import { Loader2, Heart, Eye, Trophy, PlayCircle, Globe, Search, X } from "lucide-react";
+import { getContestEntryCollaborators } from "@/app/actions/getContestEntryCollaborators";
 
 // "Can I actually try this?" — the dedicated demo field, or a website link
 // added through the extra-links list, which is the same thing by another name.
@@ -39,6 +40,8 @@ export default function EntriesGrid({ contestId }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("latest"); // 'latest', 'likes', 'views'
+  const [query, setQuery] = useState("");
+  const [collaborators, setCollaborators] = useState({}); // project_id -> [{username, name}]
 
   useEffect(() => {
     const fetchEntries = async () => {
@@ -49,8 +52,8 @@ export default function EntriesGrid({ contestId }) {
             submitted_at,
             project:projects!inner (
                 id, title, slug, thumbnail_url, likes_count, views, status,
-                demo_link, source_link, additional_links,
-                owner:profiles!projects_owner_id_fkey (username, avatar_url)
+                demo_link, source_link, additional_links, tags,
+                owner:profiles!projects_owner_id_fkey (username, full_name, avatar_url)
             )
         `)
         .eq('contest_id', contestId);
@@ -65,8 +68,34 @@ export default function EntriesGrid({ contestId }) {
     if(contestId) fetchEntries();
   }, [contestId]);
 
+  // Team members, so searching a person finds the entry even when the work
+  // is filed under a teammate's account.
+  useEffect(() => {
+    if (!contestId) return;
+    getContestEntryCollaborators(contestId).then(setCollaborators).catch(() => {});
+  }, [contestId]);
+
+  // Search across everything a judge might remember about an entry: its
+  // title, whoever submitted it, any teammate on it, and its tech tags.
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = (entry) => {
+      if (terms.length === 0) return true;
+      const p = entry.project;
+      const haystack = [
+          p.title,
+          p.owner?.username,
+          p.owner?.full_name,
+          ...(Array.isArray(p.tags) ? p.tags : []),
+          ...(collaborators[p.id] || []).flatMap((c) => [c.username, c.name]),
+      ].filter(Boolean).join(" ").toLowerCase();
+      // Every term must appear, so extra words narrow rather than widen.
+      return terms.every((t) => haystack.includes(t));
+  };
+
+  const visibleEntries = entries.filter(matches);
+
   // Sorting Logic
-  const sortedEntries = [...entries].sort((a, b) => {
+  const sortedEntries = [...visibleEntries].sort((a, b) => {
       if (filter === 'likes') return b.project.likes_count - a.project.likes_count;
       if (filter === 'views') return b.project.views - a.project.views;
       return new Date(b.submitted_at) - new Date(a.submitted_at);
@@ -103,9 +132,34 @@ export default function EntriesGrid({ contestId }) {
           </div>
       )}
 
-      {/* 2. FILTER BAR */}
-      <div className="flex justify-between items-center border-b border-border pb-4">
-        <span className="text-xs font-mono text-muted-foreground uppercase">All Entries ({entries.length})</span>
+      {/* 2. SEARCH */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter by project, author, teammate, or tech..."
+            className="w-full h-11 pl-10 pr-10 bg-secondary/5 border border-border text-sm font-mono outline-none focus:border-accent transition-colors placeholder:text-muted-foreground/60"
+        />
+        {query && (
+            <button
+                onClick={() => setQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-accent transition-colors"
+                aria-label="Clear search"
+            >
+                <X size={14} />
+            </button>
+        )}
+      </div>
+
+      {/* 3. FILTER BAR */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-border pb-4">
+        <span className="text-xs font-mono text-muted-foreground uppercase">
+            {terms.length > 0
+                ? `${sortedEntries.length} of ${entries.length} Entries`
+                : `All Entries (${entries.length})`}
+        </span>
         <div className="flex gap-4 text-xs font-mono">
             <button onClick={() => setFilter("latest")} className={filter === "latest" ? "text-accent underline" : "text-muted-foreground hover:text-foreground"}>Newest</button>
             <button onClick={() => setFilter("likes")} className={filter === "likes" ? "text-accent underline" : "text-muted-foreground hover:text-foreground"}>Top Liked</button>
@@ -113,12 +167,19 @@ export default function EntriesGrid({ contestId }) {
         </div>
       </div>
 
-      {/* 3. MAIN GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedEntries.map((entry) => (
-            <EntryCard key={entry.id} entry={entry} />
-        ))}
-      </div>
+      {/* 4. MAIN GRID */}
+      {sortedEntries.length === 0 ? (
+        <div className="py-16 text-center border border-dashed border-border bg-secondary/5">
+            <p className="text-sm font-mono text-muted-foreground uppercase">No entries match "{query}"</p>
+            <button onClick={() => setQuery("")} className="mt-2 text-xs font-mono text-accent hover:underline uppercase">Clear filter</button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sortedEntries.map((entry) => (
+                <EntryCard key={entry.id} entry={entry} />
+            ))}
+        </div>
+      )}
 
     </div>
   );

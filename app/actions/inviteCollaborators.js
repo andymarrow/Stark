@@ -65,11 +65,34 @@ export async function inviteCollaborators(projectId, collaborators) {
     }
 
     // Never let the owner add themselves as their own collaborator.
-    const filtered = collaborators.filter((c) => {
+    const selfFiltered = collaborators.filter((c) => {
       const uid = c.type === "user" ? (c.user_id || c.id) : null;
       return uid !== user.id;
     });
-    if (filtered.length === 0) return { success: true, inserted: [] };
+    if (selfFiltered.length === 0) return { success: true, inserted: [] };
+
+    // Nothing stopped the same person being invited to the same project
+    // twice. The picker only dedupes within one form session, so re-opening
+    // the edit page and adding someone already on the team wrote a second
+    // collaboration row — and then a second invite notification, which reads
+    // to the recipient as the first invite never having worked. Confirmed on
+    // live hackathon entries. Anyone already attached to this project, at any
+    // status, is skipped.
+    const { data: existing } = await admin
+      .from("collaborations")
+      .select("user_id, invite_email")
+      .eq("project_id", projectId);
+
+    const takenUserIds = new Set((existing || []).map((r) => r.user_id).filter(Boolean));
+    const takenEmails = new Set(
+      (existing || []).map((r) => r.invite_email?.toLowerCase()).filter(Boolean)
+    );
+
+    const filtered = selfFiltered.filter((c) => {
+      if (c.type === "user") return !takenUserIds.has(c.user_id || c.id);
+      return !takenEmails.has(c.email?.toLowerCase());
+    });
+    if (filtered.length === 0) return { success: true, inserted: [], skipped: "already_invited" };
 
     const collabRows = filtered.map((c) => ({
       project_id: projectId,
