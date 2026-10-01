@@ -11,7 +11,7 @@ import ChangelogTimeline from "./ChangelogTimeline";
 import ProjectComments from "./ProjectComments";
 import ProjectChatTerminal from "./ProjectChatTerminal"; // We will build this next
 
-export default function ProjectContent({ project, isOwner }) {
+export default function ProjectContent({ project, isOwner, allowCommentImages = false }) {
   const [activeTab, setActiveTab] = useState("overview");
   
   // --- CHAT PROTOCOL STATE ---
@@ -104,7 +104,7 @@ export default function ProjectContent({ project, isOwner }) {
             
             {activeTab === "changelog" && (
                 <motion.div key="changelog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                    <ChangelogTimeline projectId={project.id} isOwner={isOwner} projectSlug={project.slug} />
+                    <ChangelogTimeline projectId={project.id} isOwner={isOwner} projectSlug={project.slug} allowCommentImages={allowCommentImages} />
                 </motion.div>
             )}
 
@@ -119,7 +119,7 @@ export default function ProjectContent({ project, isOwner }) {
       {/* 4. Global Comments (Only if not in private chat) */}
       {activeTab !== "chat" && (
           <div className="pt-8">
-             <ProjectComments projectId={project.id} />
+             <ProjectComments projectId={project.id} allowImages={allowCommentImages} />
           </div>
       )}
 

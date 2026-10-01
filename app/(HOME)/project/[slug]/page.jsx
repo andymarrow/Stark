@@ -189,7 +189,11 @@ export default async function ProjectDetailPage({ params }) {
             />
 
             {/* 3. Tabbed Content (Readme/Changelog) */}
-            <ProjectContent project={project} isOwner={isOwner} />
+            {/* Image attachments on comments are for contest review —
+                mentors and judges asked to point at a screenshot rather
+                than describe where to look. contestNav is non-null only
+                for projects actually entered in a contest. */}
+            <ProjectContent project={project} isOwner={isOwner} allowCommentImages={!!contestNav} />
           </div>
 
           {/* --- RIGHT COLUMN (Sticky Sidebar) --- */}

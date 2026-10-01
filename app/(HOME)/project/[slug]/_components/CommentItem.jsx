@@ -139,7 +139,7 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
     setLoadingReplies(true);
     const { data } = await supabase
       .from('comments')
-      .select(`id, content, created_at, user_id, likes_count, dislikes_count, author:profiles!user_id(username, avatar_url)`)
+      .select(`*, author:profiles!user_id(username, avatar_url)`)
       .eq('parent_id', comment.id)
       .order('created_at', { ascending: true })
       .range(replies.length, replies.length + limit - 1);
@@ -380,6 +380,28 @@ export default function CommentItem({ comment, user, onDelete, projectId, depth 
                         {getParsedContent()}
                     </ReactMarkdown>
                 </div>
+
+                {/* Attached images — click to open full size */}
+                {Array.isArray(comment.image_urls) && comment.image_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                        {comment.image_urls.map((url, i) => (
+                            <a
+                                key={url}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="relative w-28 h-28 border border-border bg-black overflow-hidden hover:border-accent transition-colors block"
+                            >
+                                <img
+                                    src={url}
+                                    alt={`Attachment ${i + 1}`}
+                                    loading="lazy"
+                                    className="w-full h-full object-cover"
+                                />
+                            </a>
+                        ))}
+                    </div>
+                )}
             </div>
           )}
           

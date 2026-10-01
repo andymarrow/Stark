@@ -94,7 +94,7 @@ const unwrapFencedContent = (text) => {
   return match ? match[1] : text;
 };
 
-export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
+export default function ChangelogTimeline({ projectId, isOwner, projectSlug, allowCommentImages = false }) {
   const { user } = useAuth();
   const router = useRouter();
   const [logs, setLogs] = useState([]);
@@ -416,7 +416,7 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug }) {
 
                                 {/* 4. Isolated Comments */}
                                 <div className="mt-10">
-                                    <ProjectComments projectId={projectId} changelogId={log.id} />
+                                    <ProjectComments projectId={projectId} changelogId={log.id} allowImages={allowCommentImages} />
                                 </div>
 
                             </div>

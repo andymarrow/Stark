@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   LayoutDashboard, Users, Megaphone, Settings, 
-  ArrowLeft, ExternalLink, Award, Menu, Layers, BarChart3,
+  ArrowLeft, ExternalLink, Award, Menu, Layers, BarChart3, UserSquare2,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import JudgesTab from "./JudgesTab";
 import SponsorsTab from "./SponsorsTab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import SubmissionsTab from "./SubmissionsTab";
+import ParticipantsTab from "./ParticipantsTab";
 import SettingsTab from "./SettingsTab";
 import ResultsMatrix from "./ResultsMatrix";
 
@@ -23,6 +24,7 @@ export default function DashboardClient({ contest, currentUser }) {
   const TABS = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "submissions", label: "Entries", icon: Layers }, 
+    { id: "participants", label: "Participants", icon: UserSquare2 },
     { id: "matrix", label: "Results Matrix", icon: BarChart3 },
     { id: "judges", label: "Jury Panel", icon: Users },
     { id: "sponsors", label: "Sponsors", icon: Award },
@@ -106,6 +108,8 @@ export default function DashboardClient({ contest, currentUser }) {
                 {activeTab === 'overview' && <OverviewTab contest={contest} />}
                 
                 {activeTab === 'submissions' && <SubmissionsTab contest={contest} />}
+
+                {activeTab === 'participants' && <ParticipantsTab contest={contest} />}
 
                 {activeTab === 'matrix' && <ResultsMatrix contest={contest} />}
 

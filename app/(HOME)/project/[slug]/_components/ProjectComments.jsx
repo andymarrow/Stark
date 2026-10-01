@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/app/_context/AuthContext";
-import { MessageSquare, Loader2 } from "lucide-react";
+import { MessageSquare, Loader2, ImagePlus, X } from "lucide-react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -26,7 +26,10 @@ const extractMentions = (text) => {
     return [...new Set(matches)]; // Unique usernames only
 };
 
-export default function ProjectComments({ projectId, changelogId = null }) {
+const MAX_IMAGES = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export default function ProjectComments({ projectId, changelogId = null, allowImages = false }) {
   const { user } = useAuth();
   const router = useRouter();
   const [comments, setComments] = useState([]);
@@ -35,6 +38,10 @@ export default function ProjectComments({ projectId, changelogId = null }) {
   const [submitting, setSubmitting] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [projectSlug, setProjectSlug] = useState(""); // Store slug for notifications
+  // Picked but not yet uploaded — the upload happens on post, so abandoning
+  // a half-written comment doesn't leave orphaned files in the bucket.
+  const [pendingImages, setPendingImages] = useState([]); // [{ file, preview }]
+  const [uploading, setUploading] = useState(false);
 
   // Determine dynamic labels based on context
   const contextLabel = changelogId ? "Update Discussion" : "Discussion Log";
@@ -89,8 +96,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
         let query = supabase
             .from('comments')
             .select(`
-                id, content, created_at, user_id, 
-                likes_count, dislikes_count, 
+                *,
                 author:profiles!user_id (username, avatar_url)
             `)
             .eq('project_id', projectId) // Always must belong to project
@@ -120,8 +126,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     const { data } = await supabase
         .from('comments')
         .select(`
-            id, content, created_at, user_id, 
-            likes_count, dislikes_count, 
+            *,
             author:profiles!user_id (username, avatar_url)
         `)
         .eq('id', id)
@@ -155,21 +160,82 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     callback(suggestions);
   };
 
+  const handlePickImages = (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = ""; // so re-picking the same file still fires onChange
+    if (picked.length === 0) return;
+
+    const room = MAX_IMAGES - pendingImages.length;
+    if (room <= 0) {
+        toast.error(`Up to ${MAX_IMAGES} images per comment.`);
+        return;
+    }
+
+    const accepted = [];
+    for (const file of picked.slice(0, room)) {
+        if (!file.type.startsWith("image/")) {
+            toast.error("Images only", { description: `${file.name} isn't an image.` });
+            continue;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+            toast.error("Too large", { description: `${file.name} is over 5MB.` });
+            continue;
+        }
+        accepted.push({ file, preview: URL.createObjectURL(file) });
+    }
+    if (picked.length > room) toast.info(`Only the first ${room} added — ${MAX_IMAGES} max per comment.`);
+    setPendingImages((prev) => [...prev, ...accepted]);
+  };
+
+  const removePendingImage = (index) => {
+    setPendingImages((prev) => {
+        const next = [...prev];
+        const [gone] = next.splice(index, 1);
+        if (gone) URL.revokeObjectURL(gone.preview);
+        return next;
+    });
+  };
+
+  // Uploaded only once the comment is actually being posted.
+  const uploadPendingImages = async () => {
+    if (pendingImages.length === 0) return [];
+    const urls = [];
+    for (const item of pendingImages) {
+        const ext = item.file.name.split(".").pop();
+        const path = `comments/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error } = await supabase.storage.from("project-assets").upload(path, item.file);
+        if (error) throw new Error(`Image upload failed: ${error.message}`);
+        const { data } = supabase.storage.from("project-assets").getPublicUrl(path);
+        urls.push(data.publicUrl);
+    }
+    return urls;
+  };
+
   const handlePost = async () => {
     if (!user) {
         toast.error("Access Denied", { description: "You must be logged in to comment." });
         router.push("/login");
         return;
     }
-    if (!newComment.trim()) return;
+    // An image on its own is a legitimate comment — a screenshot often says
+    // the whole thing — so only require text when there's nothing attached.
+    if (!newComment.trim() && pendingImages.length === 0) return;
 
     setSubmitting(true);
     try {
+        let imageUrls = [];
+        if (pendingImages.length > 0) {
+            setUploading(true);
+            imageUrls = await uploadPendingImages();
+            setUploading(false);
+        }
+
         const payload = {
             project_id: projectId,
             user_id: user.id,
             content: newComment, // Saves with markup like @[username](username)
-            changelog_id: changelogId 
+            changelog_id: changelogId,
+            ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
         };
 
         // 1. Insert Comment
@@ -177,8 +243,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
             .from('comments')
             .insert(payload)
             .select(`
-                id, content, created_at, user_id, 
-                likes_count, dislikes_count, 
+                *,
                 author:profiles!user_id (username, avatar_url)
             `)
             .single();
@@ -186,6 +251,8 @@ export default function ProjectComments({ projectId, changelogId = null }) {
         if (error) throw error;
         
         setNewComment("");
+        pendingImages.forEach((p) => URL.revokeObjectURL(p.preview));
+        setPendingImages([]);
         // Optimistic Update: Add to state immediately
         setComments(prev => [data, ...prev]);
         toast.success("Log Added");
@@ -226,6 +293,7 @@ export default function ProjectComments({ projectId, changelogId = null }) {
     } catch (error) {
         toast.error("Failed", { description: error.message });
     } finally {
+        setUploading(false);
         setSubmitting(false);
     }
   };
@@ -295,16 +363,62 @@ export default function ProjectComments({ projectId, changelogId = null }) {
                 </MentionsInput>
             </div>
 
+            {/* Attached image previews */}
+            {allowImages && pendingImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-3 pb-3 relative z-10">
+                    {pendingImages.map((img, i) => (
+                        <div key={img.preview} className="relative w-20 h-20 border border-border bg-black overflow-hidden group/thumb">
+                            {/* Local blob preview — next/image would need the blob host allowed */}
+                            <img src={img.preview} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />
+                            <button
+                                type="button"
+                                onClick={() => removePendingImage(i)}
+                                disabled={submitting}
+                                className="absolute top-0.5 right-0.5 p-1 bg-black/70 text-white hover:bg-accent transition-colors"
+                                aria-label="Remove image"
+                            >
+                                <X size={11} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             {/* Action Bar */}
-            <div className="flex justify-between items-center p-2 border-t border-border bg-background/50 relative z-10">
-                <span className="text-[9px] font-mono text-muted-foreground pl-2 uppercase tracking-tighter">
-                    Status: {user ? 'Active_Node' : 'Restricted'}
-                </span>
-                <Button 
-                    size="sm" 
-                    onClick={handlePost} 
-                    disabled={!user || submitting || !newComment.trim()}
-                    className="h-9 bg-foreground text-background hover:bg-accent hover:text-white rounded-none font-mono text-[10px] uppercase tracking-widest px-6 transition-all"
+            <div className="flex justify-between items-center gap-2 p-2 border-t border-border bg-background/50 relative z-10">
+                <div className="flex items-center gap-2 min-w-0">
+                    {allowImages && (
+                        <label
+                            className={`flex items-center gap-1.5 px-2 py-1.5 border border-border text-[9px] font-mono uppercase tracking-widest transition-colors shrink-0 ${
+                                !user || submitting || pendingImages.length >= MAX_IMAGES
+                                    ? "text-muted-foreground/40 cursor-not-allowed"
+                                    : "text-muted-foreground hover:text-accent hover:border-accent cursor-pointer"
+                            }`}
+                            title={`Attach up to ${MAX_IMAGES} images`}
+                        >
+                            <ImagePlus size={12} />
+                            <span className="hidden sm:inline">Attach</span>
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                hidden
+                                disabled={!user || submitting || pendingImages.length >= MAX_IMAGES}
+                                onChange={handlePickImages}
+                            />
+                        </label>
+                    )}
+                    <span className="text-[9px] font-mono text-muted-foreground uppercase tracking-tighter truncate">
+                        {uploading
+                            ? "Uploading_Images..."
+                            : `Status: ${user ? "Active_Node" : "Restricted"}`}
+                    </span>
+                </div>
+                <Button
+                    size="sm"
+                    onClick={handlePost}
+                    disabled={!user || submitting || (!newComment.trim() && pendingImages.length === 0)}
+                    className="h-9 bg-foreground text-background hover:bg-accent hover:text-white rounded-none font-mono text-[10px] uppercase tracking-widest px-6 transition-all shrink-0"
                 >
                     {submitting ? <Loader2 className="animate-spin" size={14} /> : "Post"}
                 </Button>
