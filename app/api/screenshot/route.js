@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import puppeteer from "puppeteer";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/utils/supabase/server";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -11,10 +12,49 @@ export async function POST(request) {
   let browser = null;
   const uploadedUrls = [];
 
+  // This endpoint launches a headless Chrome and writes to storage, which
+  // is by far the most expensive thing the app can be asked to do. It had
+  // no auth at all, so anyone who found the path could spend the hosting
+  // budget in a loop and fill the bucket. Signed-in callers only — it's
+  // only ever used from the project create flow.
+  const caller = await createServerClient();
+  const { data: { user: caller_user } } = await caller.auth.getUser();
+  if (!caller_user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const { url, userId } = await request.json();
+    const { url } = await request.json();
+    // Trust the session for identity, not the request body — the old code
+    // took userId from the caller, so one user could file uploads under
+    // another user's folder.
+    const userId = caller_user.id;
 
     if (!url) return NextResponse.json({ error: "No URL provided" }, { status: 400 });
+
+    let target;
+    try {
+      target = new URL(url);
+    } catch {
+      return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+    }
+    // Only ever point the browser at public web pages. Without this the
+    // endpoint will happily fetch internal addresses and hand back a
+    // picture of whatever is there.
+    if (!["http:", "https:"].includes(target.protocol)) {
+      return NextResponse.json({ error: "Only http(s) URLs are allowed" }, { status: 400 });
+    }
+    const host = target.hostname.toLowerCase();
+    const isPrivateHost =
+      host === "localhost" ||
+      host === "0.0.0.0" ||
+      host.endsWith(".local") ||
+      host.endsWith(".internal") ||
+      /^(127\.|10\.|192\.168\.|169\.254\.|::1$)/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    if (isPrivateHost) {
+      return NextResponse.json({ error: "That host isn't allowed" }, { status: 400 });
+    }
 
     console.log(`[Screenshot] Launching Scout Bot for: ${url}`);
 

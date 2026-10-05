@@ -87,12 +87,18 @@ export async function middleware(request) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * Every path matched here costs one Supabase Auth call, because the
+     * middleware calls getUser() to keep the session cookie fresh. So the
+     * exclusion list is a bill, not just tidiness.
+     *
+     * Skipped, on top of the Next.js internals and image files that were
+     * already here:
+     *  - api/og/*, api/screenshot, api/link-preview, api/github — called by
+     *    crawlers, link unfurlers and our own tooling, never by a signed-in
+     *    person who needs their session refreshed.
+     *  - robots.txt, sitemap.xml, site.webmanifest — crawler traffic, which
+     *    has no session at all and can be a large share of total hits.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|site.webmanifest|api/og|api/screenshot|api/link-preview|api/github|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml|webmanifest)$).*)",
   ],
 };
