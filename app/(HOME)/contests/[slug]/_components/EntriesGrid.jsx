@@ -5,14 +5,7 @@ import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 import { Loader2, Heart, Eye, Trophy, PlayCircle, Globe, Search, X } from "lucide-react";
 import { getContestEntryCollaborators } from "@/app/actions/getContestEntryCollaborators";
-
-// "Can I actually try this?" — the dedicated demo field, or a website link
-// added through the extra-links list, which is the same thing by another name.
-const hasLiveDemo = (project) => {
-    if (project?.demo_link) return true;
-    return (Array.isArray(project?.additional_links) ? project.additional_links : [])
-        .some((l) => l?.url && l?.type === "website");
-};
+import { hasLiveDemo } from "@/lib/projectDemo";
 
 const DemoBadge = () => (
     <span
@@ -41,6 +34,7 @@ export default function EntriesGrid({ contestId }) {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("latest"); // 'latest', 'likes', 'views'
   const [query, setQuery] = useState("");
+  const [demoOnly, setDemoOnly] = useState(false);
   const [collaborators, setCollaborators] = useState({}); // project_id -> [{username, name}]
 
   useEffect(() => {
@@ -92,7 +86,11 @@ export default function EntriesGrid({ contestId }) {
       return terms.every((t) => haystack.includes(t));
   };
 
-  const visibleEntries = entries.filter(matches);
+  const demoCount = entries.filter((e) => hasLiveDemo(e.project)).length;
+
+  const visibleEntries = entries
+    .filter(matches)
+    .filter((e) => (demoOnly ? hasLiveDemo(e.project) : true));
 
   // Sorting Logic
   const sortedEntries = [...visibleEntries].sort((a, b) => {
@@ -155,11 +153,29 @@ export default function EntriesGrid({ contestId }) {
 
       {/* 3. FILTER BAR */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-border pb-4">
-        <span className="text-xs font-mono text-muted-foreground uppercase">
-            {terms.length > 0
-                ? `${sortedEntries.length} of ${entries.length} Entries`
-                : `All Entries (${entries.length})`}
-        </span>
+        <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-mono text-muted-foreground uppercase">
+                {terms.length > 0 || demoOnly
+                    ? `${sortedEntries.length} of ${entries.length} Entries`
+                    : `All Entries (${entries.length})`}
+            </span>
+
+            {/* Most entries have no demo, so "can I actually try this?" is the
+                single most useful way to narrow the list. */}
+            <button
+                onClick={() => setDemoOnly((v) => !v)}
+                aria-pressed={demoOnly}
+                className={`flex items-center gap-1.5 px-2.5 py-1 border text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                    demoOnly
+                        ? "bg-emerald-500 border-emerald-500 text-black"
+                        : "border-border text-muted-foreground hover:text-emerald-500 hover:border-emerald-500/50"
+                }`}
+            >
+                <Globe size={11} strokeWidth={2.5} />
+                Has Demo
+                <span className={demoOnly ? "opacity-70" : "opacity-50"}>({demoCount})</span>
+            </button>
+        </div>
         <div className="flex gap-4 text-xs font-mono">
             <button onClick={() => setFilter("latest")} className={filter === "latest" ? "text-accent underline" : "text-muted-foreground hover:text-foreground"}>Newest</button>
             <button onClick={() => setFilter("likes")} className={filter === "likes" ? "text-accent underline" : "text-muted-foreground hover:text-foreground"}>Top Liked</button>
@@ -170,8 +186,19 @@ export default function EntriesGrid({ contestId }) {
       {/* 4. MAIN GRID */}
       {sortedEntries.length === 0 ? (
         <div className="py-16 text-center border border-dashed border-border bg-secondary/5">
-            <p className="text-sm font-mono text-muted-foreground uppercase">No entries match "{query}"</p>
-            <button onClick={() => setQuery("")} className="mt-2 text-xs font-mono text-accent hover:underline uppercase">Clear filter</button>
+            <p className="text-sm font-mono text-muted-foreground uppercase">
+                {query && demoOnly
+                    ? `No entries with a demo match "${query}"`
+                    : query
+                    ? `No entries match "${query}"`
+                    : "No entries have a demo link yet"}
+            </p>
+            <button
+                onClick={() => { setQuery(""); setDemoOnly(false); }}
+                className="mt-2 text-xs font-mono text-accent hover:underline uppercase"
+            >
+                Clear filters
+            </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
