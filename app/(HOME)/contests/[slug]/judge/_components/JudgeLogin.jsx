@@ -32,7 +32,7 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
                 <div className="space-y-1.5">
                     <label className="text-[10px] font-mono uppercase text-muted-foreground tracking-widest">Secure Access Code</label>
                     <div className="relative">
-                        <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
+                        <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                         <Input 
                             value={code}
                             onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -53,7 +53,7 @@ export default function JudgeLogin({ onVerify, isVerifying, contestTitle }) {
             </div>
         </div>
 
-        <p className="text-center text-[10px] font-mono text-zinc-600 uppercase tracking-tighter">
+        <p className="text-center text-[10px] font-mono text-muted-foreground uppercase tracking-tighter">
             Encrypted Session // Jury_Internal_Use_Only
         </p>
       </div>

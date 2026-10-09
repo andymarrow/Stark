@@ -29,7 +29,7 @@ export default function JudgeGrid({ entries, onSelectEntry }) {
             <div className={`absolute left-0 top-0 bottom-0 w-1 ${isComplete ? 'bg-green-500/50' : 'bg-transparent group-hover:bg-accent'}`} />
 
             {/* Thumbnail */}
-            <div className="relative w-24 aspect-video bg-zinc-900 border border-border flex-shrink-0 overflow-hidden">
+            <div className="relative w-24 aspect-video bg-secondary border border-border flex-shrink-0 overflow-hidden">
                 <Image 
                     src={entry.project.thumbnail_url || "/placeholder.jpg"} 
                     alt="p" 
@@ -55,10 +55,10 @@ export default function JudgeGrid({ entries, onSelectEntry }) {
                             <span className="text-[9px] font-mono text-green-500 uppercase flex items-center gap-1 font-bold">
                                 <CheckCircle size={10} /> Sync_Complete
                             </span>
-                            <span className="text-[9px] text-zinc-600 font-mono">/ {totalPoints} PTS</span>
+                            <span className="text-[9px] text-muted-foreground font-mono">/ {totalPoints} PTS</span>
                         </div>
                     ) : (
-                        <span className="text-[9px] font-mono text-zinc-500 uppercase flex items-center gap-1">
+                        <span className="text-[9px] font-mono text-muted-foreground uppercase flex items-center gap-1">
                             <Clock size={10} /> Pending_Input
                         </span>
                     )}
@@ -69,7 +69,7 @@ export default function JudgeGrid({ entries, onSelectEntry }) {
             <div className="flex-shrink-0">
                 <ChevronRight 
                     size={16} 
-                    className={`transition-all duration-300 ${isComplete ? 'text-zinc-700' : 'text-zinc-500 group-hover:text-accent translate-x-0 group-hover:translate-x-1'}`} 
+                    className={`transition-all duration-300 ${isComplete ? 'text-muted-foreground/40' : 'text-muted-foreground group-hover:text-accent translate-x-0 group-hover:translate-x-1'}`} 
                 />
             </div>
 

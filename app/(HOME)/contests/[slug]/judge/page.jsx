@@ -130,7 +130,7 @@ export default function JudgePortalPage({ params }) {
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><Loader2 className="animate-spin text-accent" /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-accent" /></div>;
 
   if (!judge) {
     return <JudgeLogin contestTitle={contest?.title} onVerify={handleVerify} isVerifying={verifying} />;
@@ -174,10 +174,10 @@ export default function JudgePortalPage({ params }) {
                         <span>Evaluation Progress</span>
                         <span>{Math.round(progressPercent)}%</span>
                     </div>
-                    <div className="h-1 w-full bg-zinc-800">
+                    <div className="h-1 w-full bg-secondary">
                         <div className="h-full bg-accent transition-all duration-700 ease-out" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <p className="text-[10px] font-mono text-zinc-500 mt-2">{progressCount} of {entries.length} units verified</p>
+                    <p className="text-[10px] font-mono text-muted-foreground mt-2">{progressCount} of {entries.length} units verified</p>
                 </div>
             </div>
         </div>
