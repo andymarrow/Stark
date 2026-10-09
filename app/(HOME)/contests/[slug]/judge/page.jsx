@@ -10,6 +10,39 @@ import JudgeLogin from "./_components/JudgeLogin";
 import JudgeGrid from "./_components/JudgeGrid";
 import EvaluationModal from "./_components/EvaluationModal";
 
+// A judge's session used to live only in React state, so every reload,
+// tab close or wander off to look at a project meant typing the access
+// code again. Judges review dozens of entries in a sitting, so that was
+// constant. Remembered per contest, re-checked against the database on
+// each restore so a revoked code stops working rather than living on in
+// someone's browser.
+const SESSION_DAYS = 14;
+const sessionKey = (contestId) => `stark_jury_session_${contestId}`;
+
+const loadSession = (contestId) => {
+  try {
+    const raw = localStorage.getItem(sessionKey(contestId));
+    if (!raw) return null;
+    const { code, savedAt } = JSON.parse(raw);
+    if (!code || !savedAt) return null;
+    if (Date.now() - savedAt > SESSION_DAYS * 86400000) {
+      localStorage.removeItem(sessionKey(contestId));
+      return null;
+    }
+    return code;
+  } catch {
+    return null; // private mode or corrupt value — just ask for the code
+  }
+};
+
+const saveSession = (contestId, code) => {
+  try { localStorage.setItem(sessionKey(contestId), JSON.stringify({ code, savedAt: Date.now() })); } catch {}
+};
+
+const clearSession = (contestId) => {
+  try { localStorage.removeItem(sessionKey(contestId)); } catch {}
+};
+
 export default function JudgePortalPage({ params }) {
   const { slug } = use(params);
   
@@ -40,9 +73,11 @@ export default function JudgePortalPage({ params }) {
   }, [slug]);
 
   // 2. Verify Access Code
-  const handleVerify = async (inputCode) => {
+  // `silent` is a session being restored rather than a code being typed:
+  // no toasts, and a failure quietly drops back to the login screen.
+  const handleVerify = async (inputCode, { silent = false } = {}) => {
     if (!contest?.id) {
-        toast.error("Protocol Syncing", { description: "Please wait a moment and try again." });
+        if (!silent) toast.error("Protocol Syncing", { description: "Please wait a moment and try again." });
         return;
     }
 
@@ -69,23 +104,44 @@ export default function JudgePortalPage({ params }) {
 
         // Success! Establish Session
         setJudge(data);
-        toast.success("Access Granted", { description: "Jury session established." });
-        
+        saveSession(contest.id, cleanCode);
+        if (!silent) toast.success("Access Granted", { description: "Jury session established." });
+
         // 🔄 Sync Judge Status
-        // Try to link current user ID if they happen to be logged in
+        // Only ever ADD a user link — never clear one. This used to write
+        // `user_id: user?.id || null`, so a judge signing in while logged
+        // out wiped the account link they already had, every single time.
         const { data: { user } } = await supabase.auth.getUser();
+        const statusUpdate = { status: 'active' };
+        if (user?.id) statusUpdate.user_id = user.id;
         await supabase.from('contest_judges')
-            .update({ status: 'active', user_id: user?.id || null })
+            .update(statusUpdate)
             .eq('id', data.id);
 
         fetchEntries(data.id);
     } catch (err) {
         console.error("[Jury_Auth] Protocol Failure:", err.message);
-        toast.error("Access Denied", { description: err.message });
+        if (silent) clearSession(contest.id);
+        else toast.error("Access Denied", { description: err.message });
     } finally {
         setVerifying(false);
     }
   };
+
+  const endSession = () => {
+    if (contest?.id) clearSession(contest.id);
+    setJudge(null);
+    setEntries([]);
+    toast.info("Jury session ended");
+  };
+
+  // Restore a remembered session once the contest is known.
+  useEffect(() => {
+    if (!contest?.id || judge) return;
+    const code = loadSession(contest.id);
+    if (code) handleVerify(code, { silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contest?.id]);
 
   // 3. Fetch Entries + Scores
   const fetchEntries = async (judgeId) => {
@@ -172,6 +228,12 @@ export default function JudgePortalPage({ params }) {
                 <p className="text-xs font-mono text-muted-foreground uppercase mt-1">
                     Node: {judge.email} // Sector: {contest.title}
                 </p>
+                <button
+                    onClick={endSession}
+                    className="mt-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground hover:text-accent transition-colors"
+                >
+                    End session
+                </button>
             </div>
 
             <div className="bg-secondary/10 border border-border p-4 w-full md:w-64 relative overflow-hidden">
