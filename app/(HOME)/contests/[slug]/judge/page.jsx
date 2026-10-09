@@ -2,7 +2,8 @@
 import { useState, useEffect, use } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { Loader2, Gavel, CheckCircle } from "lucide-react";
+import { Loader2, Gavel, CheckCircle, Globe } from "lucide-react";
+import { hasLiveDemo } from "@/lib/projectDemo";
 
 // Sub Components
 import JudgeLogin from "./_components/JudgeLogin";
@@ -19,6 +20,7 @@ export default function JudgePortalPage({ params }) {
   const [verifying, setVerifying] = useState(false);
   
   const [selectedEntry, setSelectedEntry] = useState(null);
+  const [demoOnly, setDemoOnly] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // 1. Initial Load: Fetch Contest Info
@@ -89,7 +91,7 @@ export default function JudgePortalPage({ params }) {
   const fetchEntries = async (judgeId) => {
     const { data: submissions } = await supabase
         .from('contest_submissions')
-        .select(`*, project:projects(id, title, slug, thumbnail_url)`)
+        .select(`*, project:projects(id, title, slug, thumbnail_url, demo_link, additional_links)`)
         .eq('contest_id', contest.id);
 
     const { data: scores } = await supabase
@@ -104,6 +106,11 @@ export default function JudgePortalPage({ params }) {
 
     setEntries(formatted);
   };
+
+  // Shared with the public entries tab so "has a demo" means the same
+  // thing in both places (lib/projectDemo.js).
+  const demoCount = entries.filter((e) => hasLiveDemo(e.project)).length;
+  const visibleEntries = demoOnly ? entries.filter((e) => hasLiveDemo(e.project)) : entries;
 
   // 4. Save Score
   const handleSaveScore = async (projectId, scoresMap) => {
@@ -182,7 +189,37 @@ export default function JudgePortalPage({ params }) {
             </div>
         </div>
 
-        <JudgeGrid entries={entries} onSelectEntry={setSelectedEntry} />
+        {/* Same Has Demo filter as the public entries tab — judges asked
+            for it there first, and it's more useful here where the job is
+            working through the list one entry at a time. Filtering never
+            hides an entry you've already scored. */}
+        <div className="flex items-center justify-between gap-3 mb-6">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
+                {demoOnly ? `${visibleEntries.length} of ${entries.length} Entries` : `${entries.length} Entries`}
+            </span>
+            <button
+                onClick={() => setDemoOnly((v) => !v)}
+                aria-pressed={demoOnly}
+                className={`flex items-center gap-1.5 px-2.5 py-1 border text-[10px] font-mono uppercase tracking-widest transition-colors ${
+                    demoOnly
+                        ? "bg-emerald-500 border-emerald-500 text-black"
+                        : "border-border text-muted-foreground hover:text-emerald-500 hover:border-emerald-500/50"
+                }`}
+            >
+                <Globe size={11} strokeWidth={2.5} />
+                Has Demo
+                <span className={demoOnly ? "opacity-70" : "opacity-50"}>({demoCount})</span>
+            </button>
+        </div>
+
+        {visibleEntries.length === 0 ? (
+            <div className="py-16 text-center border border-dashed border-border bg-secondary/5">
+                <p className="text-sm font-mono text-muted-foreground uppercase">No entries have a demo link</p>
+                <button onClick={() => setDemoOnly(false)} className="mt-2 text-xs font-mono text-accent hover:underline uppercase">Clear filter</button>
+            </div>
+        ) : (
+            <JudgeGrid entries={visibleEntries} onSelectEntry={setSelectedEntry} />
+        )}
         
       </div>
 

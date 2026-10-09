@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
-import { CheckCircle, Clock, ChevronRight } from "lucide-react";
+import { CheckCircle, Clock, ChevronRight, Globe } from "lucide-react";
+import { hasLiveDemo } from "@/lib/projectDemo";
 import { motion } from "framer-motion";
 
 export default function JudgeGrid({ entries, onSelectEntry }) {
@@ -60,6 +61,14 @@ export default function JudgeGrid({ entries, onSelectEntry }) {
                     ) : (
                         <span className="text-[9px] font-mono text-muted-foreground uppercase flex items-center gap-1">
                             <Clock size={10} /> Pending_Input
+                        </span>
+                    )}
+
+                    {/* Shown regardless of scoring status — whether an entry
+                        can actually be tried is useful before and after. */}
+                    {hasLiveDemo(entry.project) && (
+                        <span className="text-[9px] font-mono text-emerald-500 uppercase flex items-center gap-1" title="Has a live demo">
+                            <Globe size={9} strokeWidth={2.5} /> Demo
                         </span>
                     )}
                 </div>
