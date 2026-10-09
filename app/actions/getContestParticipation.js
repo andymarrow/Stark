@@ -18,6 +18,7 @@
  */
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { checkContestAccess } from "@/app/actions/contestAccess";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -36,14 +37,11 @@ export async function getContestParticipation(contestId) {
 
     const admin = getAdmin();
 
-    const { data: contest } = await admin
-      .from("contests")
-      .select("creator_id")
-      .eq("id", contestId)
-      .single();
-    if (!contest) return { error: "Contest not found." };
-    if (contest.creator_id !== user.id) {
-      return { error: "Only the contest organiser can see participation details." };
+    // Creator or a moderator — same gate as the dashboard itself, so a
+    // co-organiser isn't shown a tab that then refuses them.
+    const access = await checkContestAccess(contestId);
+    if (!access.canManage) {
+      return { error: "Only the contest organisers can see participation details." };
     }
 
     const { data: subs } = await admin

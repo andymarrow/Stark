@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { 
   LayoutDashboard, Users, Megaphone, Settings, 
-  ArrowLeft, ExternalLink, Award, Menu, Layers, BarChart3, UserSquare2,
+  ArrowLeft, ExternalLink, Award, Menu, Layers, BarChart3, UserSquare2, ShieldCheck,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,11 @@ import SponsorsTab from "./SponsorsTab";
 import AnnouncementsTab from "./AnnouncementsTab";
 import SubmissionsTab from "./SubmissionsTab";
 import ParticipantsTab from "./ParticipantsTab";
+import ModeratorsTab from "./ModeratorsTab";
 import SettingsTab from "./SettingsTab";
 import ResultsMatrix from "./ResultsMatrix";
 
-export default function DashboardClient({ contest, currentUser }) {
+export default function DashboardClient({ contest, currentUser, isCreator = false }) {
   const [activeTab, setActiveTab] = useState("overview");
 
   const TABS = [
@@ -30,6 +31,9 @@ export default function DashboardClient({ contest, currentUser }) {
     { id: "sponsors", label: "Sponsors", icon: Award },
     { id: "announcements", label: "Updates", icon: Megaphone },
     { id: "settings", label: "Settings", icon: Settings },
+    // Only the creator decides who else can run the contest, so a
+    // moderator can't appoint more or remove the person above them.
+    ...(isCreator ? [{ id: "moderators", label: "Moderators", icon: ShieldCheck }] : []),
   ];
 
   return (
@@ -110,6 +114,8 @@ export default function DashboardClient({ contest, currentUser }) {
                 {activeTab === 'submissions' && <SubmissionsTab contest={contest} />}
 
                 {activeTab === 'participants' && <ParticipantsTab contest={contest} />}
+
+                {activeTab === 'moderators' && isCreator && <ModeratorsTab contest={contest} />}
 
                 {activeTab === 'matrix' && <ResultsMatrix contest={contest} />}
 

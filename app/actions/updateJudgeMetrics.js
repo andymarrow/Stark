@@ -19,6 +19,7 @@
  */
 import { createClient as createServerClient } from "@/utils/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { checkContestAccess } from "@/app/actions/contestAccess";
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -50,14 +51,9 @@ export async function updateJudgeMetrics(judgeId, metrics) {
       .single();
     if (!judge) return { error: "Judge not found." };
 
-    const { data: contest } = await admin
-      .from("contests")
-      .select("creator_id")
-      .eq("id", judge.contest_id)
-      .single();
-    if (!contest) return { error: "Contest not found." };
-    if (contest.creator_id !== user.id) {
-      return { error: "Only the contest organiser can change a judge's rubric." };
+    const access = await checkContestAccess(judge.contest_id);
+    if (!access.canManage) {
+      return { error: "Only the contest organisers can change a judge's rubric." };
     }
 
     const { data, error } = await admin

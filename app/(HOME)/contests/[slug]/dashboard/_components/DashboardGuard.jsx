@@ -5,28 +5,41 @@ import { ShieldAlert, Fingerprint, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import DashboardClient from "./DashboardClient";
+import { checkContestAccess } from "@/app/actions/contestAccess";
 
 export default function DashboardGuard({ contest, currentUser }) {
   const router = useRouter();
   const [isVerified, setIsVerified] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const [isCreator, setIsCreator] = useState(false);
 
   useEffect(() => {
-    // Artificial delay for "System Scan" effect (optional, feels cool)
-    const timer = setTimeout(() => {
-        if (!currentUser || contest.creator_id !== currentUser.id) {
-            toast.error("Access Denied", { 
-                description: "Biometric mismatch. You are not the creator of this node.",
+    let cancelled = false;
+
+    const verify = async () => {
+        // Creator OR moderator. Checked server-side rather than by
+        // comparing creator_id here, so the dashboard and the actions
+        // behind it agree on who's allowed (see contestAccess.js).
+        const access = await checkContestAccess(contest.id);
+        // Keep the scan animation, but don't make the check wait on it.
+        await new Promise((r) => setTimeout(r, 1200));
+        if (cancelled) return;
+
+        if (!access.canManage) {
+            toast.error("Access Denied", {
+                description: "Biometric mismatch. You do not run this node.",
                 duration: 5000
             });
             router.push("/");
         } else {
+            setIsCreator(access.isCreator);
             setIsVerified(true);
         }
         setIsChecking(false);
-    }, 1500); // 1.5s scan animation
+    };
 
-    return () => clearTimeout(timer);
+    verify();
+    return () => { cancelled = true; };
   }, [currentUser, contest, router]);
 
   if (isChecking) {
@@ -69,5 +82,5 @@ export default function DashboardGuard({ contest, currentUser }) {
 
   if (!isVerified) return null; // Will redirect
 
-  return <DashboardClient contest={contest} currentUser={currentUser} />;
+  return <DashboardClient contest={contest} currentUser={currentUser} isCreator={isCreator} />;
 }
