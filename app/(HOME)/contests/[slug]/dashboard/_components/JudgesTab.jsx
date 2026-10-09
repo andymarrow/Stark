@@ -232,7 +232,12 @@ export default function JudgesTab({ contestId, contestTitle, contestSlug, creato
           defaultMetrics={defaultMetrics}
           isOpen={!!metricsJudge}
           onClose={() => setMetricsJudge(null)}
-          onSaved={(updated) => setJudges((prev) => prev.map((j) => (j.id === updated.id ? updated : j)))}
+          onSaved={(updated) => {
+            setJudges((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+            // Read it back, so what's on screen is what's actually stored
+            // rather than what we hoped we wrote.
+            fetchJudges();
+          }}
         />
       )}
     </div>

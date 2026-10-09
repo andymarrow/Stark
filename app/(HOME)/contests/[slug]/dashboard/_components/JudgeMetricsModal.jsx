@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { supabase } from "@/lib/supabaseClient";
+import { updateJudgeMetrics } from "@/app/actions/updateJudgeMetrics";
 import { toast } from "sonner";
 import MetricsManager from "@/app/(HOME)/contests/create/_components/MetricsManager";
 
@@ -26,10 +26,13 @@ export default function JudgeMetricsModal({ judge, contestId, defaultMetrics, is
     }
     setIsSaving(true);
     try {
-      const { error } = await supabase.from("contest_judges").update({ metrics_config: metrics }).eq("id", judge.id);
-      if (error) throw error;
+      // Server-side; see updateJudgeMetrics.js. The browser client can't
+      // write this row, and a blocked write looked identical to a
+      // successful one, so every save from here was silently discarded.
+      const result = await updateJudgeMetrics(judge.id, metrics);
+      if (result.error) throw new Error(result.error);
       toast.success("Judge Rubric Updated", { description: `${judge.profile?.full_name || judge.email} now scores on their own criteria.` });
-      onSaved({ ...judge, metrics_config: metrics });
+      onSaved({ ...judge, metrics_config: result.judge?.metrics_config ?? metrics });
       onClose();
     } catch (error) {
       toast.error("Save Failed", { description: error.message });
