@@ -83,34 +83,95 @@ export default function ResultsMatrix({ contest }) {
         };
 
         // 5. THE MATRIX COMPILATION ENGINE
+        //
+        // A plain average of judge scores was unfair in two ways that the
+        // live hackathon showed clearly:
+        //
+        //   1. Judges score on different scales. Across eight judges the
+        //      mean weighted score ranged from 2.04 to 5.30 — a 3.26 point
+        //      spread on a 10 point scale. Which judges happened to pick up
+        //      your project mattered more than the project did.
+        //   2. Coverage is uneven. Half the field was seen by two judges and
+        //      half by seven or eight, and a two judge average is mostly
+        //      noise. One enthusiastic review put a two judge project second
+        //      overall ahead of projects seen by everybody.
+        //
+        // So: express each judge's score as how far it sits from that
+        // judge's own average, in that judge's own spread, then put it back
+        // on the global scale. That removes leniency. Then pull each
+        // project toward the global mean in proportion to how few judges
+        // actually saw it, so a thin sample has to be exceptional rather
+        // than lucky to win.
+
+        // Pass 1 — every (judge, project) weighted total, so judge
+        // behaviour can be measured before anything is compared.
+        const rawTotals = [];
+        for (const sub of submissions || []) {
+          for (const j of judgeData || []) {
+            const judgeScore = (rawScores || []).find(
+              (s) => s.project_id === sub.project.id && s.judge_id === j.id
+            );
+            if (!judgeScore) continue; // hasn't scored it — never counts as a zero
+            const rubric = j.metrics_config || contest.metrics_config || [];
+            rawTotals.push({
+              judgeId: j.id,
+              projectId: sub.project.id,
+              value: judgeWeightedTotal(rubric, sub.project, judgeScore),
+            });
+          }
+        }
+
+        const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+        const stdDev = (xs, m) =>
+          xs.length ? Math.sqrt(mean(xs.map((x) => (x - m) ** 2))) : 0;
+
+        const globalMean = mean(rawTotals.map((r) => r.value));
+        const globalSd = stdDev(rawTotals.map((r) => r.value), globalMean) || 1;
+
+        // Each judge's own centre and spread.
+        const judgeStats = {};
+        for (const j of judgeData || []) {
+          const mine = rawTotals.filter((r) => r.judgeId === j.id).map((r) => r.value);
+          if (!mine.length) continue;
+          const m = mean(mine);
+          judgeStats[j.id] = { mean: m, sd: stdDev(mine, m) || 1, count: mine.length };
+        }
+
+        // How many judges a project needs before its own average is trusted
+        // over the field's. At 4: two judges keep a third of their own
+        // score, eight judges keep two thirds.
+        const SHRINKAGE = 4;
+
         const matrix = (submissions || []).map(sub => {
             const projectScores = (rawScores || []).filter(s => s.project_id === sub.project.id);
+            const mine = rawTotals.filter((r) => r.projectId === sub.project.id);
 
-            // Each judge who has actually scored this project contributes
-            // one weighted total (0-10), computed on their own rubric.
-            const judgeTotals = (judgeData || [])
-              .map(j => {
-                  const judgeScore = projectScores.find(s => s.judge_id === j.id);
-                  if (!judgeScore) return null; // hasn't scored yet — excluded from the average
-                  const rubric = j.metrics_config || contest.metrics_config || [];
-                  return judgeWeightedTotal(rubric, sub.project, judgeScore);
-              })
-              .filter(t => t !== null);
+            // Leniency removed: distance from the judge's own average,
+            // rescaled onto the global spread.
+            const normalised = mine.map((r) => {
+              const st = judgeStats[r.judgeId];
+              if (!st) return r.value;
+              return globalMean + ((r.value - st.mean) / st.sd) * globalSd;
+            });
 
-            const finalTotal = judgeTotals.length
-              ? judgeTotals.reduce((a, b) => a + b, 0) / judgeTotals.length
+            const n = normalised.length;
+            const ownMean = mean(normalised);
+            // Bayesian shrinkage toward the field.
+            const adjusted = n
+              ? (n / (n + SHRINKAGE)) * ownMean + (SHRINKAGE / (n + SHRINKAGE)) * globalMean
               : 0;
 
             return {
                 ...sub,
                 projectScores, // Raw packets for the expanded drill-down view
-                judgesScored: judgeTotals.length,
-                finalTotal: finalTotal.toFixed(2)
+                judgesScored: n,
+                rawAverage: mean(mine.map((r) => r.value)).toFixed(2), // kept for drill-down
+                finalTotal: Math.max(0, Math.min(10, adjusted)).toFixed(2)
             };
         });
 
-        // Rank by final total
-        setData(matrix.sort((a, b) => b.finalTotal - a.finalTotal));
+        // Rank by adjusted total (numeric — finalTotal is a formatted string).
+        setData(matrix.sort((a, b) => parseFloat(b.finalTotal) - parseFloat(a.finalTotal)));
       } catch (err) {
         console.error("Matrix compilation error:", err);
       } finally {
