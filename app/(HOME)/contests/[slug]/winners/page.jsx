@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { buildContestRanking } from "@/lib/contestRanking";
 import { notFound, redirect } from "next/navigation";
 import WinnersHero  from "./_components/WinnersHero";
 import FullRankingsTable from "./_components/FullRankingsTable";
@@ -47,7 +48,7 @@ export default async function WinnersRevealPage({ params }) {
 
     supabase
         .from('contest_judges')
-        .select('id, email, profile:profiles(full_name, username, avatar_url)')
+        .select('id, email, metrics_config, profile:profiles(full_name, username, avatar_url)')
         .eq('contest_id', contest.id)
   ]);
 
@@ -56,35 +57,17 @@ export default async function WinnersRevealPage({ params }) {
   const judges = judgesRes.data || [];
 
   // 3. CALCULATION ENGINE
-  const maxLikes = Math.max(...(submissions || []).map(s => s.project.likes_count), 1);
-  const maxViews = Math.max(...(submissions || []).map(s => s.project.views), 1);
-
-  const finalRankings = (submissions || []).map(sub => {
-    // Extract scores specific to this project
-    const projectScores = (rawScores || []).filter(s => s.project_id === sub.project.id);
-    const metricAverages = {};
-    
-    contest.metrics_config.forEach(metric => {
-        if (metric.type === 'manual') {
-            const valid = projectScores.map(ps => ps.scores[metric.name]).filter(v => v != null);
-            metricAverages[metric.name] = valid.length > 0 ? valid.reduce((a,b)=>a+b,0)/valid.length : 0;
-        } else if (metric.type === 'likes') {
-            metricAverages[metric.name] = (sub.project.likes_count / maxLikes) * 10;
-        } else if (metric.type === 'views') {
-            metricAverages[metric.name] = (sub.project.views / maxViews) * 10;
-        }
-    });
-
-    let total = 0;
-    contest.metrics_config.forEach(m => total += (metricAverages[m.name] || 0) * (m.weight / 100));
-
-    return { 
-        ...sub, 
-        metricAverages, 
-        projectScores, // Pass raw breakdown
-        finalTotal: total 
-    };
-  }).sort((a, b) => b.finalTotal - a.finalTotal);
+  // Shared with the organiser's Results Matrix (lib/contestRanking.js).
+  // This page used to carry its own copy, which ranked differently and
+  // assumed every judge used the contest's default rubric — so judges
+  // with their own rubric had their scores looked up under names that
+  // didn't exist, counted as zero, and shown as "-" in the breakdown.
+  const { rows: finalRankings } = buildContestRanking({
+    contest,
+    judges,
+    submissions,
+    scores: rawScores,
+  });
 
   return (
     <div className="min-h-screen bg-white dark:bg-black pb-32">

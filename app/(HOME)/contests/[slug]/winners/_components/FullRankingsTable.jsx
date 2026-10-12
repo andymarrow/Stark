@@ -88,7 +88,7 @@ export default function FullRankingsTable({ rankings, metrics, judges = [] }) {
 
                             {metrics.map((m, i) => (
                                 <td key={i} className="px-4 py-4 text-right font-mono text-xs text-muted-foreground group-hover:text-foreground transition-colors">
-                                    {Number(row.metricAverages[m.name] || 0).toFixed(1)}
+                                    {row.metricAverages[m.name] == null ? '—' : Number(row.metricAverages[m.name]).toFixed(1)}
                                 </td>
                             ))}
 
@@ -115,9 +115,12 @@ export default function FullRankingsTable({ rankings, metrics, judges = [] }) {
                                                 </div>
                                                 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                                    {row.projectScores?.length > 0 ? row.projectScores.map((scorePacket, sIdx) => {
-                                                        // FIND JUDGE NAME FROM THE JUROR ROSTER
-                                                        const juror = judges.find(j => j.id === scorePacket.judge_id);
+                                                    {row.judgeBreakdown?.length > 0 ? row.judgeBreakdown.map((packet, sIdx) => {
+                                                        // Each judge is shown on their OWN rubric. Reading every
+                                                        // judge against the contest default meant anyone with a
+                                                        // custom rubric rendered "-" for every metric, because the
+                                                        // metric names simply didn't match what they scored.
+                                                        const juror = packet.judge || judges.find(j => j.id === packet.judgeId);
                                                         const judgeName = juror?.profile?.full_name || juror?.profile?.username || juror?.email?.split('@')[0] || `Jury_Node_${sIdx + 1}`;
 
                                                         return (
@@ -129,10 +132,10 @@ export default function FullRankingsTable({ rankings, metrics, judges = [] }) {
                                                                     <span className="text-[8px] font-mono text-green-600 dark:text-green-400 bg-green-500/10 px-1.5 py-0.5 border border-green-500/20">VERIFIED_LOG</span>
                                                                 </div>
                                                                 <div className="space-y-1.5">
-                                                                    {metrics.filter(m => m.type === 'manual').map((m, k) => (
-                                                                        <div key={k} className="flex justify-between text-[10px] font-mono">
-                                                                            <span className="text-zinc-600 uppercase">{m.name}:</span>
-                                                                            <span className="text-foreground font-bold">{scorePacket.scores[m.name] ?? '-'}</span>
+                                                                    {packet.metrics.filter(m => m.type === 'manual').map((m, k) => (
+                                                                        <div key={k} className="flex justify-between text-[9px] font-mono">
+                                                                            <span className="text-muted-foreground uppercase truncate max-w-[65%]" title={`${m.name} (${m.weight}%)`}>{m.name}</span>
+                                                                            <span className="text-foreground font-bold">{m.value ?? '-'}</span>
                                                                         </div>
                                                                     ))}
                                                                 </div>
