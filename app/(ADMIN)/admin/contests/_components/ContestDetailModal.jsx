@@ -15,6 +15,7 @@ import { deleteContestAsAdmin, removeJudgeAsAdmin, toggleContestFeatured } from 
 import PersonnelTab from "./PersonnelTab";
 import ModerationTab from "./ModerationTab";
 import OverviewTab from "./OverviewTab";
+import CertificatesTab from "./CertificatesTab";
 
 export default function ContestDetailModal({ contest, isOpen, onClose }) {
   const [activeTab, setActiveTab] = useState("overview");
@@ -102,7 +103,7 @@ export default function ContestDetailModal({ contest, isOpen, onClose }) {
 
         {/* 2. Navigation Tabs */}
         <div className="flex border-b border-white/10 bg-zinc-900/30">
-            {['overview', 'personnel', 'moderation'].map((tab) => (
+            {['overview', 'personnel', 'certificates', 'moderation'].map((tab) => (
                 <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -119,6 +120,7 @@ export default function ContestDetailModal({ contest, isOpen, onClose }) {
         <div className="flex-1 overflow-y-auto bg-black p-6">
             {activeTab === 'overview' && <OverviewTab contest={contest} />}
             {activeTab === 'personnel' && <PersonnelTab contest={contest} />}
+            {activeTab === 'certificates' && <CertificatesTab contest={contest} />}
             {activeTab === 'moderation' && <ModerationTab contest={contest} onClose={onClose} />}
         </div>
 

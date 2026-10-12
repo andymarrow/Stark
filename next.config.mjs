@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The certificate renderer reads its fonts from disk at runtime, which
+  // file tracing can't see on its own. Server actions run inside the page
+  // that calls them, so ship the fonts with the admin routes.
+  outputFileTracingIncludes: {
+    '/admin/**': ['./lib/certificate/fonts/**'],
+  },
   images: {
     unoptimized: true,
     remotePatterns: [
