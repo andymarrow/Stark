@@ -469,15 +469,23 @@ export async function sendCertificates(contestId, userIds, { resend = false } = 
   }
 }
 
-/** Email one certificate to the signed-in admin. Works before the contest ends. */
-export async function sendTestCertificate(contestId, name) {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Email one certificate to any address the admin types in (their own if
+ * left blank), exactly as participants will get it. Works before the
+ * contest ends and never touches the send ledger, so it can be used as
+ * often as needed before the real send.
+ */
+export async function sendTestCertificate(contestId, name, toEmail) {
   try {
     const auth = await requireAdmin();
     if (auth.error) return { error: auth.error };
     const { admin, profile, user } = auth;
 
-    const to = profile?.email || user.email;
-    if (!to) return { error: "Your account has no email address." };
+    const to = String(toEmail || "").trim() || profile?.email || user.email;
+    if (!to) return { error: "Enter an email address to send the test to." };
+    if (!EMAIL_RE.test(to)) return { error: `"${to}" doesn't look like an email address.` };
 
     const contest = await loadContest(admin, contestId);
     if (!contest) return { error: "Contest not found." };

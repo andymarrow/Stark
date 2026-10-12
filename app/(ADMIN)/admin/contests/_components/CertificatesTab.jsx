@@ -47,6 +47,8 @@ export default function CertificatesTab({ contest }) {
   const [previewNote, setPreviewNote] = useState(null);
   const [savingLayout, setSavingLayout] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [testName, setTestName] = useState("");
   const [sendingIds, setSendingIds] = useState(new Set());
   const [bulk, setBulk] = useState(null); // { done, total }
   const stopRef = useRef(false);
@@ -168,7 +170,7 @@ export default function CertificatesTab({ contest }) {
   const handleTest = async () => {
     if (layoutDirty) return toast.error("Save the name position first — test emails use the saved one.");
     setTesting(true);
-    const res = await sendTestCertificate(contest.id, previewName);
+    const res = await sendTestCertificate(contest.id, testName.trim() || previewName, testEmail.trim());
     setTesting(false);
     if (res.error) return toast.error("Test send failed", { description: res.error });
     toast.success(`Test certificate sent to ${res.sentTo}`);
@@ -353,15 +355,6 @@ export default function CertificatesTab({ contest }) {
                   {savingLayout ? <Loader2 size={12} className="mr-2 animate-spin" /> : <Save size={12} className="mr-2" />}
                   {layoutDirty ? "Save position" : "Position saved"}
                 </Button>
-                <Button
-                  onClick={handleTest}
-                  disabled={testing}
-                  variant="outline"
-                  className="h-8 rounded-none text-[10px] font-mono uppercase border-white/10 hover:bg-white/5 hover:text-white"
-                >
-                  {testing ? <Loader2 size={12} className="mr-2 animate-spin" /> : <Mail size={12} className="mr-2" />}
-                  Email me a test
-                </Button>
               </div>
             </div>
 
@@ -382,7 +375,54 @@ export default function CertificatesTab({ contest }) {
         </section>
       )}
 
-      {/* 3. Recipients */}
+      {/* 3. Test email — one real email to any address, before the real send */}
+      {template && (
+        <section>
+          <h3 className="text-xs font-mono text-zinc-500 uppercase mb-4 flex items-center gap-2">
+            <Mail size={14} /> Send a Test
+          </h3>
+          <div className="border border-white/10 bg-zinc-900/20 p-4 space-y-3">
+            <p className="text-[10px] font-mono text-zinc-600 leading-relaxed">
+              Sends one email exactly as participants will receive it, with the certificate attached.
+              Doesn't count as a send and works before the contest ends. Leave the email blank to send it to yourself.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+              <Field label="Send to">
+                <input
+                  type="email"
+                  className={inputClass}
+                  placeholder="you@example.com"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !testing) handleTest(); }}
+                />
+              </Field>
+              <Field label="Name on certificate">
+                <input
+                  className={inputClass}
+                  placeholder={previewName || "Participant Name"}
+                  value={testName}
+                  onChange={(e) => setTestName(e.target.value)}
+                />
+              </Field>
+              <Button
+                onClick={handleTest}
+                disabled={testing || layoutDirty}
+                variant="outline"
+                className="h-8 rounded-none text-[10px] font-mono uppercase border-white/10 hover:bg-white/5 hover:text-white"
+              >
+                {testing ? <Loader2 size={12} className="mr-2 animate-spin" /> : <Send size={12} className="mr-2" />}
+                Send test
+              </Button>
+            </div>
+            {layoutDirty && (
+              <p className="text-[10px] font-mono text-amber-400">Save the name position first — tests use the saved one.</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* 4. Recipients */}
       <section>
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
           <div>
