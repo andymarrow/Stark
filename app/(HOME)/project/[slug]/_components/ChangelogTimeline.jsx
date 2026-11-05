@@ -10,6 +10,7 @@ import { useAuth } from "@/app/_context/AuthContext";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // Added
 import rehypeRaw from "rehype-raw"; // Renders raw HTML mention spans, matching ProjectReadme
+import rehypeSafeHtml from "@/lib/rehypeSafeHtml";
 import Image from "next/image";
 import ProjectComments from "./ProjectComments";
 import { toast } from "sonner";
@@ -354,7 +355,7 @@ export default function ChangelogTimeline({ projectId, isOwner, projectSlug, all
                                 ">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
-                                        rehypePlugins={[rehypeRaw]}
+                                        rehypePlugins={[rehypeRaw, rehypeSafeHtml]}
                                         components={{ a: LinkRenderer }}
                                     >
                                         {displayContent}

@@ -44,6 +44,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import FuelButton from "@/app/(HOME)/_components/FuelButton";
+import { formatCommentHtml } from "@/lib/formatComment";
 
 
 const lowlight = createLowlight(common);
@@ -56,10 +57,6 @@ const extractMentions = (text) => {
     return [...new Set(matches)]; 
 };
 
-const formatContent = (text) => {
-    if (!text) return "";
-    return text.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<a href="/profile/$2" class="text-accent font-bold hover:underline decoration-dotted underline-offset-2 transition-colors">@$1</a>');
-};
 
 // --- 1. STARK CODE BLOCK COMPONENT ---
 const CodeBlockNode = ({ node }) => {
@@ -124,7 +121,7 @@ function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText,
                         <Link href={`/profile/${rootComment.user.username}`} className="text-[10px] font-bold font-mono uppercase truncate hover:text-accent transition-colors">@{rootComment.user.username}</Link>
                         <span className="text-[8px] font-mono text-muted-foreground">{new Date(rootComment.created_at).toLocaleDateString()}</span>
                     </div>
-                    <p className="text-xs text-foreground/90 font-mono leading-relaxed mb-2" dangerouslySetInnerHTML={{ __html: formatContent(rootComment.content) }} />
+                    <p className="text-xs text-foreground/90 font-mono leading-relaxed mb-2" dangerouslySetInnerHTML={{ __html: formatCommentHtml(rootComment.content) }} />
                     
                     <div className="flex items-center gap-4">
                         {rootComment.visibility === 'public' && (
@@ -153,7 +150,7 @@ function MarginCommentThread({ rootComment, onReplyClick, replyingTo, replyText,
                                     <Link href={`/profile/${reply.user.username}`} className="text-[10px] font-bold font-mono text-foreground uppercase hover:text-accent transition-colors">@{reply.user.username}</Link>
                                     <span className="text-[8px] font-mono text-muted-foreground">{new Date(reply.created_at).toLocaleDateString()}</span>
                                 </div>
-                                <p className="text-xs text-foreground/80 font-mono leading-relaxed mb-1" dangerouslySetInnerHTML={{ __html: formatContent(reply.content) }} />
+                                <p className="text-xs text-foreground/80 font-mono leading-relaxed mb-1" dangerouslySetInnerHTML={{ __html: formatCommentHtml(reply.content) }} />
                                 <button onClick={() => onReplyClick(rootComment.id, reply.user.username)} className="text-[9px] font-mono text-muted-foreground/50 hover:text-accent uppercase tracking-widest flex items-center gap-1 transition-colors">
                                     Reply
                                 </button>

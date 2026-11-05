@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Terminal } from "lucide-react";
 import { motion } from "framer-motion";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw"; // Required to render the <span> tags from Tiptap
+import rehypeSafeHtml from "@/lib/rehypeSafeHtml";
 
 export default function ProjectReadme({ content }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -60,7 +61,7 @@ export default function ProjectReadme({ content }) {
         ">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]} // This allows the <span> to be parsed before we convert it
+            rehypePlugins={[rehypeRaw, rehypeSafeHtml]} // This allows the <span> to be parsed before we convert it
             components={{
                 a: ({node, ...props}) => {
                     // Check if this link is an internal profile mention

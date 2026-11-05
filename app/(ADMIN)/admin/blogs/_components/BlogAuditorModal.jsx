@@ -11,6 +11,7 @@ import {
 import { Dialog, DialogContent, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
+import { deleteBlogCommentAsAdmin } from "@/app/actions/adminBlogActions";
 import { toast } from "sonner";
 import { getAvatar } from "@/constants/assets";
 
@@ -115,11 +116,11 @@ export default function BlogAuditorModal({ blog, isOpen, onClose, onUpdate }) {
 
   const purgeSignal = async (commentId) => {
       if (!confirm("Permanently purge this signal from the network?")) return;
-      const { error } = await supabase.from('blog_comments').delete().eq('id', commentId);
-      if (!error) {
+      const res = await deleteBlogCommentAsAdmin(commentId);
+      if (res.success) {
           toast.success("Signal Purged");
-          setComments(prev => prev.filter(c => c.id !== commentId));
-      } else toast.error("Purge Failed");
+          setComments(prev => prev.filter(c => !res.deletedIds.includes(c.id)));
+      } else toast.error("Purge Failed", { description: res.error });
   };
 
   const forceRollback = async (version) => {

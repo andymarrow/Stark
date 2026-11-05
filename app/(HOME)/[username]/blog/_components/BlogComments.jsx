@@ -12,6 +12,7 @@ import { getAvatar } from "@/constants/assets";
 // MENTIONS IMPORTS
 import { MentionsInput, Mention } from 'react-mentions';
 import mentionStyles from "@/app/(HOME)/project/[slug]/_components/mentionStyles"; 
+import { formatCommentHtml } from "@/lib/formatComment";
 
 const extractMentions = (text) => {
     const regex = /@\[[^\]]+\]\(([^)]+)\)/g;
@@ -21,10 +22,6 @@ const extractMentions = (text) => {
     return [...new Set(matches)]; 
 };
 
-const formatContent = (text) => {
-    if (!text) return "";
-    return text.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<a href="/profile/$2" class="text-accent font-bold hover:underline decoration-dotted underline-offset-2 transition-colors">@$1</a>');
-};
 
 // --- SUB-COMPONENT: INDIVIDUAL COMMENT THREAD ---
 // This isolates the expand/collapse and reply state for every single root comment
@@ -115,7 +112,7 @@ function CommentThread({ comment, currentUser, blogId, blogMeta, fetchUsers, onR
                         </span>
                     </div>
                     
-                    <p className="text-sm text-foreground/90 font-mono leading-relaxed mb-2" dangerouslySetInnerHTML={{ __html: formatContent(comment.content) }} />
+                    <p className="text-sm text-foreground/90 font-mono leading-relaxed mb-2" dangerouslySetInnerHTML={{ __html: formatCommentHtml(comment.content) }} />
                     
                     <div className="flex items-center gap-4">
                         <button onClick={() => handleReplyClick(null)} className="text-[9px] font-mono text-muted-foreground hover:text-accent uppercase tracking-widest flex items-center gap-1 transition-colors">
@@ -172,7 +169,7 @@ function CommentThread({ comment, currentUser, blogId, blogMeta, fetchUsers, onR
                                             </div>
                                             <span className="text-[8px] font-mono text-muted-foreground">{new Date(reply.created_at).toLocaleDateString()}</span>
                                         </div>
-                                        <p className="text-xs text-foreground/80 font-mono leading-relaxed mb-1" dangerouslySetInnerHTML={{ __html: formatContent(reply.content) }} />
+                                        <p className="text-xs text-foreground/80 font-mono leading-relaxed mb-1" dangerouslySetInnerHTML={{ __html: formatCommentHtml(reply.content) }} />
                                         
                                         <button onClick={() => handleReplyClick(reply.user.username)} className="text-[9px] font-mono text-muted-foreground/50 hover:text-accent uppercase tracking-widest flex items-center gap-1 transition-colors">
                                             Reply
